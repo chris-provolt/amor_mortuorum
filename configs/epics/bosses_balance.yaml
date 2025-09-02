@@ -1,0 +1,228 @@
+epic:
+  id: EPIC_Bosses_Balance
+  title: "EPIC: Bosses & Balance"
+  labels: ["epic"]
+  target_window: "2025-08-26+"
+  description: |
+    Minibosses at floors 20/40/60/80 and Final Boss at B99; includes drops, balance, and tuning instrumentation.
+  acceptance:
+    - "Child issues exist and are linked in comments on the Epic issue."
+    - "Label 'epic' is applied to the Epic issue."
+    - "Progress trackable via linked issues checklist."
+
+children:
+  - id: minibosses-design
+    title: "Design: Minibosses floors 20/40/60/80"
+    labels: ["bosses", "design"]
+    acceptance:
+      - "Design brief with stats, skills, and theming for each miniboss."
+      - "Data-driven definitions drafted (YAML/JSON) with schema."
+      - "Review approved by design+engineering."
+    body: |
+      Summary
+      Define the four minibosses appearing at floors 20/40/60/80, including stats, skills, resistances, and theme.
+
+      Epic: EPIC: Bosses & Balance
+
+      Acceptance
+      - Design brief with stats, skills, and theming for each miniboss.
+      - Data-driven definitions drafted (YAML/JSON) with schema.
+      - Review approved by design+engineering.
+
+  - id: boss-gates-floor-triggers
+    title: "Feature: Boss gate and floor triggers"
+    labels: ["bosses", "dungeon"]
+    acceptance:
+      - "Boss gates spawn on floors 20/40/60/80 with proper visuals."
+      - "Final Boss gate spawns on B99."
+      - "Unit tests cover gate placement and floor triggers."
+    body: |
+      Summary
+      Implement boss gates and floor triggers for miniboss and final boss floors.
+
+      Epic: EPIC: Bosses & Balance
+
+      Acceptance
+      - Boss gates spawn on floors 20/40/60/80 with proper visuals.
+      - Final Boss gate spawns on B99.
+      - Unit tests cover gate placement and floor triggers.
+
+  - id: miniboss-encounter-scheduler
+    title: "Feature: Miniboss encounter generator and scheduling"
+    labels: ["bosses", "combat"]
+    acceptance:
+      - "Encounter generator spawns miniboss parties appropriately."
+      - "Turn-based integration with existing combat menu and SPD order."
+      - "Deterministic seeding for tests."
+    body: |
+      Summary
+      Create generator that spawns and schedules miniboss encounters on 20/40/60/80.
+
+      Epic: EPIC: Bosses & Balance
+
+      Acceptance
+      - Encounter generator spawns miniboss parties appropriately.
+      - Turn-based integration with existing combat menu and SPD order.
+      - Deterministic seeding for tests.
+
+  - id: final-boss-design-integration
+    title: "Feature: Final Boss (B99) encounter design & integration"
+    labels: ["bosses", "combat"]
+    acceptance:
+      - "Final Boss data, phase design, and encounter integration complete."
+      - "Final Relic drop integrated on victory."
+      - "Cinematic intro/outro hooks in place."
+    body: |
+      Summary
+      Implement Final Boss at B99 with multi-phase fight and Final Relic reward.
+
+      Epic: EPIC: Bosses & Balance
+
+      Acceptance
+      - Final Boss data, phase design, and encounter integration complete.
+      - Final Relic drop integrated on victory.
+      - Cinematic intro/outro hooks in place.
+
+  - id: boss-ai-phases-skills
+    title: "Feature: Boss AI, phases, and skills"
+    labels: ["bosses", "ai"]
+    acceptance:
+      - "State machine for boss phases with thresholds and triggers."
+      - "Skill selection logic with counters and telegraphs."
+      - "Unit tests for AI transitions and edge cases."
+    body: |
+      Summary
+      Implement AI state machines for bosses, including phase transitions and skill logic.
+
+      Epic: EPIC: Bosses & Balance
+
+      Acceptance
+      - State machine for boss phases with thresholds and triggers.
+      - Skill selection logic with counters and telegraphs.
+      - Unit tests for AI transitions and edge cases.
+
+  - id: loot-tables-boss-uniques
+    title: "Data: Loot tables and boss unique drops"
+    labels: ["loot", "data"]
+    acceptance:
+      - "Data-driven loot tables with depth modifiers."
+      - "Unique drops per miniboss and final boss."
+      - "Schema validation and tests."
+    body: |
+      Summary
+      Author loot tables and unique boss drop items; integrate with chest and drop systems.
+
+      Epic: EPIC: Bosses & Balance
+
+      Acceptance
+      - Data-driven loot tables with depth modifiers.
+      - Unique drops per miniboss and final boss.
+      - Schema validation and tests.
+
+  - id: balance-enemy-stat-curves
+    title: "Balance: Enemy stat curves by depth"
+    labels: ["balance", "combat"]
+    acceptance:
+      - "Curves defined and configurable per-dimension (HP/ATK/DEF/RES/SPD/XP/GOLD)."
+      - "Unit tests for curve math and determinism."
+      - "Tuning notes documented."
+    body: |
+      Summary
+      Define and integrate depth-scaling stat curves for enemies.
+
+      Epic: EPIC: Bosses & Balance
+
+      Acceptance
+      - Curves defined and configurable per-dimension (HP/ATK/DEF/RES/SPD/XP/GOLD).
+      - Unit tests for curve math and determinism.
+      - Tuning notes documented.
+
+  - id: balance-chest-economy-curve
+    title: "Balance: Chest quality and item economy curve"
+    labels: ["balance", "loot"]
+    acceptance:
+      - "Depth-tiered chest quality and rarity tables."
+      - "Gold economy and shop pricing aligned with drops."
+      - "Tests for distribution sanity."
+    body: |
+      Summary
+      Balance chest quality and item economy vs. depth; align with shop pricing.
+
+      Epic: EPIC: Bosses & Balance
+
+      Acceptance
+      - Depth-tiered chest quality and rarity tables.
+      - Gold economy and shop pricing aligned with drops.
+      - Tests for distribution sanity.
+
+  - id: portal-chance-curve
+    title: "Feature: Portal spawn chance curve config and tests"
+    labels: ["world", "balance"]
+    acceptance:
+      - "Configurable curve for portal spawn chance decreasing by depth."
+      - "Unit tests verify monotonic decrease and expected values."
+      - "Debug visualization hook."
+    body: |
+      Summary
+      Implement and test depth-scaling portal spawn chance curve with config.
+
+      Epic: EPIC: Bosses & Balance
+
+      Acceptance
+      - Configurable curve for portal spawn chance decreasing by depth.
+      - Unit tests verify monotonic decrease and expected values.
+      - Debug visualization hook.
+
+  - id: telemetry-balance-hooks
+    title: "Feature: Telemetry hooks and balance dashboards"
+    labels: ["telemetry", "balance"]
+    acceptance:
+      - "Events for encounter outcomes, damage taken/dealt, resource spend."
+      - "Export pipeline (file-based) for offline analysis."
+      - "Basic dashboards/plots for tuning."
+    body: |
+      Summary
+      Add telemetry events and simple dashboards to inform balance decisions.
+
+      Epic: EPIC: Bosses & Balance
+
+      Acceptance
+      - Events for encounter outcomes, damage taken/dealt, resource spend.
+      - Export pipeline (file-based) for offline analysis.
+      - Basic dashboards/plots for tuning.
+
+  - id: qa-boss-balance-regression
+    title: "QA: Boss and balance regression test suite"
+    labels: ["qa", "tests"]
+    acceptance:
+      - "Deterministic simulations of boss fights."
+      - "Threshold checks for egregious balance regressions."
+      - "CI gating."
+    body: |
+      Summary
+      Add regression suite for boss encounters and core balance checks.
+
+      Epic: EPIC: Bosses & Balance
+
+      Acceptance
+      - Deterministic simulations of boss fights.
+      - Threshold checks for egregious balance regressions.
+      - CI gating.
+
+  - id: docs-bosses-balance-playbook
+    title: "Docs: Bosses & Balance design document and tuning playbook"
+    labels: ["docs", "design"]
+    acceptance:
+      - "Design doc covering bosses, phases, skills, and drops."
+      - "Tuning playbook with knobs and procedures."
+      - "Linked in README roadmap."
+    body: |
+      Summary
+      Document bosses, balance principles, and a playbook for tuning and validation.
+
+      Epic: EPIC: Bosses & Balance
+
+      Acceptance
+      - Design doc covering bosses, phases, skills, and drops.
+      - Tuning playbook with knobs and procedures.
+      - Linked in README roadmap.
