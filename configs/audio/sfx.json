@@ -1,0 +1,6 @@
+{
+  "ui_click": "data/audio/ui/click_01.wav",
+  "chest_open": "data/audio/ui/chest_open_01.wav",
+  "hit": "data/audio/combat/hit_01.wav",
+  "defeat": "data/audio/combat/defeat_01.wav"
+}
