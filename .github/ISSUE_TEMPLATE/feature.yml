@@ -1,0 +1,28 @@
+name: Feature
+description: Request or define a new feature
+labels: [feature]
+title: "Feature: <short name>"
+body:
+  - type: input
+    id: area
+    attributes:
+      label: Area
+      description: Area/component affected (e.g., dungeon, combat, ui)
+      placeholder: dungeon
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is the feature? Why does it matter?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: What must be delivered for this feature to be accepted?
+      placeholder: |
+        - ...
+        - ...
+    validations:
+      required: true

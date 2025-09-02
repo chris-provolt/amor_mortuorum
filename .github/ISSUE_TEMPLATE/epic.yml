@@ -1,0 +1,27 @@
+name: Epic
+description: Track a large body of work across multiple issues
+labels: [epic]
+title: "EPIC: <short name>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for high-level tracking of related child issues.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the epic goal and scope.
+      placeholder: High-level description
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: What must be true for this epic to be considered complete?
+      placeholder: |
+        - Child issues exist and are linked
+        - Progress can be tracked via checklist
+    validations:
+      required: true
