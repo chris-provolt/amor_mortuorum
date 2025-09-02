@@ -1,0 +1,9 @@
+{
+  "schema": "xp_curve@1",
+  "mode": "parametric",
+  "params": {
+    "base_to_next": 25,
+    "growth": 1.12,
+    "levels": 99
+  }
+}
