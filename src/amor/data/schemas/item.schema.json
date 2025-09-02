@@ -1,0 +1,31 @@
+{
+  "$id": "amor://schemas/item",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Item",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "type", "rarity"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "id": {"type": "string", "minLength": 1},
+    "name": {"type": "string", "minLength": 1},
+    "type": {"type": "string", "enum": ["consumable", "equipment", "key", "misc"]},
+    "rarity": {"type": "string", "enum": ["common", "uncommon", "rare", "epic", "legendary"]},
+    "description": {"type": "string"},
+    "stackSize": {"type": "integer", "minimum": 1, "default": 1},
+    "effects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": true,
+        "properties": {
+          "id": {"type": "string"}
+        }
+      },
+      "default": []
+    },
+    "value": {"type": "integer", "minimum": 0, "default": 0},
+    "tags": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+  }
+}
