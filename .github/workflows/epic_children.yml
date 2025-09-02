@@ -1,0 +1,125 @@
+name: Manage Epic Child Issues
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+jobs:
+  manage-epic:
+    name: Create and Link Child Issues for EPIC
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure labels exist
+        uses: actions-ecosystem/action-create-labels@v1
+        with:
+          github_token: ${{ github.token }}
+          from_file: .github/labels.yml
+
+      - name: Create child issues and update EPIC body
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const epicLabel = 'epic';
+            const childLabel = 'epic-child';
+            const markerStart = '<!-- epic:auto:children -->';
+            const markerEnd = '<!-- /epic:auto:children -->';
+
+            const issue = context.payload.issue;
+            if (!issue || issue.state !== 'open') {
+              core.info('No open issue context. Exiting.');
+              return;
+            }
+
+            const labels = (issue.labels || []).map(l => (typeof l === 'string' ? l : l.name));
+            const isEpic = issue.title.startsWith('EPIC:') || labels.includes(epicLabel);
+            if (!isEpic) {
+              core.info('Not an EPIC issue. Skipping.');
+              return;
+            }
+
+            // Ensure EPIC label is applied
+            if (!labels.includes(epicLabel)) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: [epicLabel]
+              });
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const getBody = (issue.body || '').toString();
+
+            if (getBody.includes(markerStart) && getBody.includes(markerEnd)) {
+              core.info('Epic already has children section. No action needed.');
+              return;
+            }
+
+            // Define child issues blueprint
+            const childBlueprints = [
+              {
+                title: 'Player Model: Stats, Inventory, Equipment Slots',
+                body: `Parent Epic: #${issue.number}\n\n## Summary\nImplement the Player domain model with combat stats, inventory, and equipment slots. Aggregate equipped stats and expose derived values.\n\n## Scope\n- Player entity with base stats (HP, MP, STR, DEF, MAG, RES, SPD, LCK) and current values\n- Inventory list with capacity constraints\n- Equipment slots: Weapon, Armor, Accessory 1, Accessory 2\n- Stat aggregation and derived values (e.g., ATK, DEF)\n- Serialization hooks for save/load\n\n## Acceptance\n- Unit tests for stat aggregation and equipment slot rules\n- Documentation of data schema and defaults\n- Type hints and docstrings\n`
+              },
+              {
+                title: 'Party System: Up to 4 Members & Formation',
+                body: `Parent Epic: #${issue.number}\n\n## Summary\nDesign and implement a Party container supporting up to 4 members, order/formation handling, and basic validation.\n\n## Scope\n- Party class with add/remove/swap/order operations\n- Max size enforcement (4)\n- Active leader and turn-order views\n- Serialization hooks for save/load\n\n## Acceptance\n- Unit tests for constraints and ordering\n- Error handling for invalid operations\n- Docstrings and examples\n`
+              },
+              {
+                title: 'Experience & Leveling: XP Curves, Stat Growth',
+                body: `Parent Epic: #${issue.number}\n\n## Summary\nImplement XP gain, level thresholds (configurable curves), and stat growth on level up.\n\n## Scope\n- Configurable XP curve (e.g., linear/exponential)\n- Level-up processing and stat increases\n- XP distribution to party members\n- Events/callbacks/hooks for UI\n\n## Acceptance\n- Unit tests for curve determinism and level transitions\n- Config-driven thresholds with defaults\n- Clear formulas documented\n`
+              },
+              {
+                title: 'Equipment System: Slots, Equipping, Stat Aggregation',
+                body: `Parent Epic: #${issue.number}\n\n## Summary\nImplement equipping/unequipping flow, slot validation, and stat aggregation across equipped items.\n\n## Scope\n- Slot compatibility rules (weapon/armor/accessories)\n- Equip/unequip operations and validation\n- Aggregation of item modifiers into player stats\n- Unit tests for edge cases and stacking rules\n\n## Acceptance\n- Passing tests for equip/unequip and modifier math\n- Robust error handling and messages\n- Documentation of stacking order and conflicts\n`
+              }
+            ];
+
+            // Create child issues
+            const createdChildren = [];
+            for (const c of childBlueprints) {
+              const created = await github.rest.issues.create({
+                owner, repo,
+                title: c.title,
+                body: c.body,
+                labels: [childLabel]
+              });
+              createdChildren.push({ number: created.data.number, title: c.title });
+            }
+
+            // Build checklist section with issue references; GitHub auto-updates checkboxes when referencing issues are closed
+            const checklistLines = [];
+            checklistLines.push('## Epic Progress');
+            checklistLines.push('');
+            checklistLines.push(markerStart);
+            checklistLines.push('');
+            for (const ch of createdChildren) {
+              checklistLines.push(`- [ ] #${ch.number} ${ch.title}`);
+            }
+            checklistLines.push('');
+            checklistLines.push(markerEnd);
+            const checklistSection = checklistLines.join('\n');
+
+            // Update EPIC body by appending the section
+            const newBody = (getBody.trim() + '\n\n' + checklistSection).trim() + '\n';
+            await github.rest.issues.update({
+              owner, repo,
+              issue_number: issue.number,
+              body: newBody
+            });
+
+            // Leave a comment for visibility
+            const links = createdChildren.map(c => `- #${c.number} ${c.title}`).join('\n');
+            await github.rest.issues.createComment({
+              owner, repo,
+              issue_number: issue.number,
+              body: `Child issues created and linked.\n\n${links}\n\nProgress checklist added to the issue body.`
+            });
+
+            core.info('Child issues created and epic body updated successfully.');
