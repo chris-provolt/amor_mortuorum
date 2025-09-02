@@ -1,9 +1,9 @@
 """
-Amor Mortuorum package root.
+Amor Mortuorum - core package
 """
-
 __all__ = [
-    "__version__",
+    "state",
+    "ui",
+    "input",
+    "config",
 ]
-
-__version__ = "0.1.0"
