@@ -1,0 +1,78 @@
+epic:
+  title: "EPIC: Relics of the Veil (Meta)"
+  summary: |
+    Relics data, acquisition logic, final relic, passive toggles.
+
+    Goal: Track and group related child issues under this Epic.
+  target_window: "2025-08-26 → (Ongoing)"
+  labels: ["epic"]
+
+children:
+  - title: "Relics: Data schema and registry"
+    labels: ["relics", "meta"]
+    body: |
+      Summary
+      Define data schema and a registry for 9 + 1 relics (final relic). Include IDs, names, descriptions, unlock conditions, and passive effects metadata.
+
+      Acceptance
+      - JSON/YAML schema exists and validated
+      - Registry can load and validate relic definitions
+      - IDs are stable and names localized-ready
+
+      Notes
+      - Include forward-compatibility for balance fields and feature flags
+
+  - title: "Relics: Acquisition logic and persistence"
+    labels: ["relics", "meta"]
+    body: |
+      Summary
+      Implement acquisition logic (e.g., drops, boss rewards) and save persistence across runs.
+
+      Acceptance
+      - Acquire on defined triggers (bosses, chests, events)
+      - Persist to meta-save and visible in Graveyard
+      - Idempotent (no duplicate acquisitions)
+
+  - title: "Relics: Final relic unlock and conditions"
+    labels: ["relics", "meta"]
+    body: |
+      Summary
+      Implement the 10th relic unlocked by defeating the deepest boss and meeting any prerequisite conditions.
+
+      Acceptance
+      - Unlock on B99 final boss defeat
+      - Optional prerequisites checked
+      - Integration tests cover edge cases
+
+  - title: "Relics: Passive toggles UI and save-state"
+    labels: ["relics", "ui"]
+    body: |
+      Summary
+      Provide UI to toggle applicable passive effects on/off between runs, saved to meta-state.
+
+      Acceptance
+      - UI lists acquired relics and toggleable passives
+      - Toggles persist and are enforced in-run
+      - Accessibility and controller/keyboard support
+
+  - title: "Relics: Content data for 9+1 relics"
+    labels: ["relics", "content"]
+    body: |
+      Summary
+      Author initial data for all relics with sensible, balanced effects and clear descriptions.
+
+      Acceptance
+      - All relics defined in data files and validated by schema
+      - Descriptions concise and thematic
+      - Balance reviewed with test stubs
+
+  - title: "Relics: Tests, validation, and docs"
+    labels: ["relics", "qa"]
+    body: |
+      Summary
+      Comprehensive unit tests, validation routines, and developer docs for the relic system.
+
+      Acceptance
+      - >90% unit test coverage on relic modules
+      - Validation catches invalid/missing fields
+      - Docs explain data, acquisition, toggles, and save formats
