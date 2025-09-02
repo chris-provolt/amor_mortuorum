@@ -1,0 +1,20 @@
+name: Telemetry Client
+description: Implement JSON-Lines telemetry logging with context
+labels: [telemetry]
+body:
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Events, schema, buffering, and file output
+    validations:
+      required: true
+  - type: checkboxes
+    id: acceptance
+    attributes:
+      label: Acceptance
+      options:
+        - label: Events are written as JSONL
+        - label: Global context merged into attrs
+        - label: Output directory configurable
+        - label: Unit tests cover emit/flush
