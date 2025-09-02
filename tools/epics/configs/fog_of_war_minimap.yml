@@ -1,0 +1,102 @@
+title: "EPIC: Fog of War & Minimap"
+body: |
+  ## Summary
+  Implement visibility (field of view), explored tile tracking (auto-map), and a minimap UI with toggle and icons.
+
+  Goal: Track and group related child issues under this Epic.
+  Target Window: 2025-08-26 → (Ongoing)
+
+  ## Acceptance
+  - Child issues exist and are linked in comments.
+  - Label `epic` is applied to this issue.
+  - Progress is tracked via a linked issues checklist.
+labels:
+  - epic
+children:
+  - key: fov-core
+    title: "FOV: Visibility + Explored Tiles Grid"
+    labels: [feature, map, fov]
+    body: |
+      Implement tile visibility and exploration state.
+      - Maintain per-floor boolean arrays for "visible" and "explored".
+      - When a tile becomes visible, mark explored=true permanently for that run.
+      - Expose events: on_visibility_changed, on_explored_changed.
+      - Provide serialization hooks to save/load explored arrays.
+
+  - key: fov-algorithm
+    title: "FOV Algorithm: Permissive Shadowcasting"
+    labels: [feature, fov, perf]
+    body: |
+      Implement a deterministic, performant FOV algorithm (Permissive Shadowcasting or Recursive Shadowcasting).
+      - Input: origin (player), radius, opaque callback.
+      - Output: set of visible tiles each turn.
+      - Must support obstacles, rooms, corridors.
+      - Include unit tests for edge cases and obstacles.
+
+  - key: minimap-render
+    title: "Minimap: Rendering Overlay"
+    labels: [feature, ui, map]
+    body: |
+      Render a minimap overlay showing explored tiles and current visibility.
+      - Configurable scale (pixels per tile), position, opacity.
+      - Draw visible area brighter; explored but not visible dimmer.
+      - Respect performance budgets; batch draw if using Arcade.
+
+  - key: minimap-icons
+    title: "Minimap: Icons for Stairs, Chests, Portals"
+    labels: [feature, ui, map]
+    body: |
+      Display standardized icons on the minimap for points of interest.
+      - Up stairs / down stairs (if applicable), chests, portals to Graveyard.
+      - Icon color contrasts with background; supports high-DPI.
+      - Optional legend in pause/help screen.
+
+  - key: minimap-toggle
+    title: "Minimap: Toggle & Hotkey"
+    labels: [feature, ui]
+    body: |
+      Implement input handling to toggle the minimap and cycle sizes.
+      - Default hotkey: 'M' to toggle, 'Shift+M' to cycle modes (small/large/off).
+      - Persist last state per run.
+
+  - key: save-state
+    title: "Save/Load: Persist Explored Tiles"
+    labels: [feature, save]
+    body: |
+      Persist explored state in the run savefile and reload per floor.
+      - Do not persist visibility across turns; only explored.
+      - Validate against schema version for forward compatibility.
+
+  - key: accessibility-contrast
+    title: "Accessibility: Minimap Contrast/Colorblind Options"
+    labels: [feature, accessibility, ui]
+    body: |
+      Provide settings for colorblind-friendly palette and high contrast minimap.
+      - Configurable colors for: visible tiles, explored tiles, unknown.
+      - Predefined palettes for common color vision deficiencies.
+
+  - key: perf-culling
+    title: "Performance: Culling & Throttling"
+    labels: [perf, map]
+    body: |
+      Ensure FOV and minimap updates are efficient.
+      - Avoid recomputing FOV when origin and map state haven't changed.
+      - Debounce minimap redraws and batch draw calls.
+      - Profiling in stress scenarios (large rooms, many obstacles).
+
+  - key: tests-fov-minimap
+    title: "Tests: FOV and Minimap"
+    labels: [task]
+    body: |
+      Add comprehensive unit tests:
+      - FOV visibility with obstacles, tunnel, room edges, corners.
+      - Explored state transitions.
+      - Minimap rendering function outputs (colors, layers) via headless checks.
+
+  - key: docs-fov-minimap
+    title: "Docs: Fog of War & Minimap"
+    labels: [docs]
+    body: |
+      Document the design decisions, data structures, and extension points.
+      - Include diagrams of visibility and exploration flows.
+      - Update README UI/UX section with minimap details.
