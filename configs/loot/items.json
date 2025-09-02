@@ -1,0 +1,22 @@
+{
+  "items": [
+    {"id": "potion_minor", "name": "Minor Health Potion", "quality": "common", "meta": {"heal": 25}},
+    {"id": "scroll_identify", "name": "Scroll of Identify", "quality": "common"},
+    {"id": "torch", "name": "Torch", "quality": "common"},
+
+    {"id": "potion_standard", "name": "Health Potion", "quality": "uncommon", "meta": {"heal": 50}},
+    {"id": "bomb_small", "name": "Small Bomb", "quality": "uncommon", "meta": {"dmg": 30}},
+    {"id": "amulet_copper", "name": "Copper Amulet", "quality": "uncommon", "meta": {"stat": {"DEF": 1}}},
+
+    {"id": "potion_greater", "name": "Greater Health Potion", "quality": "rare", "meta": {"heal": 100}},
+    {"id": "scroll_freeze", "name": "Scroll of Freeze", "quality": "rare", "meta": {"dmg": 40, "status": "frozen"}},
+    {"id": "ring_silver", "name": "Silver Ring", "quality": "rare", "meta": {"stat": {"SPD": 2}}},
+
+    {"id": "elixir", "name": "Elixir", "quality": "epic", "meta": {"heal": 100, "mana": 100}},
+    {"id": "bomb_heavy", "name": "Heavy Bomb", "quality": "epic", "meta": {"dmg": 75}},
+    {"id": "amulet_sapphire", "name": "Sapphire Amulet", "quality": "epic", "meta": {"stat": {"MAG": 3}}},
+
+    {"id": "token_resurrection", "name": "Resurrection Token", "quality": "legendary", "meta": {"revive": true}},
+    {"id": "ring_obsidian", "name": "Obsidian Ring", "quality": "legendary", "meta": {"stat": {"ATK": 4, "SPD": 2}}}
+  ]
+}
