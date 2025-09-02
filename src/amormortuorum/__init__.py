@@ -1,9 +1,14 @@
 """
 Amor Mortuorum package root.
+
+This package contains core, combat, items, and progression modules used by
+unit tests and the wider application. The implementation is intentionally
+lightweight and deterministic-friendly to support testing.
 """
 
 __all__ = [
-    "__version__",
+    "core",
+    "combat",
+    "items",
+    "progression",
 ]
-
-__version__ = "0.1.0"
