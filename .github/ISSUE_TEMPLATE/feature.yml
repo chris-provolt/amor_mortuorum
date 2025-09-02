@@ -1,25 +1,25 @@
 name: Feature
-description: Implement a feature or task
+description: Request or track a new feature
 labels: [feature]
-title: "feat: <short description>"
 body:
   - type: input
-    id: context
+    id: summary
     attributes:
-      label: Epic Link
-      description: Link to parent Epic issue (if any)
-      placeholder: "#<epic-issue>"
+      label: Summary
+      placeholder: Short feature description
   - type: textarea
-    id: description
+    id: motivation
     attributes:
-      label: Description
-      description: What needs to be done?
+      label: Motivation
+      description: Why is this feature needed?
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is in/out of scope?
   - type: textarea
     id: acceptance
     attributes:
       label: Acceptance Criteria
-      description: Define done for this task
-      placeholder: |
-        - [ ] Unit tests added/updated
-        - [ ] Code reviewed
-        - [ ] Documentation updated
+      description: Define testable outcomes
+
