@@ -1,9 +1,5 @@
 """
 Amor Mortuorum package root.
+
+This package contains game modules for the Amor Mortuorum project.
 """
-
-__all__ = [
-    "__version__",
-]
-
-__version__ = "0.1.0"
