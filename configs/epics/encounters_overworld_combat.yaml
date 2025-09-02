@@ -1,0 +1,37 @@
+epic:
+  title: "EPIC: Encounters & Overworld → Combat"
+  description: |
+    Encounter triggers, enemy formations by tier, miniboss gates.
+
+    Goal: Track and group related child issues under this Epic.
+  target_window: "2025-08-26 → (Ongoing)"
+  labels: ["epic"]
+  acceptance:
+    - "Child issues exist and are linked in comments."
+    - "Labels applied: `epic`."
+    - "Progress can be tracked via linked issues checklist."
+
+children:
+  - title: "Encounter Triggers (Overworld)"
+    description: |
+      Implement deterministic encounter spawning on overworld/dungeon tiles.
+      - Support proximity and tile-tag triggers
+      - Rate limiting and step counters
+      - Visual telegraph and lock-in rules (no escape zones)
+    labels: ["encounters", "overworld", "combat"]
+
+  - title: "Enemy Formations by Tier"
+    description: |
+      Define and load enemy formations per depth tier with weighted selection.
+      - Data-driven formation tables
+      - Tier scaling hooks (stats, skills)
+      - Unit tests for selection distribution
+    labels: ["data", "combat"]
+
+  - title: "Miniboss Gates (20/40/60/80)"
+    description: |
+      Implement miniboss gate rooms and trigger rules at floors 20/40/60/80.
+      - Gate tile prefab + lock/unlock logic
+      - Encounter binding to unique miniboss formations
+      - Rewards and portal spawning behavior
+    labels: ["boss", "overworld", "combat"]
