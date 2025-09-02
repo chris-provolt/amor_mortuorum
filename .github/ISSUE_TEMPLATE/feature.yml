@@ -1,0 +1,25 @@
+name: Feature
+description: Implement a feature or task
+labels: [feature]
+title: "feat: <short description>"
+body:
+  - type: input
+    id: context
+    attributes:
+      label: Epic Link
+      description: Link to parent Epic issue (if any)
+      placeholder: "#<epic-issue>"
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What needs to be done?
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Define done for this task
+      placeholder: |
+        - [ ] Unit tests added/updated
+        - [ ] Code reviewed
+        - [ ] Documentation updated
