@@ -1,9 +1,6 @@
-"""
-Amor Mortuorum package root.
-"""
+from importlib.metadata import version, PackageNotFoundError
 
-__all__ = [
-    "__version__",
-]
-
-__version__ = "0.1.0"
+try:
+    __version__ = version("amormortuorum")
+except PackageNotFoundError:  # pragma: no cover - during development
+    __version__ = "0.0.0-dev"
