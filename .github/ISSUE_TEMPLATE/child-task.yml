@@ -1,0 +1,30 @@
+name: Task
+description: Single actionable task, possibly linked to an Epic
+labels: []
+body:
+  - type: input
+    id: epic
+    attributes:
+      label: Epic Link (optional)
+      description: Reference the parent epic, e.g. #123
+      placeholder: #123
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What needs to be done and why.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: What conditions must be met.
+      placeholder: |
+        - Works on Windows, macOS, Linux
+        - Unit tests added
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Additional context and links
