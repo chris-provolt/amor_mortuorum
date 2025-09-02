@@ -1,0 +1,14 @@
+repo: owner/repo
+labels:
+  epic:
+    color: 1f1f1f
+    description: High-level epic tracking issue
+  tracking:
+    color: 0052cc
+    description: Tracking/umbrella issue
+  performance:
+    color: 0e8a16
+    description: Performance-related work
+  stability:
+    color: d93f0b
+    description: Stability, crash resilience, determinism
