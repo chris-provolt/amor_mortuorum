@@ -1,0 +1,73 @@
+name: Epic Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      config_path:
+        description: Path to an epic YAML config (e.g., configs/epics/audio_atmosphere.yaml)
+        required: true
+  issues:
+    types: [opened, edited, labeled, unlabeled, reopened, closed]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  sync-via-config:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || pip install requests pyyaml pydantic
+      - name: Sync Epic
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python tools/epics/sync_epic.py --config "${{ inputs.config_path }}"
+
+  sync-on-epic-issues:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pyyaml pydantic
+      - name: Determine if issue is an Epic
+        id: epic_detect
+        env:
+          LABELS: ${{ toJson(github.event.issue.labels) }}
+        run: |
+          python - << 'PY'
+          import json, os
+          labels = {l['name'] for l in json.loads(os.environ.get('LABELS','[]'))}
+          print('labels:', labels)
+          is_epic = 'epic' in labels
+          print(f"is_epic={str(is_epic).lower()}")
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"is_epic={str(is_epic).lower()}\n")
+          PY
+      - name: Sync Epic by inferring config from title
+        if: steps.epic_detect.outputs.is_epic == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          EPIC_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          python tools/epics/sync_epic.py --epic-number "$EPIC_NUMBER"
