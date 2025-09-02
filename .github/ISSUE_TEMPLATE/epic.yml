@@ -1,0 +1,38 @@
+name: Epic
+description: Track a large body of work via linked child issues and checklist
+labels:
+  - epic
+  - tracking
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to create a high-level Epic that groups related issues. Link child issues in a checklist.
+  - type: input
+    id: goal
+    attributes:
+      label: Goal
+      description: What is the objective of this epic?
+      placeholder: e.g., Improve performance and stability across the engine
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: High-level overview and scope
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: What conditions must be met for the epic to be considered complete?
+      value: |
+        - Child issues exist and are linked in comments.
+        - Labels applied: `epic`.
+        - Progress can be tracked via linked issues checklist.
+  - type: textarea
+    id: checklist
+    attributes:
+      label: Child Issues
+      description: Add a checklist of child issues
+      value: |
+        - [ ] Child issue 1 #123
+        - [ ] Child issue 2 #124
