@@ -1,0 +1,24 @@
+name: Feature
+description: Request or track a new feature
+labels: [feature]
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      placeholder: Short feature description
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why is this feature needed?
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is in/out of scope?
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Define testable outcomes
