@@ -1,0 +1,209 @@
+{
+  "formations": [
+    {
+      "id": "t1_slimes_2",
+      "members": [{"enemy": "slime", "count": 2}],
+      "weights": {"1": 6, "2": 1}
+    },
+    {
+      "id": "t1_slimes_3",
+      "members": [{"enemy": "slime", "count": 3}],
+      "weights": {"1": 3}
+    },
+    {
+      "id": "t1_rats_bat",
+      "members": [
+        {"enemy": "rat", "count": 2},
+        {"enemy": "bat", "count": 1}
+      ],
+      "weights": {"1": 4, "2": 1}
+    },
+
+    {
+      "id": "t2_wolves_2",
+      "members": [{"enemy": "wolf", "count": 2}],
+      "weights": {"2": 6, "3": 2}
+    },
+    {
+      "id": "t2_skeletons_3",
+      "members": [{"enemy": "skeleton", "count": 3}],
+      "weights": {"2": 5, "3": 2}
+    },
+    {
+      "id": "t2_zombieline",
+      "members": [
+        {"enemy": "zombie", "count": 2},
+        {"enemy": "skeleton", "count": 1}
+      ],
+      "weights": {"2": 4, "3": 2}
+    },
+
+    {
+      "id": "t3_imp_spiders",
+      "members": [
+        {"enemy": "imp", "count": 1},
+        {"enemy": "spider", "count": 2}
+      ],
+      "weights": {"3": 6, "4": 2}
+    },
+    {
+      "id": "t3_ghoul_pair",
+      "members": [{"enemy": "ghoul", "count": 2}],
+      "weights": {"3": 4, "4": 2}
+    },
+    {
+      "id": "t3_mixed_4",
+      "members": [
+        {"enemy": "imp", "count": 1},
+        {"enemy": "spider", "count": 1},
+        {"enemy": "ghoul", "count": 2}
+      ],
+      "weights": {"3": 2, "4": 2}
+    },
+
+    {
+      "id": "t4_orc_band",
+      "members": [{"enemy": "orc", "count": 3}],
+      "weights": {"4": 6, "5": 3}
+    },
+    {
+      "id": "t4_banshee_wights",
+      "members": [
+        {"enemy": "banshee", "count": 1},
+        {"enemy": "wight", "count": 2}
+      ],
+      "weights": {"4": 4, "5": 3}
+    },
+    {
+      "id": "t4_mixed_5",
+      "members": [
+        {"enemy": "orc", "count": 2},
+        {"enemy": "banshee", "count": 1},
+        {"enemy": "wight", "count": 2}
+      ],
+      "weights": {"4": 2, "5": 2}
+    },
+
+    {
+      "id": "t5_gargoyle_trio",
+      "members": [{"enemy": "gargoyle", "count": 3}],
+      "weights": {"5": 6, "6": 2}
+    },
+    {
+      "id": "t5_revenant_pack",
+      "members": [{"enemy": "revenant", "count": 2}],
+      "weights": {"5": 4, "6": 2}
+    },
+    {
+      "id": "t5_sorcerer_screen",
+      "members": [
+        {"enemy": "sorcerer", "count": 1},
+        {"enemy": "revenant", "count": 1},
+        {"enemy": "gargoyle", "count": 1}
+      ],
+      "weights": {"5": 3, "6": 2}
+    },
+
+    {
+      "id": "t6_knight_vanguard",
+      "members": [
+        {"enemy": "dread_knight", "count": 1},
+        {"enemy": "troll", "count": 1},
+        {"enemy": "vampire_spawn", "count": 1}
+      ],
+      "weights": {"6": 6, "7": 3}
+    },
+    {
+      "id": "t6_troll_pair",
+      "members": [{"enemy": "troll", "count": 2}],
+      "weights": {"6": 4, "7": 2}
+    },
+    {
+      "id": "t6_spawn_coterie",
+      "members": [{"enemy": "vampire_spawn", "count": 3}],
+      "weights": {"6": 3, "7": 2}
+    },
+
+    {
+      "id": "t7_nightmare_band",
+      "members": [
+        {"enemy": "nightmare", "count": 1},
+        {"enemy": "lichling", "count": 2}
+      ],
+      "weights": {"7": 6, "8": 3}
+    },
+    {
+      "id": "t7_basilisk_pair",
+      "members": [{"enemy": "basilisk", "count": 2}],
+      "weights": {"7": 4, "8": 2}
+    },
+    {
+      "id": "t7_mixed_5",
+      "members": [
+        {"enemy": "lichling", "count": 2},
+        {"enemy": "basilisk", "count": 1},
+        {"enemy": "nightmare", "count": 1}
+      ],
+      "weights": {"7": 3, "8": 2}
+    },
+
+    {
+      "id": "t8_death_knight_squad",
+      "members": [
+        {"enemy": "death_knight", "count": 1},
+        {"enemy": "vampire", "count": 1},
+        {"enemy": "chimera", "count": 1}
+      ],
+      "weights": {"8": 6, "9": 3}
+    },
+    {
+      "id": "t8_vampire_pair",
+      "members": [{"enemy": "vampire", "count": 2}],
+      "weights": {"8": 4, "9": 3}
+    },
+    {
+      "id": "t8_chimera_line",
+      "members": [{"enemy": "chimera", "count": 2}],
+      "weights": {"8": 3, "9": 2}
+    },
+
+    {
+      "id": "t9_archlich_entourage",
+      "members": [
+        {"enemy": "archlich", "count": 1},
+        {"enemy": "dread_wraith", "count": 1},
+        {"enemy": "hydra", "count": 1}
+      ],
+      "weights": {"9": 6, "10": 4}
+    },
+    {
+      "id": "t9_wraith_pair",
+      "members": [{"enemy": "dread_wraith", "count": 2}],
+      "weights": {"9": 4, "10": 3}
+    },
+    {
+      "id": "t9_hydra_line",
+      "members": [{"enemy": "hydra", "count": 1}],
+      "weights": {"9": 2, "10": 2}
+    },
+
+    {
+      "id": "t10_final_host",
+      "members": [
+        {"enemy": "abyssal_lord", "count": 1},
+        {"enemy": "dracolich", "count": 1}
+      ],
+      "weights": {"10": 6}
+    },
+    {
+      "id": "t10_dracolich_pair",
+      "members": [{"enemy": "dracolich", "count": 1}],
+      "weights": {"10": 4}
+    },
+    {
+      "id": "t10_leviathan_solo",
+      "members": [{"enemy": "leviathan", "count": 1}],
+      "weights": {"10": 3}
+    }
+  ]
+}
