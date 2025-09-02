@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amor-mortuorum"
+version = "0.1.0"
+description = "Amor Mortuorum core systems: Graveyard hub, shop, crypt, save system"
+authors = [{name = "Amor Mortuorum Team"}]
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+pythonpath = ["src"]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amormortuorum"
+version = "0.1.0"
+description = "Amor Mortuorum - A modern, dark roguelite built with Python + Arcade"
+readme = "README.md"
+authors = [{name = "Amor Mortuorum Team"}]
+requires-python = ">=3.9"
+dependencies = [
+    "arcade==2.6.17",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+]
+
+[project.scripts]
+amor = "amormortuorum.cli:main"
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["amormortuorum*"]
