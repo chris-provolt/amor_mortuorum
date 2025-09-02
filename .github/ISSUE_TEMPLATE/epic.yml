@@ -1,0 +1,29 @@
+name: Epic
+description: Track a group of related issues
+labels: [epic]
+title: "EPIC: <Title>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to define an Epic. Child issues can be generated via the Epic sync tool or linked manually.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the goal and scope for this Epic.
+      placeholder: A short summary of the desired outcome.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Define how we know this Epic is complete.
+      value: |
+        - Child issues exist and are linked in comments.
+        - Labels applied: `epic`.
+        - Progress can be tracked via linked issues checklist.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Additional context, assets, or references.
