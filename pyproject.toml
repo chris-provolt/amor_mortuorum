@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amor-mortuorum"
+version = "0.1.0"
+description = "Amor Mortuorum core systems: Graveyard hub, shop, crypt, save system"
+authors = [{name = "Amor Mortuorum Team"}]
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+pythonpath = ["src"]
