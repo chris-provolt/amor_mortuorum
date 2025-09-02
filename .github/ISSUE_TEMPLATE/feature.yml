@@ -1,0 +1,32 @@
+name: Feature / Task
+description: Implement a feature or task under an Epic
+labels: [feature]
+title: "<Feature>: <short description>"
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What are we building and why?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Define clear, testable outcomes
+      placeholder: >-
+        - [ ] Behavior is implemented and tested
+        - [ ] Documentation updated
+    validations:
+      required: true
+  - type: input
+    id: epic_link
+    attributes:
+      label: Epic Link (optional)
+      description: Link the tracking Epic (e.g., #123)
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / Design
+      description: Any design notes, risks, or references

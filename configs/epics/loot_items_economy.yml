@@ -1,0 +1,105 @@
+epic_title: "EPIC: Loot, Items & Economy"
+epic_body: |
+  Summary
+  Item schema, equip/unequip, consumables, resurrection token, gold/economy.
+
+  Goal: Track and group related child issues under this Epic.
+  Target Window: 2025-08-26 → (Ongoing)
+
+  Acceptance
+  - Child issues exist and are linked in comments.
+  - Labels applied: `epic`.
+  - Progress can be tracked via linked issues checklist.
+labels:
+  - epic
+children:
+  - title: "Item Data Schema & Registry"
+    labels: ["feature", "items", "data"]
+    body: |
+      Define item data schema (JSON/YAML) and a centralized registry.
+      - Fields: id, name, type, rarity, stackable, effects, equip_slots, value, tags
+      - Validation & versioning
+      - Loading and hot-reload for development
+      - Unit tests for schema validation
+  - title: "Equipment System: Equip/Unequip"
+    labels: ["feature", "items", "equipment"]
+    body: |
+      Implement equipment system with slots (weapon, armor, accessory, etc.).
+      - Equip/unequip flows, stat recalculation
+      - Conflict resolution (slot exclusivity)
+      - Serialization for save/load
+      - Unit tests
+  - title: "Consumables: Use Effects & Targeting"
+    labels: ["feature", "items", "consumable"]
+    body: |
+      Implement consumable item usage in combat and exploration contexts.
+      - Healing, buffs, debuffs
+      - Targeting rules (self, ally, enemy, party)
+      - Cooldowns/limited stacking rules
+      - Unit tests
+  - title: "Resurrection Token Mechanics"
+    labels: ["feature", "items", "system"]
+    body: |
+      Implement Resurrection Token behavior.
+      - On death, if carried, revive at Graveyard and consume token
+      - Edge cases: simultaneous wipes, boss floors, portal timing
+      - Visual/audio feedback hooks
+      - Unit tests
+  - title: "Gold Economy: Currency & Transactions"
+    labels: ["feature", "economy"]
+    body: |
+      Implement currency model and transaction ledger.
+      - Earn from fights, chests; spend at Graveyard vendors
+      - Anti-exploit measures; clamped ranges
+      - Save/load and analytics hooks
+      - Unit tests
+  - title: "Vendors & Pricing: Graveyard Shop"
+    labels: ["feature", "economy", "ui"]
+    body: |
+      Implement shop UI and pricing model.
+      - Depth-based price modifiers; scarcity curves
+      - Inventory rotation; limited stock
+      - Buy/sell flows, confirmations
+      - Unit tests
+  - title: "Chest Loot Tables by Depth"
+    labels: ["feature", "loot", "procedural"]
+    body: |
+      Configure depth-scaled chest loot tables.
+      - Themes; rarity curves; guarantees
+      - Deterministic generation for tests
+      - Unit tests
+  - title: "Enemy Drop Generation"
+    labels: ["feature", "loot"]
+    body: |
+      Implement drop generation from enemies.
+      - Separate gold and item rolls; pity system
+      - Boss/miniboss unique pools
+      - Unit tests
+  - title: "Crypt: Persistent Storage (3 Slots)"
+    labels: ["feature", "items", "persistence"]
+    body: |
+      Implement Crypt storage with 3 persistent item slots.
+      - Access from Graveyard; between-run persistence
+      - Conflict and dupe prevention
+      - Unit tests
+  - title: "Inventory & Item UI"
+    labels: ["feature", "ui", "items"]
+    body: |
+      Implement inventory UI and interaction model.
+      - Equip/unequip; use; split stacks; sort & filter
+      - Controller and keyboard accessibility
+      - Unit tests
+  - title: "Balance Curves: Rarity, Value & Depth"
+    labels: ["feature", "balance", "economy"]
+    body: |
+      Define and tune balance curves.
+      - Item rarity probabilities; gold rewards; vendor pricing
+      - Depth scaling functions; curve configuration
+      - Simulation tooling; Unit tests
+  - title: "Documentation: Items, Loot & Economy"
+    labels: ["docs", "items", "economy"]
+    body: |
+      Document systems, data formats, and workflows.
+      - Contributor guide for adding items/loot tables
+      - Glossary of item tags/types
+      - Diagrams of flows
