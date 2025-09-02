@@ -1,158 +1,141 @@
-import io
-import json
-import os
-from pathlib import Path
-
-import pytest
-import responses
-
-from src.am_epic.cli import main as cli_main
-
-
-@pytest.fixture()
-def tmp_yaml(tmp_path: Path) -> Path:
-    data = {
-        "epic": {
-            "title": "EPIC: Dungeon Generation & Navigation",
-            "body": "Summary body\n\n<!-- epic-checklist:start --><!-- epic-checklist:end -->",
-            "labels": ["epic"],
-            "assignees": [],
-        },
-        "children": [
-            {"title": "Dungeon: BSP Room Generation", "body": "BSP body", "labels": ["dungeon", "generation"]},
-            {"title": "Navigation: Pathfinding & Movement", "body": "Path body", "labels": ["navigation"]},
-        ],
-    }
-    p = tmp_path / "epic.yml"
-    p.write_text(json.dumps(data))  # YAML superset; JSON is valid YAML
-    return p
+import tempfile
+from typing import Any, Dict, List
+from tools.epics.epic_manager import (
+    load_config,
+    process_epic,
+    MARKER_START,
+    MARKER_END,
+)
 
 
-def _issue(number, title, body="", state="open", labels=None):
-    labels = labels or []
-    return {
-        "number": number,
-        "title": title,
-        "body": body,
-        "state": state,
-        "labels": [{"name": l} for l in labels],
-    }
+class FakeLabel:
+    def __init__(self, name: str):
+        self.name = name
 
 
-@responses.activate
-def test_cli_apply_creates_epic_and_children(tmp_yaml, monkeypatch):
-    # Env
-    monkeypatch.setenv("GITHUB_TOKEN", "tkn")
-    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+class FakeComment:
+    def __init__(self, body: str):
+        self.body = body
+    def edit(self, body: str):
+        self.body = body
 
-    # Label checks (GET will 404 -> create)
-    responses.add(
-        responses.GET,
-        "https://api.github.com/repos/owner/repo/labels/epic",
-        status=404,
-    )
-    responses.add(
-        responses.POST,
-        "https://api.github.com/repos/owner/repo/labels",
-        json={"name": "epic"},
-        status=201,
-    )
-    responses.add(
-        responses.GET,
-        "https://api.github.com/repos/owner/repo/labels/epic-child",
-        status=404,
-    )
-    responses.add(
-        responses.POST,
-        "https://api.github.com/repos/owner/repo/labels",
-        json={"name": "epic-child"},
-        status=201,
-    )
 
-    # Search epic (none)
-    responses.add(
-        responses.GET,
-        "https://api.github.com/search/issues?q=repo%3Aowner%2Frepo%20type%3Aissue%20in%3Atitle%20%22EPIC%3A%20Dungeon%20Generation%20%26%20Navigation%22",
-        json={"items": []},
-        status=200,
-    )
-    # Create epic
-    responses.add(
-        responses.POST,
-        "https://api.github.com/repos/owner/repo/issues",
-        json=_issue(1, "EPIC: Dungeon Generation & Navigation", "Summary body"),
-        status=201,
-    )
+class FakeIssue:
+    _num = 0
+    def __init__(self, title: str, body: str, labels: List[FakeLabel]):
+        FakeIssue._num += 1
+        self.title = title
+        self.body = body
+        self.labels = labels
+        self.number = FakeIssue._num
+        self._comments: List[FakeComment] = []
+    def get_comments(self):
+        return list(self._comments)
+    def create_comment(self, body: str):
+        c = FakeComment(body)
+        self._comments.append(c)
+        return c
+    def edit(self, body: str = None):
+        if body is not None:
+            self.body = body
 
-    # Children search (none)
-    for title in ["Dungeon: BSP Room Generation", "Navigation: Pathfinding & Movement"]:
-        url = "https://api.github.com/search/issues?q=repo%3Aowner%2Frepo%20type%3Aissue%20in%3Atitle%20%22" + requests.utils.quote(title, safe="") + "%22"
-        responses.add(
-            responses.GET,
-            url,
-            json={"items": []},
-            status=200,
-        )
-        responses.add(
-            responses.POST,
-            "https://api.github.com/repos/owner/repo/issues",
-            json=_issue(100 + len(responses.calls), title),
-            status=201,
-        )
 
-    # get_issue for building checklist (called twice: for each child once, and again when listing in comments)
-    # We'll respond with the child issues created above: assume numbers 3 and 5 for simplicity
-    # After the two POSTs above, we don't know exact numbers; instead, add generic matchers for GET issue
-    responses.add_callback(
-        responses.GET,
-        responses.calls._calls is None and "" or "https://api.github.com/repos/owner/repo/issues/3",
-        callback=lambda req: (200, {}, json.dumps(_issue(3, "Dungeon: BSP Room Generation"))),
-    )
-    responses.add_callback(
-        responses.GET,
-        "https://api.github.com/repos/owner/repo/issues/4",
-        callback=lambda req: (200, {}, json.dumps(_issue(4, "Navigation: Pathfinding & Movement"))),
-    )
+class FakeRepo:
+    def __init__(self, full_name: str = "owner/repo"):
+        self.full_name = full_name
+        self._labels: Dict[str, FakeLabel] = {}
+        self._issues: List[FakeIssue] = []
+    def get_labels(self):
+        return list(self._labels.values())
+    def create_label(self, name: str, color: str, description: str):
+        lbl = FakeLabel(name)
+        self._labels[name.lower()] = lbl
+        return lbl
+    def get_issues(self, state: str = "open"):
+        return list(self._issues)
+    def create_issue(self, title: str, body: str, labels: List[FakeLabel]):
+        issue = FakeIssue(title, body, labels)
+        self._issues.append(issue)
+        return issue
 
-    # Update epic body
-    responses.add(
-        responses.PATCH,
-        "https://api.github.com/repos/owner/repo/issues/1",
-        json=_issue(1, "EPIC: Dungeon Generation & Navigation", "updated"),
-        status=200,
-    )
 
-    # Comments on epic and children
-    # list comments epic -> empty
-    responses.add(
-        responses.GET,
-        "https://api.github.com/repos/owner/repo/issues/1/comments",
-        json=[],
-        status=200,
-    )
-    # create comment epic
-    responses.add(
-        responses.POST,
-        "https://api.github.com/repos/owner/repo/issues/1/comments",
-        json={"id": 10},
-        status=201,
-    )
+def minimal_config_yaml() -> str:
+    return """
+    title: EPIC: Fog of War & Minimap
+    body: |
+      Test epic body
+    labels: [epic]
+    children:
+      - key: child-1
+        title: FOV: Visibility + Explored Tiles Grid
+        labels: [feature, map, fov]
+        body: test child body 1
+      - key: child-2
+        title: Minimap: Rendering Overlay
+        labels: [feature, ui, map]
+        body: test child body 2
+    """
 
-    # list comments child -> empty
-    for n in [3, 4]:
-        responses.add(
-            responses.GET,
-            f"https://api.github.com/repos/owner/repo/issues/{n}/comments",
-            json=[],
-            status=200,
-        )
-        responses.add(
-            responses.POST,
-            f"https://api.github.com/repos/owner/repo/issues/{n}/comments",
-            json={"id": 20 + n},
-            status=201,
-        )
 
-    # Run CLI
-    rc = cli_main(["apply", "-c", str(tmp_yaml)])
-    assert rc == 0
+def test_load_config_and_process_epic_creates_issues(tmp_path):
+    # Write temp config
+    cfg_path = tmp_path / "epic.yml"
+    cfg_path.write_text(minimal_config_yaml())
+
+    cfg = load_config(str(cfg_path))
+    repo = FakeRepo()
+
+    summary = process_epic(repo, cfg, dry_run=False)
+
+    # Should have created 1 epic + 2 children
+    assert len(repo._issues) == 3
+
+    # Epic should have checklist comment with both markers
+    epic_issue = next(i for i in repo._issues if i.title == "EPIC: Fog of War & Minimap")
+    comments = epic_issue.get_comments()
+    assert any(MARKER_START in c.body and MARKER_END in c.body for c in comments)
+
+    # Each child should have backlink comment
+    for title in ("FOV: Visibility + Explored Tiles Grid", "Minimap: Rendering Overlay"):
+        child = next(i for i in repo._issues if i.title == title)
+        assert any("Linked to Epic: #" in c.body for c in child.get_comments())
+
+
+def test_idempotent_rerun_updates_comment_not_duplicate(tmp_path):
+    cfg_path = tmp_path / "epic.yml"
+    cfg_path.write_text(minimal_config_yaml())
+
+    cfg = load_config(str(cfg_path))
+    repo = FakeRepo()
+
+    summary1 = process_epic(repo, cfg, dry_run=False)
+    # Capture comment count on epic
+    epic_issue = next(i for i in repo._issues if i.title == "EPIC: Fog of War & Minimap")
+    initial_comment_count = len(epic_issue.get_comments())
+
+    # Re-run
+    summary2 = process_epic(repo, cfg, dry_run=False)
+
+    # No new issues should be created, still 3 total
+    assert len(repo._issues) == 3
+
+    # Checklist comment should be updated in place (no new managed comment)
+    managed_comments = [c for c in epic_issue.get_comments() if MARKER_START in c.body and MARKER_END in c.body]
+    assert len(managed_comments) == 1
+    assert len(epic_issue.get_comments()) == initial_comment_count
+
+
+def test_dry_run_mode_like_objects(tmp_path):
+    # In dry-run, numbers may be -1; ensure no crash building checklist
+    cfg_path = tmp_path / "epic.yml"
+    cfg_path.write_text(minimal_config_yaml())
+
+    cfg = load_config(str(cfg_path))
+
+    # Simulate dry-run by using an isolated repo but passing dry_run=True
+    repo = FakeRepo()
+    # We don't create labels/issues via repo in dry-run path of create_issue() here,
+    # but process_epic should still work and attach a checklist comment to the epic.
+    summary = process_epic(repo, cfg, dry_run=True)
+    # Summary may not have real numbers in dry-run; but function should complete.
+    assert "epic_number" in summary
