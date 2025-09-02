@@ -1,0 +1,32 @@
+name: Epic
+description: Track a large body of work via child issues and a checklist
+labels: [epic]
+title: "EPIC: <summary>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this Epic to group related issues. Link child issues below for progress tracking.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is the goal and scope of this Epic?
+      placeholder: High-level goal and scope
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Measurable outcomes for this Epic.
+      value: |
+        - Child issues exist and are linked in comments.
+        - Label applied: `epic`.
+        - Progress can be tracked via linked issues checklist.
+  - type: textarea
+    id: links
+    attributes:
+      label: Linked Child Issues
+      description: Use - [ ] #<issue-number> to link issues
+      placeholder: |
+        - [ ] #123
+        - [ ] #124
