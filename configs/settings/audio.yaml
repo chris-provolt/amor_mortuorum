@@ -1,0 +1,4 @@
+# Default audio volumes. Linear scale [0.0 - 1.0].
+master_volume: 0.8
+music_volume: 0.9
+sfx_volume: 0.9
