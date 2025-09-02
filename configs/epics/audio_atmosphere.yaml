@@ -1,0 +1,55 @@
+epic:
+  title: "EPIC: Audio & Atmosphere"
+  body: |
+    ## Summary
+    SFX hooks, ambient loops, dynamic boss layers.
+
+    Goal: Track and group related child issues under this Epic.
+    Target Window: 2025-08-26 → (Ongoing)
+
+    ## Acceptance
+    - Child issues exist and are linked in comments.
+    - Labels applied: `epic`.
+    - Progress can be tracked via linked issues checklist.
+  labels: ["epic", "audio"]
+  children:
+    - title: "SFX: Gameplay and UI Hooks"
+      body: |
+        Implement event-driven SFX hooks for gameplay (attacks, items, footsteps, traps) and UI (menu open/close, confirm/cancel, cursor move).
+
+        Requirements:
+        - Central AudioBus with channels: sfx, ui, ambient, music.
+        - Latency budget < 25ms for sfx trigger to playback.
+        - Configurable volume sliders and mute per channel.
+        - Data-driven mapping from events -> sound assets (YAML/JSON) with sensible defaults.
+
+        Definition of Done:
+        - Unit tests simulate event triggers and assert dispatch calls (no real audio).
+        - Documentation for adding new SFX events.
+      labels: ["audio", "sfx"]
+    - title: "Ambient: Biome Loops & Transitions"
+      body: |
+        Add ambient loop tracks per biome (Graveyard, Catacombs, Caverns, Crypt, Boss antechamber) with smooth crossfades.
+
+        Requirements:
+        - Looping playback with seamless crossfade on biome change.
+        - Volume ducking when combat starts; restore on exit.
+        - Configurable loop lists with weights; avoid immediate repeats.
+
+        Definition of Done:
+        - Deterministic tests for loop selection and ducking envelope.
+        - Configs documented; asset placeholders referenced.
+      labels: ["audio", "ambient"]
+    - title: "Boss Music: Dynamic Layering"
+      body: |
+        Implement dynamic music layering for minibosses (F20/40/60/80) and Final Boss (B99).
+
+        Requirements:
+        - Base track + N layers toggled by boss phase/HP thresholds.
+        - Beat-aligned layer changes; quantize to bar/beat.
+        - Emergency fallback if timing data unavailable.
+
+        Definition of Done:
+        - Tests for phase -> layer mapping and quantization timing math.
+        - Documentation on authoring stems and timing metadata.
+      labels: ["audio", "boss", "music"]
