@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "items": [
+    {"id": "potion_small", "name": "Lesser Health Potion", "price": 25, "quantity": 5},
+    {"id": "antidote", "name": "Antidote", "price": 15, "quantity": 3},
+    {"id": "scroll_fire", "name": "Fire Scroll", "price": 50, "quantity": 2}
+  ]
+}
