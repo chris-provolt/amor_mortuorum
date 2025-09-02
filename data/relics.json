@@ -1,0 +1,81 @@
+[
+  {
+    "id": "veil_fragment_1",
+    "name": "Veil Fragment I",
+    "description": "A shard of the Veil, faintly humming.",
+    "kind": "fragment",
+    "order": 1,
+    "icon": "assets/icons/relics/fragment_1.png"
+  },
+  {
+    "id": "veil_fragment_2",
+    "name": "Veil Fragment II",
+    "description": "Two pieces begin to resonate.",
+    "kind": "fragment",
+    "order": 2,
+    "icon": "assets/icons/relics/fragment_2.png"
+  },
+  {
+    "id": "veil_fragment_3",
+    "name": "Veil Fragment III",
+    "description": "The Veil stirs at your touch.",
+    "kind": "fragment",
+    "order": 3,
+    "icon": "assets/icons/relics/fragment_3.png"
+  },
+  {
+    "id": "veil_fragment_4",
+    "name": "Veil Fragment IV",
+    "description": "A whisper leaks through the tear.",
+    "kind": "fragment",
+    "order": 4,
+    "icon": "assets/icons/relics/fragment_4.png"
+  },
+  {
+    "id": "veil_fragment_5",
+    "name": "Veil Fragment V",
+    "description": "Half the Veil remembers you.",
+    "kind": "fragment",
+    "order": 5,
+    "icon": "assets/icons/relics/fragment_5.png"
+  },
+  {
+    "id": "veil_fragment_6",
+    "name": "Veil Fragment VI",
+    "description": "A current pulls from beyond.",
+    "kind": "fragment",
+    "order": 6,
+    "icon": "assets/icons/relics/fragment_6.png"
+  },
+  {
+    "id": "veil_fragment_7",
+    "name": "Veil Fragment VII",
+    "description": "The seams begin to align.",
+    "kind": "fragment",
+    "order": 7,
+    "icon": "assets/icons/relics/fragment_7.png"
+  },
+  {
+    "id": "veil_fragment_8",
+    "name": "Veil Fragment VIII",
+    "description": "Echoes of the dead steady your hand.",
+    "kind": "fragment",
+    "order": 8,
+    "icon": "assets/icons/relics/fragment_8.png"
+  },
+  {
+    "id": "veil_fragment_9",
+    "name": "Veil Fragment IX",
+    "description": "The Veil is almost whole.",
+    "kind": "fragment",
+    "order": 9,
+    "icon": "assets/icons/relics/fragment_9.png"
+  },
+  {
+    "id": "veil_final",
+    "name": "Relic of the Veil",
+    "description": "The Veil surrenders its last secret.",
+    "kind": "final",
+    "icon": "assets/icons/relics/final.png"
+  }
+]

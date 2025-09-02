@@ -1,0 +1,3 @@
+"""
+Graveyard UI package.
+"""
