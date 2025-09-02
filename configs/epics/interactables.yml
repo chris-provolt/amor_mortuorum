@@ -1,0 +1,113 @@
+title: "EPIC: Interactables (Chests, Traps, Doors)"
+body: |
+  ## Summary
+  Chests with variable quality, traps, keys & doors.
+
+  Goal: Track and group related child issues under this Epic.
+  Target Window: 2025-08-26 → (Ongoing)
+
+  ## Acceptance
+  - Child issues exist and are linked in comments.
+  - Label applied: `epic`.
+  - Progress can be tracked via linked issues checklist.
+labels:
+  - epic
+children:
+  - title: "Feature: Chest system MVP"
+    labels: [feature, dungeon, loot]
+    body: |
+      ## Summary
+      Implement interactable chests on dungeon floors.
+
+      ## Acceptance
+      - Chests spawn according to procgen rules
+      - Can be opened by player interaction
+      - Basic loot roll from a placeholder loot table
+      - Unit tests for chest open state transitions
+
+  - title: "Feature: Trap system MVP"
+    labels: [feature, dungeon, traps]
+    body: |
+      ## Summary
+      Implement trap tiles and basic triggers.
+
+      ## Acceptance
+      - Trap tiles placed by generator
+      - On step, trigger damage/effect
+      - Visual/audio feedback hooks
+      - Tests for trigger determinism and serialization
+
+  - title: "Feature: Keys and Doors (Locked Doors)"
+    labels: [feature, dungeon, doors]
+    body: |
+      ## Summary
+      Introduce locked doors that require a key item.
+
+      ## Acceptance
+      - Locked door entity blocks movement
+      - Key items unlock doors and consume (configurable)
+      - Door state persists across save/load for the floor
+      - Tests for door state and key consumption rules
+
+  - title: "Tuning: Chest quality scales by depth"
+    labels: [tuning, loot]
+    body: |
+      ## Summary
+      Implement depth-based quality curve for chests (common→legendary) with data-driven weights.
+
+      ## Acceptance
+      - Configurable curve by floor depth
+      - Deterministic seeding respected
+      - Tests verifying expected distribution at sample depths
+
+  - title: "UX: Minimap icons for chests/doors/traps"
+    labels: [ui, ux, minimap]
+    body: |
+      ## Summary
+      Add distinct minimap icons for chests, locked doors, and traps with FoW integration.
+
+      ## Acceptance
+      - Icons appear when tile discovered
+      - Icons reflect opened/unlocked/disarmed states
+      - Accessibility contrast guidelines followed
+
+  - title: "Data: Loot tables for chest themes"
+    labels: [data, loot]
+    body: |
+      ## Summary
+      Define data-driven loot tables with themes and weights.
+
+      ## Acceptance
+      - YAML/JSON schema for loot tables
+      - Support themed chest groups (weapons, consumables, mixed)
+      - Tests to validate schema and weighted selection
+
+  - title: "Design: Trap types and effects"
+    labels: [design, traps]
+    body: |
+      ## Summary
+      Specify initial set of trap types and their effects (damage, status, debuffs).
+
+      ## Acceptance
+      - Documented list of trap types
+      - Data stubs for parameters and visuals
+
+  - title: "Engineering: Serialization for interactables"
+    labels: [engineering, save-system]
+    body: |
+      ## Summary
+      Ensure chests, doors, and traps serialize/deserialize cleanly in save system.
+
+      ## Acceptance
+      - Schema updates for run state
+      - Tests for save/load roundtrip and integrity
+
+  - title: "QA: Unit tests for interactables"
+    labels: [qa, tests]
+    body: |
+      ## Summary
+      Expand unit test coverage for interactables behavior and edge cases.
+
+      ## Acceptance
+      - Coverage targets met for chests, traps, and doors modules
+      - Deterministic tests with seeded RNG
