@@ -1,0 +1,87 @@
+epic:
+  title: "EPIC: UI & HUD"
+  labels: ["epic", "ui"]
+  body: |
+    ## Summary
+    HUD, inventory/equip, main/settings/run summary screens.
+
+    Goal: Track and group related child issues under this Epic.
+    Target Window: 2025-08-26 → (Ongoing)
+
+    ## Acceptance
+    - Child issues exist and are linked in comments.
+    - Labels applied: `epic`.
+    - Progress can be tracked via linked issues checklist.
+
+    This epic is auto-managed by tools/issue_sync.py.
+  children:
+    - title: "HUD: Core Overlay (HP/MP, EXP, Floor, Buffs/Debuffs)"
+      labels: ["ui", "hud", "frontend"]
+      body: |
+        Build the in-run Heads-Up Display overlay consistent with Amor Mortuorum's visual style.
+        Requirements:
+        - Display: Player HP/MP bars, Current EXP % to level, Floor number, Gold, Keys, Status icons (buffs/debuffs), Turn/Time indicator.
+        - Layout: Scales with resolution; safe zones for 16:9 and 21:9.
+        - Performance: Draw within Arcade UI pass; minimize allocations.
+        - Accessibility: Colorblind-safe palettes, configurable text scaling.
+
+        Acceptance:
+        - UI visible in exploration and updates every tick.
+        - Bars and text values match underlying game state.
+        - Buff/debuff icons show tooltips on hover with keyboard/gamepad hints.
+        - Unit tests cover formatting and layout math helpers.
+
+    - title: "Inventory & Equipment Screen"
+      labels: ["ui", "frontend"]
+      body: |
+        Implement in-run inventory and equipment management panel.
+        Requirements:
+        - Inventory grid with tabs/filters; sorting by type/rarity.
+        - Equipment slots (weapon, armor, accessory x2) with stat preview diffs.
+        - Item tooltip with stats, effects, flavor.
+        - Input: keyboard, mouse, basic gamepad navigation.
+        - Integrate with Crypt persistence stubs when available.
+
+        Acceptance:
+        - Items can be equipped/unequipped; derived stats update.
+        - Using a consumable updates counts and triggers effect hooks (stub ok).
+        - Navigation works with keyboard and mouse.
+
+    - title: "Main Menu & Settings"
+      labels: ["ui", "frontend"]
+      body: |
+        Implement initial Main Menu and Settings screens.
+        Requirements:
+        - Main menu: Continue, New Run, Settings, Quit.
+        - Settings: Audio (volumes), Video (resolution, fullscreen), Controls (bindings), Accessibility (font size, colorblind mode).
+        - Persist settings to save file; load at startup.
+
+        Acceptance:
+        - Settings persist across runs and affect the game immediately where applicable.
+        - Keyboard/controller navigation and focus states are consistent.
+
+    - title: "Run Summary (Post-Death/Retire) Screen"
+      labels: ["ui", "frontend"]
+      body: |
+        Show a summary after death or retiring via portal.
+        Requirements:
+        - Display: Floors reached, enemies defeated, loot collected, relic progress, time, cause of death.
+        - Buttons: Return to Graveyard, Start New Run.
+        - Export: Optional JSON summary saved under runs/ with seed and stats.
+
+        Acceptance:
+        - Summary reflects the run data accurately.
+        - JSON export file created when enabled in settings.
+
+    - title: "Minimap & Fog of War UI"
+      labels: ["ui", "hud", "frontend"]
+      body: |
+        Add minimap rendering with fog-of-war and icons.
+        Requirements:
+        - Fog reveals with player exploration.
+        - Icons for stairs, chests, portals, boss gates.
+        - Toggle size/opacity via settings and hotkey.
+
+        Acceptance:
+        - Map tiles reveal correctly; icons render with correct legend.
+        - Unit tests cover fog state transitions and icon picking helpers.
