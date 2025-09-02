@@ -1,9 +1,4 @@
-"""
-Amor Mortuorum package root.
-"""
-
+"""Amor Mortuorum - core package initializer."""
 __all__ = [
-    "__version__",
+    "config",
 ]
-
-__version__ = "0.1.0"
