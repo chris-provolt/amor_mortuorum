@@ -1,32 +1,42 @@
 name: Epic
-description: Track a large body of work via child issues and a checklist
+description: Track a multi-task initiative via linked child issues
 labels: [epic]
-title: "EPIC: <summary>"
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Use this Epic to group related issues. Link child issues below for progress tracking.
   - type: textarea
     id: summary
     attributes:
       label: Summary
-      description: What is the goal and scope of this Epic?
-      placeholder: High-level goal and scope
+      description: High-level goal and scope of this epic.
+      placeholder: >-
+        PyInstaller specs, save locations, CI build.
+    validations:
+      required: true
   - type: textarea
     id: acceptance
     attributes:
       label: Acceptance Criteria
-      description: Measurable outcomes for this Epic.
       value: |
         - Child issues exist and are linked in comments.
-        - Label applied: `epic`.
+        - Labels applied: `epic`.
         - Progress can be tracked via linked issues checklist.
   - type: textarea
-    id: links
+    id: children
     attributes:
-      label: Linked Child Issues
-      description: Use - [ ] #<issue-number> to link issues
-      placeholder: |
-        - [ ] #123
-        - [ ] #124
+      label: Children
+      description: >-
+        Add unchecked checklist items for each child task. Upon creation/edit, a workflow will create issues
+        and link them to this epic automatically. You can optionally append "(labels: a,b)" to apply labels.
+      value: |
+        ### Children
+        - [ ] PyInstaller spec & hooks (labels: packaging, build)
+        - [ ] Binary icon & metadata (labels: packaging)
+        - [ ] Configure save locations and portable mode (labels: platform, save)
+        - [ ] CI: Multi-OS build and upload artifacts (labels: ci, build)
+        - [ ] Release pipeline: tag -> GitHub Releases assets (labels: release, build)
+        - [ ] Smoke test script and preflight validation (labels: qa)
+        - [ ] Documentation: packaging and distribution guide (labels: docs)
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Additional context, risks, references.

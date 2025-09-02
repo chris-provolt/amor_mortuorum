@@ -1,0 +1,101 @@
+name: Epic Children Manager
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+jobs:
+  manage-children:
+    if: contains(github.event.issue.labels.*.name, 'epic')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Link or create child issues from checklist
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const epic = context.payload.issue;
+            const body = epic.body || '';
+
+            // Find a 'Children' section if present, otherwise scan entire body
+            function extractChecklist(text) {
+              const lines = text.split(/\r?\n/);
+              let inChildren = false;
+              const tasks = [];
+              for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const header = line.trim().toLowerCase();
+                if (header.startsWith('### children')) {
+                  inChildren = true;
+                  continue;
+                }
+                if (inChildren && /^###\s/.test(line)) {
+                  break; // end of section
+                }
+                const m = line.match(/^\s*- \[ \] (.+)$/);
+                if (m) {
+                  tasks.push({ index: i, text: m[1], original: line });
+                }
+              }
+              return { lines, tasks };
+            }
+
+            const { lines, tasks } = extractChecklist(body);
+            if (tasks.length === 0) {
+              core.info('No unchecked checklist items found to convert into issues.');
+              return;
+            }
+
+            // Detect already linked items ('#123') to avoid duplication
+            const toCreate = tasks.filter(t => !/#\d+/.test(t.text));
+
+            if (toCreate.length === 0) {
+              core.info('All checklist items already reference issues.');
+              return;
+            }
+
+            const created = [];
+            for (const task of toCreate) {
+              const title = task.text.replace(/\s*\(labels:.*\)$/i, '').trim();
+
+              // Parse optional labels hint: (labels: a,b,c)
+              const labelsMatch = task.text.match(/\(labels:([^\)]*)\)/i);
+              let labels = [];
+              if (labelsMatch) {
+                labels = labelsMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+              }
+
+              const res = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body: `Child of epic #${epic.number}.\n\nAuto-generated from epic checklist.`,
+                labels,
+              });
+              created.push(res.data);
+
+              // Replace the checklist line with a linked issue format: - [ ] #123 Title
+              const replacement = lines[task.index].replace(/- \[ \] .*/, `- [ ] #${res.data.number} ${title}`);
+              lines[task.index] = replacement;
+            }
+
+            // Update the epic body with linked children
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: epic.number,
+              body: lines.join('\n'),
+            });
+
+            // Add a comment summarizing created children
+            if (created.length > 0) {
+              const list = created.map(c => `- #${c.number} ${c.title}`).join('\n');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: epic.number,
+                body: `Created linked child issues:\n${list}`,
+              });
+            }
