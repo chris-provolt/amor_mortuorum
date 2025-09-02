@@ -1,0 +1,22 @@
+video:
+  width: 1280
+  height: 720
+  fullscreen: false
+  vsync: true
+  ui_scale: 1.0
+
+audio:
+  music_volume: 0.6
+  sfx_volume: 0.8
+
+input:
+  mapping:
+    move_up: ["W", "UP"]
+    move_down: ["S", "DOWN"]
+    move_left: ["A", "LEFT"]
+    move_right: ["D", "RIGHT"]
+    confirm: ["ENTER", "SPACE"]
+    cancel: ["ESCAPE", "BACKSPACE"]
+    menu: ["TAB"]
+    pause: ["P"]
+    debug: ["F3"]

@@ -24,6 +24,10 @@ from .errors import (
     NotFound,
 )
 
+from importlib.metadata import version, PackageNotFoundError
+
+
+
 __all__ = [
     "Item",
     "ItemCatalog",
@@ -41,3 +45,9 @@ __all__ = [
     "InvalidOperation",
     "NotFound",
 ]
+try:
+    __version__ = version("amormortuorum")
+except PackageNotFoundError:  # pragma: no cover
+    __version__ = "0.0.0"
+
+__version__ = "0.1.0"
