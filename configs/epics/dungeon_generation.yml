@@ -1,0 +1,72 @@
+epic:
+  title: "EPIC: Dungeon Generation & Navigation"
+  body: |-
+    ## Summary
+    BSP/cellular generation, stairs placement, tile rendering.
+
+    Goal: Track and group related child issues under this Epic.
+    Target Window: 2025-08-26 → (Ongoing)
+
+    ## Acceptance
+    - Child issues exist and are linked in comments.
+    - Labels applied: `epic`.
+    - Progress can be tracked via linked issues checklist.
+
+    <!-- epic-checklist:start -->
+    <!-- epic-checklist:end -->
+  labels: ["epic"]
+  assignees: []
+children:
+  - title: "Dungeon: BSP Room Generation"
+    body: |-
+      Implement Binary Space Partitioning (BSP) to carve rectangular rooms connected by corridors.
+
+      Acceptance:
+      - Deterministic with seeded RNG
+      - Configurable min/max room sizes and splits
+      - Connectivity guaranteed
+      - Unit tests for topology invariants
+    labels: ["dungeon", "generation"]
+  - title: "Dungeon: Cellular Automata Caverns"
+    body: |-
+      Implement cellular automata cave generation as an optional mode per floor.
+
+      Acceptance:
+      - Seeded / deterministic
+      - Configurable birth/survival rules
+      - Identify/keep largest connected component
+    labels: ["dungeon", "generation"]
+  - title: "Dungeon: Stairs Placement & Validation"
+    body: |-
+      Place up/down stairs with constraints:
+      - Minimum Manhattan distance
+      - On walkable tiles only
+      - Reachability between stairs guaranteed
+    labels: ["dungeon", "navigation"]
+  - title: "Rendering: Tilemap & Sprite Atlas"
+    body: |-
+      Implement tile rendering pipeline and sprite atlas management for rooms/caverns, including layers for walls, floors, features.
+
+      Acceptance:
+      - Offscreen batch for performance
+      - Depth-correct layering
+      - Rendering tests via golden images (smoke)
+    labels: ["rendering", "tilemap"]
+  - title: "Navigation: Pathfinding & Movement"
+    body: |-
+      Implement grid-based pathfinding (A*/Dijkstra) and movement validation with collision against walls and features.
+
+      Acceptance:
+      - 4/8-direction modes
+      - Costs configurable, tie-breakers deterministic
+      - Unit tests on sample maps
+    labels: ["navigation"]
+  - title: "Map UI: Minimap & Fog of War"
+    body: |-
+      Implement minimap with fog-of-war reveal, icons for stairs, chests, and portals.
+
+      Acceptance:
+      - Explore/reveal radius configurable
+      - Save/restore explored cells
+      - Icons legend and toggle
+    labels: ["ui", "map"]
