@@ -1,0 +1,34 @@
+name: Epic
+description: Plan and track an epic of related work
+labels: [epic]
+title: "EPIC: Player, Party & Progression"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fill out the details below. When you submit this EPIC, child issues will be created automatically and a progress checklist will be added to this issue body.
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: Brief summary of the epic and its goals
+      placeholder: Player model, equipment slots, party up to 4, XP/leveling
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Additional context, risks, and scope notes
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Define what success looks like for this epic
+      value: |
+        - Child issues exist and are linked in comments and in the body checklist.
+        - Labels applied: epic.
+        - Progress can be tracked via linked issues checklist.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Any other information
