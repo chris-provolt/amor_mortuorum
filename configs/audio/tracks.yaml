@@ -1,0 +1,8 @@
+# Ambient track mapping per scene. Paths are examples/placeholders.
+# Replace with real asset paths available in your project.
+
+hub: assets/audio/ambient/hub_graveyard.ogg
+
+dungeon: assets/audio/ambient/dungeon_depths.ogg
+
+combat: assets/audio/ambient/combat_tension.ogg
