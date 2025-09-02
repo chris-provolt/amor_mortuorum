@@ -1,0 +1,152 @@
+epic:
+  title: "EPIC: Turn-Based Combat (FF1-style)"
+  target_window: "2025-08-26 → (Ongoing)"
+  labels: ["epic"]
+  body: |
+    ## Summary
+    Combat UI, turn queue, commands, items, defend, flee, log.
+
+    **Goal:** Track and group related child issues under this Epic.
+
+    **Target Window:** 2025-08-26 → (Ongoing)
+
+    ## Acceptance
+    - Child issues exist and are linked in comments.
+    - Labels applied: `epic`.
+    - Progress can be tracked via linked issues checklist.
+
+    ## Checklist
+    <!-- Populated by generator with issue numbers -->
+
+    ---
+    Auto-generated via tool.
+children:
+  - key: combat-architecture
+    title: "Combat Architecture & Data Model"
+    labels: ["combat", "backend"]
+    body: |
+      Define core combat domain model and interfaces:
+      - Actor, Party, Battle, TurnQueue, Command abstractions
+      - Stats (HP/MP/ATK/DEF/MAG/RES/ACC/EVA/CRIT/SPD), equipment hooks
+      - Deterministic RNG hooks for testing
+      - Damage & hit formula interfaces (no hard balance yet)
+      - Serialization stubs for save system
+      Acceptance:
+      - Unit tests for queue ordering and basic data validations
+  - key: combat-ui
+    title: "Combat UI: FF1-style Menu and Targeting"
+    labels: ["combat", "ui"]
+    body: |
+      Implement menu system: Attack / Skill(Scroll) / Item / Defend / Flee.
+      - Keyboard/controller navigation
+      - Target selection (ally/enemy, single/multi)
+      - Accessibility: remappable keys, readable fonts, focus state
+      Acceptance:
+      - Snapshot tests or golden path navigation tests
+  - key: turn-queue
+    title: "Turn Queue & SPD Ordering"
+    labels: ["combat", "backend"]
+    body: |
+      Implement initiative/turn order logic based on SPD with tie-breakers.
+      - Round construction and re-seeding per turn
+      - Handle dead/KO actors removal
+      - Deterministic seed for tests
+      Acceptance:
+      - Tests showing correct order across ties and KO mid-round
+  - key: commands
+    title: "Commands: Attack, Skill(Scroll), Item, Defend, Flee"
+    labels: ["combat", "backend"]
+    body: |
+      Implement command resolution pipeline with clear phases:
+      - Select → Validate → Resolve → Log
+      - Attack: hit/crit, damage, miss handling
+      - Skill(Scroll): consumable skills via scroll items
+      - Item: consumables (potions/ethers) and target restrictions
+      - Defend: damage mitigation this round + RES boost
+      - Flee: SPD vs party average; boss immune
+      Acceptance:
+      - Unit tests for each command path
+  - key: items-combat
+    title: "Combat Items: Data & Effects"
+    labels: ["combat", "items"]
+    body: |
+      Data-driven consumables usable in combat. Hook into existing item schema.
+      - Healing, mana, cleanse, buff, revive
+      - Depth-scaling quality via loot tables
+      Acceptance:
+      - Tests for item application and inventory updates
+  - key: status-effects
+    title: "Status Effects: Buffs & Debuffs"
+    labels: ["combat", "backend"]
+    body: |
+      Implement timed statuses: Poison, Blind, Slow, Protect, Shell, Regen.
+      - Stacking rules, dispel interactions
+      - Start/End-of-turn ticks
+      Acceptance:
+      - Tests for duration, stacking, and dispel
+  - key: enemy-ai
+    title: "Enemy AI: Behavior & Targeting"
+    labels: ["combat", "ai"]
+    body: |
+      Simple rules-based AI choosing commands and targets.
+      - Weighted choices, HP thresholds, status-aware decisions
+      Acceptance:
+      - Tests with seeded RNG for reproducibility
+  - key: formulas
+    title: "Damage & Hit Formulas"
+    labels: ["combat", "balancing"]
+    body: |
+      Implement initial formulas for hit, crit, physical/magical damage, defense, resistances.
+      - Document constants and balance levers
+      Acceptance:
+      - Tests covering edge cases and rounding
+  - key: combat-log
+    title: "Combat Log & Battle Messages"
+    labels: ["combat", "ui"]
+    body: |
+      Rolling log of battle events with severity tags.
+      - Toasts for important events (crit, KO, flee)
+      Acceptance:
+      - Tests for message formatting and buffer size
+  - key: flee
+    title: "Flee / Escape Mechanics"
+    labels: ["combat", "backend"]
+    body: |
+      Implement escape chance formula and constraints (no flee from bosses).
+      Acceptance:
+      - Tests showing probability bands across SPD deltas
+  - key: defend
+    title: "Defend / Guard Mechanics"
+    labels: ["combat", "backend"]
+    body: |
+      Implement defend stance: damage reduction this round and minor SPD initiative effect next round.
+      Acceptance:
+      - Tests verifying mitigation and initiative interaction
+  - key: integration
+    title: "Integration: Exploration → Combat → Exploration"
+    labels: ["combat", "integration"]
+    body: |
+      Wire map encounters to battle start/finish and reward/escape flows.
+      Acceptance:
+      - Integration test simulating an encounter lifecycle
+  - key: tests-determinism
+    title: "Combat Test Scenarios & Determinism Harness"
+    labels: ["combat", "testing"]
+    body: |
+      Build reproducible scenario tests with snapshot results and seeded RNG.
+      Acceptance:
+      - CI deterministic run; flaky test guardrails
+  - key: accessibility
+    title: "Accessibility: Combat UX"
+    labels: ["combat", "accessibility"]
+    body: |
+      Ensure combat UX meets accessibility: readable text, color contrast, screen reader hints.
+      Acceptance:
+      - Manual checklist + automated contrast checks where feasible
+  - key: analytics
+    title: "Telemetry: Combat Metrics"
+    labels: ["combat", "telemetry"]
+    body: |
+      Instrument combat events (turn length, actions, flee rate, KO rate) behind a privacy gate.
+      Acceptance:
+      - Events schema and opt-in path documented
