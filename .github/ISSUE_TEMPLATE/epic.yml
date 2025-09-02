@@ -1,0 +1,34 @@
+name: Epic
+description: Track a larger body of work via linked child issues
+labels: [epic]
+title: "EPIC: <short description>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Provide a summary and acceptance criteria. Child issues should be linked in a checklist for progress tracking.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is the scope and goal of this Epic?
+      placeholder: >-
+        Describe the problem, constraints, and success metrics.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: What must be true for this Epic to be considered complete?
+      placeholder: >-
+        - [ ] Child issues exist and are linked
+        - [ ] Labels applied: epic
+        - [ ] Progress tracked via checklist
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / Links
+      description: Any related docs, designs, or references
