@@ -1,0 +1,94 @@
+name: Build and Release (PyInstaller)
+
+on:
+  workflow_dispatch:
+    inputs:
+      entry:
+        description: 'Override entry script path (optional)'
+        required: false
+        default: ''
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.11']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          # Ensure build/test toolchain
+          pip install pyinstaller pytest
+          # Arcade is often required; try to install if not already
+          python - <<'PY'
+          import sys
+          try:
+              import arcade  # noqa
+          except Exception:
+              print('Installing arcade...', flush=True)
+              import subprocess
+              subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'arcade>=2.6'])
+          PY
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Build (PyInstaller)
+        env:
+          AMOR_ENTRY: ${{ github.event.inputs.entry || '' }}
+        shell: bash
+        run: |
+          ENTRY_ARG=""
+          if [ -n "${AMOR_ENTRY}" ]; then
+            echo "Using overridden entry: ${AMOR_ENTRY}"
+            export AMOR_ENTRY
+          fi
+          pyinstaller tools/pyinstaller/amormortuorum.spec
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AmorMortuorum-${{ matrix.os }}
+          path: dist/AmorMortuorum/**
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
