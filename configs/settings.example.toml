@@ -1,0 +1,16 @@
+# Example settings for Amor Mortuorum
+
+[window]
+width = 1600
+height = 900
+fullscreen = false
+vsync = true
+
+[audio]
+master_volume = 0.8
+music_volume = 0.7
+sfx_volume = 0.9
+
+[ui]
+show_minimap = true
+fog_of_war = true
