@@ -1,0 +1,19 @@
+name: QA Harness (Determinism)
+description: Record/replay RNG operations for reproducible tests
+labels: [qa, testing]
+body:
+  - type: textarea
+    id: design
+    attributes:
+      label: Design
+      description: Recording strategy and reproduction guarantees
+    validations:
+      required: true
+  - type: checkboxes
+    id: acceptance
+    attributes:
+      label: Acceptance
+      options:
+        - label: Can snapshot and reproduce traces
+        - label: Validates checksum
+        - label: Unit tests included

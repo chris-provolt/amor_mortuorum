@@ -1,0 +1,21 @@
+name: Debug Overlay
+description: Implement and integrate the debug overlay UI and controls
+labels: [debug, ui]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What the overlay should display and how to toggle it
+      placeholder: FPS, frame time, memory, seed, build, telemetry status
+    validations:
+      required: true
+  - type: checkboxes
+    id: acceptance
+    attributes:
+      label: Acceptance
+      options:
+        - label: Overlay renders text in Arcade
+        - label: Toggled via keybind
+        - label: Headless-friendly (text fallback)
+        - label: Unit tests for text generation

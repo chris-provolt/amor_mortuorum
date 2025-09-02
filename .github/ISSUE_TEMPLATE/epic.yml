@@ -1,0 +1,19 @@
+name: Epic
+description: Track a collection of related issues towards a larger goal.
+labels: [epic]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: High-level overview of the Epic
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Progress
+      options:
+        - label: Child issues created and linked in comments
+        - label: Labels applied (epic)
+        - label: Acceptance criteria met
