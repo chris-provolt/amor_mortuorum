@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amor-mortuorum.dev/schemas/item.schema.json",
+  "title": "Amor Mortuorum Item",
+  "description": "Schema for game items (equipment, consumables, keys)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "type"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "name": {"type": "string", "minLength": 1},
+    "type": {"type": "string", "enum": ["equipment", "consumable", "key"]},
+    "tags": {
+      "type": "array",
+      "items": {"type": "string"},
+      "default": []
+    },
+    "slot": {"type": "string", "enum": ["weapon", "armor", "accessory"]},
+    "stat_deltas": {
+      "type": "object",
+      "description": "Additive stat modifiers applied when equipped",
+      "additionalProperties": false,
+      "properties": {
+        "max_hp": {"type": "integer"},
+        "max_mp": {"type": "integer"},
+        "atk": {"type": "integer"},
+        "defense": {"type": "integer"},
+        "magic": {"type": "integer"},
+        "resistance": {"type": "integer"},
+        "speed": {"type": "integer"},
+        "luck": {"type": "integer"}
+      },
+      "default": {}
+    },
+    "effects": {
+      "type": "array",
+      "description": "List of effects applied on consume",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {"type": "string", "enum": ["heal_hp", "heal_mp"]},
+          "amount": {
+            "description": "Numeric amount or composite amount descriptor",
+            "oneOf": [
+              {"type": ["integer", "number"]},
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "flat": {"type": ["integer", "number"]},
+                  "percent_max": {"type": ["number"]},
+                  "percent_missing": {"type": ["number"]}
+                }
+              }
+            ]
+          },
+          "target": {"type": "string", "enum": ["self"], "default": "self"}
+        }
+      },
+      "default": []
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"type": {"const": "equipment"}}},
+      "then": {
+        "required": ["slot"],
+        "properties": {
+          "effects": false
+        }
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "consumable"}}},
+      "then": {
+        "required": ["effects"],
+        "properties": {
+          "slot": false,
+          "stat_deltas": false
+        }
+      }
+    }
+  ]
+}
