@@ -1,0 +1,12 @@
+[
+  {"id": "veil_fragment_i", "name": "Veil Fragment I", "order": 1, "category": "fragment"},
+  {"id": "veil_fragment_ii", "name": "Veil Fragment II", "order": 2, "category": "fragment"},
+  {"id": "veil_fragment_iii", "name": "Veil Fragment III", "order": 3, "category": "fragment"},
+  {"id": "veil_fragment_iv", "name": "Veil Fragment IV", "order": 4, "category": "fragment"},
+  {"id": "veil_fragment_v", "name": "Veil Fragment V", "order": 5, "category": "fragment"},
+  {"id": "veil_fragment_vi", "name": "Veil Fragment VI", "order": 6, "category": "fragment"},
+  {"id": "veil_fragment_vii", "name": "Veil Fragment VII", "order": 7, "category": "fragment"},
+  {"id": "veil_fragment_viii", "name": "Veil Fragment VIII", "order": 8, "category": "fragment"},
+  {"id": "veil_fragment_ix", "name": "Veil Fragment IX", "order": 9, "category": "fragment"},
+  {"id": "heart_of_oblivion", "name": "Heart of Oblivion", "order": 10, "category": "final", "award_condition": "final_boss_defeat"}
+]
