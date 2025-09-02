@@ -1,0 +1,13 @@
+{
+  "depth_gold_scale_base": 1.0,
+  "depth_gold_scale_per_floor": 0.02,
+  "chest_quality_multipliers": {
+    "poor": 0.5,
+    "normal": 1.0,
+    "rich": 1.75,
+    "rare": 2.5
+  },
+  "base_chest_gold": 10,
+  "chest_gold_per_floor": 2,
+  "shop_price_modifier": 1.0
+}
