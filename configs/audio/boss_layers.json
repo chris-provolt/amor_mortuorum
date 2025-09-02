@@ -1,0 +1,10 @@
+{
+  "miniboss_volume": 0.85,
+  "final_boss_volume": 0.95,
+  "fade_in_seconds": 1.5,
+  "fade_out_seconds": 1.5,
+  "tracks": {
+    "miniboss_overlay": "assets/audio/music/overlays/miniboss_layer.ogg",
+    "final_boss_overlay": "assets/audio/music/overlays/final_boss_layer.ogg"
+  }
+}
