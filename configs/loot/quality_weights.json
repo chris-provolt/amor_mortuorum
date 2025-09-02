@@ -1,0 +1,9 @@
+{
+  "tiers": {
+    "1": {"common": 80, "uncommon": 18, "rare": 2, "epic": 0, "legendary": 0},
+    "2": {"common": 65, "uncommon": 28, "rare": 6, "epic": 1, "legendary": 0},
+    "3": {"common": 50, "uncommon": 35, "rare": 12, "epic": 3, "legendary": 0},
+    "4": {"common": 35, "uncommon": 38, "rare": 18, "epic": 8, "legendary": 1},
+    "5": {"common": 25, "uncommon": 35, "rare": 25, "epic": 12, "legendary": 3}
+  }
+}
