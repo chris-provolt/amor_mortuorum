@@ -1,0 +1,35 @@
+{
+  "max_hp": 5000,
+  "thresholds": {
+    "phase1": 1.01,
+    "phase2": 0.7,
+    "phase3": 0.2
+  },
+  "music": {
+    "phase1": "music.oblivion_heart.phase1",
+    "phase2": "music.oblivion_heart.phase2",
+    "phase3": "music.oblivion_heart.enraged"
+  },
+  "sfx": {
+    "enter_p1": "sfx.boss.oblivion_heart.phase1",
+    "enter_p2": "sfx.boss.oblivion_heart.phase2",
+    "enter_p3": "sfx.boss.oblivion_heart.enrage",
+    "shadow_pulse": "sfx.boss.shadow_pulse",
+    "abyssal_maelstrom": "sfx.boss.abyssal_maelstrom",
+    "heartseeker_drain": "sfx.boss.heartseeker_drain",
+    "reconstitution": "sfx.boss.reconstitution",
+    "cataclysmic_beat": "sfx.boss.cataclysmic_beat",
+    "combo": "sfx.boss.combo",
+    "death": "sfx.boss.death"
+  },
+  "numbers": {
+    "p1_st": 120,
+    "p1_aoe": 65,
+    "p2_st": 160,
+    "p2_aoe": 95,
+    "p2_drain": 140,
+    "p3_st": 180,
+    "p3_drain": 180,
+    "p3_cataclysm": 220
+  }
+}
