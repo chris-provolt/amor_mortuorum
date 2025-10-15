@@ -1,9 +1,6 @@
 import json
 
 import pytest
-import json
-
-import pytest
 import responses
 
 from src.am_epic.github_client import GitHubAPIError, GitHubClient
