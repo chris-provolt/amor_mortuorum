@@ -1,12 +1,11 @@
 from pathlib import Path
 
 import json
-import os
 
+from amormortuorum.errors import InvalidOperation, InsufficientGold, NotFound, OutOfStock
 from amormortuorum.hub import GraveyardHub
 from amormortuorum.models import ItemCatalog, Player
 from amormortuorum.save import SaveManager
-from amormortuorum.errors import OutOfStock, InsufficientGold, CryptFull, NotFound, InvalidOperation
 
 
 def make_hub(tmp_path: Path) -> GraveyardHub:
@@ -70,7 +69,7 @@ def test_shop_restock_is_deterministic(tmp_path: Path):
     # Recreate hub with same save, but revert cycle increment to re-enter same cycle number
     sm = hub.save_manager
     data = sm.load()
-    # The current cycle is 1; we'll manually set it back to 0 so the next enter returns cycle 1 again
+    # The current cycle is 1; manually set back to 0 so the next enter returns cycle 1
     data.hub_cycle = 0
     sm.save(data)
 
@@ -104,9 +103,8 @@ def test_crypt_capacity_and_withdraw(tmp_path: Path):
     # Try depositing a fourth distinct item -> full
     player.inventory.add(cat.get("potion_small"), 1)
     try:
-        # New distinct only if we pick an id not in crypt; we reuse potion_small but it stacks instead
-        # So to force full error, try depositing a different id; we used all 3 available defaults already.
-        # We'll simulate by attempting to deposit yet another distinct (not present) -> expect NotFound.
+        # New distinct only if we pick an id not in crypt; we reuse potion_small but it stacks instead.
+        # To force a failure, attempt to deposit another distinct item (not present) -> expect NotFound.
         hub.crypt_deposit(player, "nonexistent", 1)
         assert False, "Expected NotFound"
     except NotFound:
@@ -137,7 +135,7 @@ def test_crypt_capacity_and_withdraw(tmp_path: Path):
 
 def test_save_persistence_across_instances(tmp_path: Path):
     hub = make_hub(tmp_path)
-    ctx = hub.enter()
+    _ctx = hub.enter()
     player = Player()
     cat = ItemCatalog()
     player.inventory.add(cat.get("potion_small"), 2)

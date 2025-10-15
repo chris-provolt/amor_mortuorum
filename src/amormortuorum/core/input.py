@@ -85,13 +85,13 @@ class InputManager:
     def process_key_press(self, key: int, modifiers: int) -> List[str]:
         self._pressed.add(key)
         actions = self.actions_for_key(key)
-        logger.debug("Key pressed: %s (mods=%s) -> actions=%s", key, modifiers, actions)
+        logger.debug("Key pressed %s mods=%s actions=%s", key, modifiers, actions)
         return actions
 
     def process_key_release(self, key: int, modifiers: int) -> List[str]:
         self._pressed.discard(key)
         actions = self.actions_for_key(key)
-        logger.debug("Key released: %s (mods=%s) -> actions=%s", key, modifiers, actions)
+        logger.debug("Key released %s mods=%s actions=%s", key, modifiers, actions)
         return actions
 
     # Binding management

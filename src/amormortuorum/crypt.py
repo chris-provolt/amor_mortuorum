@@ -22,7 +22,12 @@ class Crypt:
     Up to 3 slots, each slot holds a stack of a single item id.
     """
 
-    def __init__(self, save: SaveData, catalog: ItemCatalog | None = None, config: CryptConfig | None = None):
+    def __init__(
+        self,
+        save: SaveData,
+        catalog: ItemCatalog | None = None,
+        config: CryptConfig | None = None,
+    ) -> None:
         self.save = save
         self.catalog = catalog or ItemCatalog()
         self.config = config or CryptConfig()

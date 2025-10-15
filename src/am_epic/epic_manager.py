@@ -1,8 +1,8 @@
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from .github_client import GitHubClient
-from .models import EpicSpec, IssueSpec
+from .models import EpicSpec
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class EpicManager:
         a progress checklist. Returns a dict with epic and child issue numbers.
         """
         # Ensure label 'epic' exists
-        if "epic" not in [l.lower() for l in spec.labels]:
+        if "epic" not in [label.lower() for label in spec.labels]:
             spec.labels = [*spec.labels, "epic"]
         self.gh.ensure_label("epic", color="5319e7", description="Epic grouping issue")
         self.gh.ensure_label("epic-child", color="c2e0c6", description="Child of an Epic")
@@ -35,7 +35,13 @@ class EpicManager:
         child_numbers: List[int] = []
         for child in spec.children:
             # Ensure child exists
-            child_issue = self._upsert_issue(child.title, child.body, list(set(child.labels + ["epic-child"])), child.assignees)
+            child_labels = list({*child.labels, "epic-child"})
+            child_issue = self._upsert_issue(
+                child.title,
+                child.body,
+                child_labels,
+                child.assignees,
+            )
             child_number = child_issue["number"]
             child_numbers.append(child_number)
 
@@ -43,7 +49,10 @@ class EpicManager:
             self._ensure_child_comment(child_number, epic_number)
 
         # Update epic body with dynamic checklist
-        updated_body = self._build_epic_body_with_checklist(epic.get("body") or spec.body, child_numbers)
+        updated_body = self._build_epic_body_with_checklist(
+            epic.get("body") or spec.body,
+            child_numbers,
+        )
         if updated_body != epic.get("body"):
             epic = self.gh.update_issue(epic_number, body=updated_body)
 
@@ -52,13 +61,18 @@ class EpicManager:
 
         return {"epic": epic_number, "children": len(child_numbers)}
 
-    def _upsert_issue(self, title: str, body: str, labels: List[str], assignees: List[str]) -> Dict:
+    def _upsert_issue(
+        self, title: str, body: str, labels: List[str], assignees: List[str]
+    ) -> Dict:
         existing = self.gh.search_issue_by_title(title)
         if existing:
             logger.debug("Issue exists: '%s' (#%s)", title, existing.get("number"))
             # Ensure required labels are present
-            existing_labels = [l.get("name") if isinstance(l, dict) else l for l in existing.get("labels", [])]
-            missing = [l for l in labels if l not in existing_labels]
+            existing_labels = [
+                label.get("name") if isinstance(label, dict) else label
+                for label in existing.get("labels", [])
+            ]
+            missing = [label for label in labels if label not in existing_labels]
             if missing:
                 self.gh.add_labels(existing["number"], missing)
             # Optionally refresh body if missing checklist markers for epic only; but keep user's edits for children
@@ -72,7 +86,8 @@ class EpicManager:
             issue = self.gh.get_issue(n)
             checked = issue.get("state") == "closed"
             title = issue.get("title", "")
-            lines.append(f"  - [{'x' if checked else ' '}] #{n} {title}")
+            checkbox = "x" if checked else " "
+            lines.append(f"  - [{checkbox}] #{n} {title}")
         checklist = "\n".join(lines)
 
         if CHECKLIST_START in base_body and CHECKLIST_END in base_body:
@@ -93,7 +108,8 @@ class EpicManager:
         ]
         for n in child_numbers:
             issue = self.gh.get_issue(n)
-            comment_body.append(f"- #{n} {issue.get('title','')}")
+            issue_title = issue.get("title", "")
+            comment_body.append(f"- #{n} {issue_title}")
         body = "\n".join(comment_body)
 
         comments = self.gh.list_comments(epic_number)

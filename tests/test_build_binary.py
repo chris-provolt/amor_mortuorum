@@ -1,5 +1,4 @@
 from pathlib import Path
-import sys
 
 from tools.ci.build_binary import (
     find_spec_file,

@@ -29,7 +29,11 @@ class GraveyardHub:
     - All crypt changes persist via SaveManager.save()
     """
 
-    def __init__(self, save_manager: Optional[SaveManager] = None, catalog: Optional[ItemCatalog] = None):
+    def __init__(
+        self,
+        save_manager: Optional[SaveManager] = None,
+        catalog: Optional[ItemCatalog] = None,
+    ) -> None:
         self.save_manager = save_manager or SaveManager()
         self.catalog = catalog or ItemCatalog()
         self._ctx: Optional[HubContext] = None

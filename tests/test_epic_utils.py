@@ -15,8 +15,8 @@ def test_generate_checklist_section_basic():
     ]
     section = generate_checklist_section(children)
     assert section.startswith("## Epic Progress\n\n" + MARKER_START)
-    assert f"- [ ] #101 First" in section
-    assert f"- [ ] #102 Second" in section
+    assert "- [ ] #101 First" in section
+    assert "- [ ] #102 Second" in section
     assert section.strip().endswith(MARKER_END)
 
 

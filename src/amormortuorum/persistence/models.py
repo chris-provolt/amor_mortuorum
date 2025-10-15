@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import List, Optional, Set, Dict, Any
+from typing import Any, Dict, List, Set
 
 from .errors import SaveValidationError
 

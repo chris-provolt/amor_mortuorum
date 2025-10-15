@@ -23,10 +23,9 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import List, Optional
 
 try:
     import tomllib  # Python 3.11+
@@ -266,7 +265,10 @@ def build(plan: BuildPlan) -> Path:
         built = guess_built_binary(dist_dir, None)
     else:
         if plan.entry_file is None:
-            raise SystemExit("Could not detect an application entry point. Provide a .spec file or define [project.scripts] in pyproject.toml or add src/**/__main__.py")
+            raise SystemExit(
+                "Could not detect an application entry point. Provide a .spec file or "
+                "define [project.scripts] in pyproject.toml or add src/**/__main__.py"
+            )
         debug(f"Using entry file: {plan.entry_file}")
         run_pyinstaller_on_entry(plan.entry_file, plan.app_name)
         built = guess_built_binary(dist_dir, plan.app_name)
@@ -277,15 +279,28 @@ def build(plan: BuildPlan) -> Path:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Build standalone binary and zip it for release")
-    parser.add_argument("--name", default="AmorMortuorum", help="Base application/binary name")
-    parser.add_argument("--out", default="dist/release", help="Output directory for zipped artifact")
+    parser = argparse.ArgumentParser(
+        description="Build standalone binary and zip it for release"
+    )
+    parser.add_argument(
+        "--name",
+        default="AmorMortuorum",
+        help="Base application/binary name",
+    )
+    parser.add_argument(
+        "--out",
+        default="dist/release",
+        help="Output directory for zipped artifact",
+    )
     args = parser.parse_args(argv)
 
     root = Path.cwd()
     plan = make_build_plan(root, args.name)
 
-    debug(f"Build plan: spec_file={plan.spec_file}, entry_file={plan.entry_file}, app_name={plan.app_name}")
+    debug(
+        "Build plan: spec_file=%s, entry_file=%s, app_name=%s"
+        % (plan.spec_file, plan.entry_file, plan.app_name)
+    )
     binary = build(plan)
 
     version = get_version()

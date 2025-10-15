@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import random
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict
 
 from .models import ItemCatalog, Player
 from .errors import OutOfStock
