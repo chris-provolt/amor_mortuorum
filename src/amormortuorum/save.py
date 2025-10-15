@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -95,5 +96,9 @@ class SaveManager:
         tmp_path = self.save_path.with_suffix(self.save_path.suffix + ".tmp")
         with tmp_path.open("w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, sort_keys=True)
+        bak_path = self.save_path.with_suffix(self.save_path.suffix + ".bak")
+        if self.save_path.exists():
+            bak_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(self.save_path, bak_path)
         os.replace(tmp_path, self.save_path)
         logger.debug("Atomic save written to %s", self.save_path)
