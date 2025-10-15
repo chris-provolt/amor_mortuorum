@@ -1,9 +1,6 @@
 import json
 
 import pytest
-import json
-
-import pytest
 import responses
 
 from src.am_epic.github_client import GitHubAPIError, GitHubClient
@@ -29,7 +26,10 @@ def test_search_issue_by_title_exact_match():
     # search returns two results but only one exact title
     responses.add(
         responses.GET,
-        "https://api.github.com/search/issues?q=repo%3Ao%2Fr%20type%3Aissue%20in%3Atitle%20%22Hello%20World%22",
+        (
+            "https://api.github.com/search/issues?q=repo%3Ao%2Fr%20type%3Aissue%20"
+            "in%3Atitle%20%22Hello%20World%22"
+        ),
         json={
             "items": [
                 {"number": 1, "title": "Hello world"},

@@ -93,13 +93,14 @@ def test_load_config_and_process_epic_creates_issues(tmp_path):
     cfg = load_config(str(cfg_path))
     repo = FakeRepo()
 
-    _summary = process_epic(repo, cfg, dry_run=False)
+    summary = process_epic(repo, cfg, dry_run=False)
 
     # Should have created 1 epic + 2 children
     assert len(repo._issues) == 3
 
     # Epic should have checklist comment with both markers
     epic_issue = next(i for i in repo._issues if i.title == "EPIC: Fog of War & Minimap")
+    assert summary["epic_number"] == epic_issue.number
     comments = epic_issue.get_comments()
     assert any(MARKER_START in c.body and MARKER_END in c.body for c in comments)
 
@@ -107,6 +108,7 @@ def test_load_config_and_process_epic_creates_issues(tmp_path):
     for title in ("FOV: Visibility + Explored Tiles Grid", "Minimap: Rendering Overlay"):
         child = next(i for i in repo._issues if i.title == title)
         assert any("Linked to Epic: #" in c.body for c in child.get_comments())
+    assert set(summary["child_numbers"]) == {issue.number for issue in repo._issues if issue is not epic_issue}
 
 
 def test_idempotent_rerun_updates_comment_not_duplicate(tmp_path):
@@ -116,13 +118,13 @@ def test_idempotent_rerun_updates_comment_not_duplicate(tmp_path):
     cfg = load_config(str(cfg_path))
     repo = FakeRepo()
 
-    _summary1 = process_epic(repo, cfg, dry_run=False)
+    summary1 = process_epic(repo, cfg, dry_run=False)
     # Capture comment count on epic
     epic_issue = next(i for i in repo._issues if i.title == "EPIC: Fog of War & Minimap")
     initial_comment_count = len(epic_issue.get_comments())
 
     # Re-run
-    _summary2 = process_epic(repo, cfg, dry_run=False)
+    summary2 = process_epic(repo, cfg, dry_run=False)
 
     # No new issues should be created, still 3 total
     assert len(repo._issues) == 3
@@ -135,6 +137,7 @@ def test_idempotent_rerun_updates_comment_not_duplicate(tmp_path):
     ]
     assert len(managed_comments) == 1
     assert len(epic_issue.get_comments()) == initial_comment_count
+    assert summary1 == summary2
 
 
 def test_dry_run_mode_like_objects(tmp_path):
@@ -148,6 +151,6 @@ def test_dry_run_mode_like_objects(tmp_path):
     repo = FakeRepo()
     # We don't create labels/issues via repo in dry-run path of create_issue() here,
     # but process_epic should still work and attach a checklist comment to the epic.
-    _summary = process_epic(repo, cfg, dry_run=True)
+    summary = process_epic(repo, cfg, dry_run=True)
     # Summary may not have real numbers in dry-run; but function should complete.
     assert "epic_number" in summary

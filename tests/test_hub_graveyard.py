@@ -103,8 +103,9 @@ def test_crypt_capacity_and_withdraw(tmp_path: Path):
     # Try depositing a fourth distinct item -> full
     player.inventory.add(cat.get("potion_small"), 1)
     try:
-        # New distinct only if we pick an id not in crypt; we reuse potion_small but it stacks instead.
-        # To force a failure, attempt to deposit another distinct item (not present) -> expect NotFound.
+        # A distinct item needs an id not already in the crypt; reusing potion_small just stacks.
+        # Force a failure by attempting to deposit another unique id.
+        # The nonexistent entry should trigger NotFound.
         hub.crypt_deposit(player, "nonexistent", 1)
         assert False, "Expected NotFound"
     except NotFound:
@@ -135,18 +136,23 @@ def test_crypt_capacity_and_withdraw(tmp_path: Path):
 
 def test_save_persistence_across_instances(tmp_path: Path):
     hub = make_hub(tmp_path)
-    _ctx = hub.enter()
+    ctx = hub.enter()
     player = Player()
     cat = ItemCatalog()
     player.inventory.add(cat.get("potion_small"), 2)
     hub.crypt_deposit(player, "potion_small", 2)
+
+    initial_slots = ctx.crypt.list_slots()
+    assert len(initial_slots) == 1
+    assert initial_slots[0].item_id == "potion_small"
 
     # New hub with same SaveManager should load crypt contents
     hub2 = GraveyardHub(save_manager=hub.save_manager, catalog=cat)
     ctx2 = hub2.enter()
     slots = ctx2.crypt.list_slots()
     assert len(slots) == 1
-    assert slots[0].item_id == "potion_small" and slots[0].quantity >= 2
+    assert slots[0].item_id == "potion_small"
+    assert slots[0].quantity >= 2
 
 
 def test_atomic_save(tmp_path: Path):

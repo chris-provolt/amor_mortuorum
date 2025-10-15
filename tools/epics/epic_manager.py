@@ -49,7 +49,13 @@ def load_config(path: str) -> Dict[str, Any]:
     return data
 
 
-def get_or_create_label(repo: Any, name: str, color: str = "ededed", description: Optional[str] = None, dry_run: bool = False) -> Any:
+def get_or_create_label(
+    repo: Any,
+    name: str,
+    color: str = "ededed",
+    description: Optional[str] = None,
+    dry_run: bool = False,
+) -> Any:
     """Return a Label object; create if missing.
 
     The repo object is expected to implement:
