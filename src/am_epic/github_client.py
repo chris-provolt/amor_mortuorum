@@ -108,7 +108,11 @@ class GitHubClient:
         if assignees:
             payload["assignees"] = assignees
         logger.info("Creating issue '%s'", title)
-        resp = self._request("POST", f"/repos/{self.owner}/{self.repo}/issues", json=payload)
+        resp = self._request(
+            "POST",
+            f"/repos/{self.owner}/{self.repo}/issues",
+            json=payload,
+        )
         return resp.json()
 
     def update_issue(
@@ -130,7 +134,11 @@ class GitHubClient:
         if labels is not None:
             payload["labels"] = labels
         logger.debug("Updating issue #%s", number)
-        resp = self._request("PATCH", f"/repos/{self.owner}/{self.repo}/issues/{number}", json=payload)
+        resp = self._request(
+            "PATCH",
+            f"/repos/{self.owner}/{self.repo}/issues/{number}",
+            json=payload,
+        )
         return resp.json()
 
     def add_labels(self, number: int, labels: List[str]) -> List[Dict[str, Any]]:
@@ -148,7 +156,10 @@ class GitHubClient:
 
     # Comments
     def list_comments(self, issue_number: int) -> List[Dict[str, Any]]:
-        resp = self._request("GET", f"/repos/{self.owner}/{self.repo}/issues/{issue_number}/comments")
+        resp = self._request(
+            "GET",
+            f"/repos/{self.owner}/{self.repo}/issues/{issue_number}/comments",
+        )
         return resp.json()
 
     def create_comment(self, issue_number: int, body: str) -> Dict[str, Any]:

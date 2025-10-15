@@ -28,7 +28,10 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
     repo = args.repo or os.getenv("GITHUB_REPOSITORY")
     if not repo:
-        print("error: --repo or GITHUB_REPOSITORY env is required (format: owner/name)", file=sys.stderr)
+        print(
+            "error: --repo or GITHUB_REPOSITORY env is required (format: owner/name)",
+            file=sys.stderr,
+        )
         return 2
 
     try:

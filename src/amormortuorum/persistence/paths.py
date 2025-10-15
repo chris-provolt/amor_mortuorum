@@ -13,7 +13,7 @@ def default_save_root() -> Path:
 
     Linux: ~/.local/share/amormortuorum
     macOS: ~/Library/Application Support/AmorMortuorum
-    Windows: %APPDATA%\AmorMortuorum
+    Windows: %APPDATA%\\AmorMortuorum
     """
     if sys.platform.startswith("win"):
         base = os.environ.get("APPDATA")

@@ -4,7 +4,9 @@ from __future__ import annotations
 import json
 from typing import Any, Callable, Dict, Optional
 
-_mock_dispatcher: Optional[Callable[["Session", str, str, Dict[str, Any]], "Response"]] = None
+Dispatcher = Callable[["Session", str, str, Dict[str, Any]], "Response"]
+
+_mock_dispatcher: Optional[Dispatcher] = None
 
 
 class RequestException(Exception):
@@ -29,7 +31,9 @@ class Session:
     def __init__(self) -> None:
         self.headers: Dict[str, str] = {}
 
-    def request(self, method: str, url: str, timeout: float | None = None, **kwargs: Any) -> Response:
+    def request(
+        self, method: str, url: str, timeout: float | None = None, **kwargs: Any
+    ) -> Response:
         if _mock_dispatcher is None:
             raise RequestException("No HTTP dispatcher configured for stubbed requests")
         return _mock_dispatcher(self, method.upper(), url, kwargs)
@@ -44,6 +48,6 @@ class Session:
         return self.request("PATCH", url, timeout=timeout, **kwargs)
 
 
-def _set_mock_dispatcher(dispatcher: Optional[Callable[["Session", str, str, Dict[str, Any]], Response]]) -> None:
+def _set_mock_dispatcher(dispatcher: Optional[Dispatcher]) -> None:
     global _mock_dispatcher
     _mock_dispatcher = dispatcher

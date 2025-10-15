@@ -1,28 +1,39 @@
 import json
-import os
 from pathlib import Path
 import sys
 
 import pytest
 
-# Ensure src is importable when tests are run locally
-ROOT = Path(__file__).resolve().parents[1]
-src_path = ROOT / "src"
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
-
-from amormortuorum.persistence import (
-    SaveManager,
-    SavePolicy,
-    MetaState,
-    RunState,
-    SaveGame,
-    Item,
-    RelicCollection,
-    SaveNotAllowed,
-    SaveValidationError,
-    CorruptSaveError,
-)
+try:
+    from amormortuorum.persistence import (
+        CorruptSaveError,
+        Item,
+        MetaState,
+        RelicCollection,
+        RunState,
+        SaveGame,
+        SaveManager,
+        SaveNotAllowed,
+        SavePolicy,
+        SaveValidationError,
+    )
+except ModuleNotFoundError:  # pragma: no cover - fallback for local runs without install
+    ROOT = Path(__file__).resolve().parents[1]
+    src_path = ROOT / "src"
+    if str(src_path) not in sys.path:
+        sys.path.insert(0, str(src_path))
+    from amormortuorum.persistence import (
+        CorruptSaveError,
+        Item,
+        MetaState,
+        RelicCollection,
+        RunState,
+        SaveGame,
+        SaveManager,
+        SaveNotAllowed,
+        SavePolicy,
+        SaveValidationError,
+    )
 
 
 def test_crypt_capacity_and_persistence(tmp_path: Path):
@@ -74,7 +85,11 @@ def test_graveyard_only_full_save(tmp_path: Path):
 
 
 def test_save_and_quit_flag_allows_midrun_save(tmp_path: Path):
-    mgr = SaveManager(root_dir=tmp_path, profile_id="test3", policy=SavePolicy(allow_save_and_quit=True))
+    mgr = SaveManager(
+        root_dir=tmp_path,
+        profile_id="test3",
+        policy=SavePolicy(allow_save_and_quit=True),
+    )
     run = RunState(floor=10, in_graveyard=False, rng_seed=99)
     save = SaveGame(meta=MetaState(), run=run, profile_id="test3")
     # Should not raise now
@@ -87,7 +102,11 @@ def test_atomic_write_and_backup_recovery(tmp_path: Path):
     mgr = SaveManager(root_dir=tmp_path, profile_id="test4")
 
     # Create a valid save at graveyard
-    save = SaveGame(meta=MetaState(), run=RunState(floor=1, in_graveyard=True, rng_seed=1), profile_id="test4")
+    save = SaveGame(
+        meta=MetaState(),
+        run=RunState(floor=1, in_graveyard=True, rng_seed=1),
+        profile_id="test4",
+    )
     mgr.save_full(save)
 
     run_path = mgr.run_path
