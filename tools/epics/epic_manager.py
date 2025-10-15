@@ -317,9 +317,8 @@ def connect_repo(repo_full_name: str, token: Optional[str]) -> Any:  # pragma: n
         )
 
 
-def parse_args(
-    argv: Optional[List[str]] = None,
-) -> argparse.Namespace:  # pragma: no cover - thin wrapper
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:  # pragma: no cover - thin wrapper
+
     parser = argparse.ArgumentParser(
         description="Create/Update an Epic and its child issues from YAML config."
     )
