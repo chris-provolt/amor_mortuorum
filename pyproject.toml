@@ -1,51 +1,35 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=65", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "amor-mortuorum"
 version = "0.1.0"
-description = "Amor Mortuorum core systems: Graveyard hub, shop, crypt, save system"
-authors = [{name = "Amor Mortuorum Team"}]
-requires-python = ">=3.10"
-dependencies = []
-
-[tool.pytest.ini_options]
-minversion = "8.0"
-addopts = "-ra -q"
-testpaths = ["tests"]
-pythonpath = ["src"]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "amormortuorum"
-version = "0.1.0"
 description = "Amor Mortuorum - A modern, dark roguelite built with Python + Arcade"
 readme = "README.md"
-authors = [{name = "Amor Mortuorum Team"}]
-requires-python = ">=3.9"
+authors = [{ name = "Amor Mortuorum Team" }]
+requires-python = ">=3.10"
 dependencies = [
     "arcade==2.6.17",
     "PyYAML>=6.0",
+    "requests>=2.31",
+    "responses>=0.25.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "flake8>=6.1",
 ]
 
 [project.scripts]
 amor = "amormortuorum.cli:main"
-
-[tool.pytest.ini_options]
-minversion = "7.0"
-addopts = "-q"
-testpaths = ["tests"]
+am-epic = "am_epic.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["amormortuorum*"]
+include = ["amormortuorum*", "am_epic*", "epic*"]
