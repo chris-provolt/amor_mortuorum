@@ -49,7 +49,13 @@ def load_config(path: str) -> Dict[str, Any]:
     return data
 
 
-def get_or_create_label(repo: Any, name: str, color: str = "ededed", description: Optional[str] = None, dry_run: bool = False) -> Any:
+def get_or_create_label(
+    repo: Any,
+    name: str,
+    color: str = "ededed",
+    description: Optional[str] = None,
+    dry_run: bool = False,
+) -> Any:
     """Return a Label object; create if missing.
 
     The repo object is expected to implement:
@@ -66,6 +72,7 @@ def get_or_create_label(repo: Any, name: str, color: str = "ededed", description
 
     if dry_run:
         logging.info("[dry-run] Would create label: %s", name)
+
         class _FakeLabel:
             def __init__(self, name: str):
                 self.name = name
@@ -99,6 +106,7 @@ def create_issue(repo: Any, title: str, body: str, labels: List[Any], dry_run: b
     """
     if dry_run:
         logging.info("[dry-run] Would create issue: %s", title)
+
         class _FakeIssue:
             def __init__(self, title: str, body: str, labels: List[Any]):
                 self.title = title
@@ -106,11 +114,14 @@ def create_issue(repo: Any, title: str, body: str, labels: List[Any], dry_run: b
                 self.labels = labels
                 self.number = -1
                 self._comments = []
+
             def get_comments(self):
                 return list(self._comments)
+
             def create_comment(self, body: str):
                 self._comments.append(type("C", (), {"body": body}))
                 return self._comments[-1]
+
             def edit(self, body: Optional[str] = None):
                 if body is not None:
                     self.body = body
@@ -131,7 +142,11 @@ def ensure_issue(repo: Any, title: str, body: str, labels: List[Any], dry_run: b
     return create_issue(repo, title, body, labels, dry_run=dry_run)
 
 
-def build_checklist(repo_full_name: str, epic_title: str, child_issues: List[Tuple[str, Any]]) -> str:
+def build_checklist(
+    repo_full_name: str,
+    epic_title: str,
+    child_issues: List[Tuple[str, Any]],
+) -> str:
     """Build a standardized, updatable checklist for the epic comment.
 
     child_issues: list of (child_title, issue_obj)
@@ -175,7 +190,9 @@ def upsert_epic_children_comment(epic_issue: Any, checklist_body: str) -> None:
             break
     if managed is None:
         epic_issue.create_comment(checklist_body)
-        logging.info("Added checklist comment to epic #%s", getattr(epic_issue, "number", "?"))
+        logging.info(
+            "Added checklist comment to epic #%s", getattr(epic_issue, "number", "?")
+        )
     else:
         # PyGithub Comment has .edit(body)
         if hasattr(managed, "edit"):
@@ -183,7 +200,10 @@ def upsert_epic_children_comment(epic_issue: Any, checklist_body: str) -> None:
         else:
             # Fallback: append a new one
             epic_issue.create_comment(checklist_body)
-        logging.info("Updated checklist comment on epic #%s", getattr(epic_issue, "number", "?"))
+            logging.info(
+                "Updated checklist comment on epic #%s",
+                getattr(epic_issue, "number", "?"),
+            )
 
 
 def link_child_to_epic(child_issue: Any, epic_issue: Any) -> None:
@@ -219,7 +239,9 @@ def ensure_labels(repo: Any, labels: List[str], dry_run: bool = False) -> List[A
             "accessibility": "0e8a16",
             "save": "d4c5f9",
         }.get(name.lower(), "ededed")
-        label_objs.append(get_or_create_label(repo, name, color=color, dry_run=dry_run))
+        label_objs.append(
+            get_or_create_label(repo, name, color=color, dry_run=dry_run)
+        )
     return label_objs
 
 
@@ -233,7 +255,11 @@ def process_epic(repo: Any, config: Dict[str, Any], dry_run: bool = False) -> Di
     epic_labels_cfg = config.get("labels", ["epic"])
 
     # Ensure labels and create/get epic
-    epic_label_objs = ensure_labels(repo, list(set(epic_labels_cfg + ["epic"])), dry_run=dry_run)
+    epic_label_objs = ensure_labels(
+        repo,
+        list(set(epic_labels_cfg + ["epic"])),
+        dry_run=dry_run,
+    )
     epic_issue = ensure_issue(repo, epic_title, epic_body, epic_label_objs, dry_run=dry_run)
 
     # Children
@@ -245,7 +271,11 @@ def process_epic(repo: Any, config: Dict[str, Any], dry_run: bool = False) -> Di
         title = child["title"].strip()
         body = child.get("body", "").strip()
         child_labels_cfg = child.get("labels", ["feature"]) or ["feature"]
-        child_label_objs = ensure_labels(repo, child_labels_cfg, dry_run=dry_run)
+        child_label_objs = ensure_labels(
+            repo,
+            child_labels_cfg,
+            dry_run=dry_run,
+        )
         issue = ensure_issue(repo, title, body, child_label_objs, dry_run=dry_run)
         child_issues.append((title, issue))
         if getattr(issue, "number", None) is not None and getattr(issue, "number") != -1:
@@ -254,7 +284,11 @@ def process_epic(repo: Any, config: Dict[str, Any], dry_run: bool = False) -> Di
         link_child_to_epic(issue, epic_issue)
 
     # Create/update checklist on epic
-    checklist_body = build_checklist(getattr(repo, "full_name", ""), epic_title, child_issues)
+    checklist_body = build_checklist(
+        getattr(repo, "full_name", ""),
+        epic_title,
+        child_issues,
+    )
     upsert_epic_children_comment(epic_issue, checklist_body)
 
     logging.info(
@@ -278,22 +312,52 @@ def connect_repo(repo_full_name: str, token: Optional[str]) -> Any:  # pragma: n
     try:
         return gh.get_repo(repo_full_name)
     except GithubException as exc:
-        raise EpicManagerError(f"Unable to access repo '{repo_full_name}': {exc}")
+        raise EpicManagerError(
+            f"Unable to access repo '{repo_full_name}': {exc}"
+        )
 
 
-def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:  # pragma: no cover - thin wrapper
-    parser = argparse.ArgumentParser(description="Create/Update an Epic and its child issues from YAML config.")
-    parser.add_argument("--repo", required=True, help="GitHub repo in 'owner/name' format")
-    parser.add_argument("--config", required=True, help="Path to epic YAML configuration")
-    parser.add_argument("--token", default=os.environ.get("GITHUB_TOKEN"), help="GitHub token (or set GITHUB_TOKEN)")
-    parser.add_argument("--dry-run", action="store_true", help="Do not call GitHub; simulate actions")
-    parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Logging level")
+def parse_args(
+    argv: Optional[List[str]] = None,
+) -> argparse.Namespace:  # pragma: no cover - thin wrapper
+    parser = argparse.ArgumentParser(
+        description="Create/Update an Epic and its child issues from YAML config."
+    )
+    parser.add_argument(
+        "--repo",
+        required=True,
+        help="GitHub repo in 'owner/name' format",
+    )
+    parser.add_argument(
+        "--config",
+        required=True,
+        help="Path to epic YAML configuration",
+    )
+    parser.add_argument(
+        "--token",
+        default=os.environ.get("GITHUB_TOKEN"),
+        help="GitHub token (or set GITHUB_TOKEN)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Do not call GitHub; simulate actions",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover - CLI wrapper
     args = parse_args(argv)
-    logging.basicConfig(level=getattr(logging, args.log_level), format="%(levelname)s: %(message)s")
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format="%(levelname)s: %(message)s",
+    )
 
     try:
         cfg = load_config(args.config)
@@ -308,11 +372,13 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover - CLI wra
             class _FakeComment:
                 def __init__(self, body: str):
                     self.body = body
+
                 def edit(self, body: str):
                     self.body = body
 
             class _FakeIssue:
                 _counter = 1000
+
                 def __init__(self, title: str, body: str, labels: List[_FakeLabel]):
                     _FakeIssue._counter += 1
                     self.title = title
@@ -320,12 +386,15 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover - CLI wra
                     self.labels = labels
                     self.number = _FakeIssue._counter
                     self._comments: List[_FakeComment] = []
+
                 def get_comments(self):
                     return list(self._comments)
+
                 def create_comment(self, body: str):
                     c = _FakeComment(body)
                     self._comments.append(c)
                     return c
+
                 def edit(self, body: Optional[str] = None):
                     if body is not None:
                         self.body = body
@@ -335,15 +404,24 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover - CLI wra
                     self.full_name = args.repo
                     self._labels: Dict[str, _FakeLabel] = {}
                     self._issues: List[_FakeIssue] = []
+
                 def get_labels(self):
                     return list(self._labels.values())
+
                 def create_label(self, name: str, color: str, description: str):
                     lbl = _FakeLabel(name)
                     self._labels[name.lower()] = lbl
                     return lbl
+
                 def get_issues(self, state: str = "open"):
                     return list(self._issues)
-                def create_issue(self, title: str, body: str, labels: List[_FakeLabel]):
+
+                def create_issue(
+                    self,
+                    title: str,
+                    body: str,
+                    labels: List[_FakeLabel],
+                ):
                     issue = _FakeIssue(title, body, labels)
                     self._issues.append(issue)
                     return issue
@@ -352,7 +430,11 @@ def main(argv: Optional[List[str]] = None) -> int:  # pragma: no cover - CLI wra
         else:
             repo = connect_repo(args.repo, args.token)
         summary = process_epic(repo, cfg, dry_run=args.dry_run)
-        logging.info("Done. Epic: %s Children: %s", summary.get("epic_number"), summary.get("child_numbers"))
+        logging.info(
+            "Done. Epic: %s Children: %s",
+            summary.get("epic_number"),
+            summary.get("child_numbers"),
+        )
         return 0
     except EpicManagerError as exc:
         logging.error(str(exc))

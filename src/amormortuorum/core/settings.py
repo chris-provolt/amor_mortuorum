@@ -68,7 +68,10 @@ class Settings:
         """
         # Load default YAML from package resources
         try:
-            with resources.files("amormortuorum.config").joinpath("default_settings.yaml").open("r", encoding="utf-8") as f:
+            default_settings_path = resources.files("amormortuorum.config").joinpath(
+                "default_settings.yaml"
+            )
+            with default_settings_path.open("r", encoding="utf-8") as f:
                 default_data = yaml.safe_load(f) or {}
         except FileNotFoundError:
             logger.warning("Default settings not found; falling back to dataclass defaults.")

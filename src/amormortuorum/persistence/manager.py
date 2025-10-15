@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import threading
@@ -28,7 +27,12 @@ class SavePolicy:
 class SaveManager:
     """Responsible for reading/writing save files, enforcing policy and atomicity."""
 
-    def __init__(self, root_dir: Optional[Path] = None, profile_id: str = "default", policy: Optional[SavePolicy] = None) -> None:
+    def __init__(
+        self,
+        root_dir: Optional[Path] = None,
+        profile_id: str = "default",
+        policy: Optional[SavePolicy] = None,
+    ) -> None:
         self.root_dir = ensure_dir(root_dir or default_save_root())
         self.profile_dir = ensure_dir(self.root_dir / "profiles" / profile_id)
         self.meta_path = self.profile_dir / "meta.json"
@@ -64,7 +68,8 @@ class SaveManager:
                 raise SaveValidationError("SaveGame.run must be present for full save")
             if not save.run.in_graveyard and not self.policy.allow_save_and_quit:
                 raise SaveNotAllowed(
-                    "Full save not allowed outside the Graveyard. Return to Graveyard or enable save-and-quit."
+                    "Full save not allowed outside the Graveyard. Return to Graveyard or enable"
+                    " save-and-quit."
                 )
             save.touch()
             text = encode_save(save)

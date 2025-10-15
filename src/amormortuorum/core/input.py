@@ -46,7 +46,11 @@ class InputManager:
     - Can be extended to support gamepad, axes, and chords
     """
 
-    def __init__(self, window: arcade.Window, mapping: Dict[str, Iterable[str]] | None = None) -> None:
+    def __init__(
+        self,
+        window: arcade.Window,
+        mapping: Dict[str, Iterable[str]] | None = None,
+    ) -> None:
         self.window = window
         self._mapping: Dict[str, Set[int]] = {}
         self._pressed: Set[int] = set()
@@ -85,13 +89,13 @@ class InputManager:
     def process_key_press(self, key: int, modifiers: int) -> List[str]:
         self._pressed.add(key)
         actions = self.actions_for_key(key)
-        logger.debug("Key pressed: %s (mods=%s) -> actions=%s", key, modifiers, actions)
+        logger.debug("Key pressed %s mods=%s actions=%s", key, modifiers, actions)
         return actions
 
     def process_key_release(self, key: int, modifiers: int) -> List[str]:
         self._pressed.discard(key)
         actions = self.actions_for_key(key)
-        logger.debug("Key released: %s (mods=%s) -> actions=%s", key, modifiers, actions)
+        logger.debug("Key released %s mods=%s actions=%s", key, modifiers, actions)
         return actions
 
     # Binding management

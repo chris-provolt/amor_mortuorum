@@ -106,4 +106,3 @@ class GameApp(arcade.Window):
             fullscreen = not self.fullscreen
         self.set_fullscreen(fullscreen)
         logger.info("Fullscreen toggled: %s", fullscreen)
-

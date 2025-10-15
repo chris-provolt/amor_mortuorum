@@ -24,9 +24,7 @@ from .errors import (
     NotFound,
 )
 
-from importlib.metadata import version, PackageNotFoundError
-
-
+from importlib.metadata import PackageNotFoundError, version
 
 __all__ = [
     "Item",

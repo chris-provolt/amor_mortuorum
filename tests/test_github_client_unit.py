@@ -3,7 +3,7 @@ import json
 import pytest
 import responses
 
-from src.am_epic.github_client import GitHubClient, GitHubAPIError
+from src.am_epic.github_client import GitHubAPIError, GitHubClient
 
 
 @responses.activate
@@ -24,10 +24,19 @@ def test_ensure_label_creates_when_missing():
 def test_search_issue_by_title_exact_match():
     gh = GitHubClient(token="tok", repo="o/r")
     # search returns two results but only one exact title
+    search_url = (
+        "https://api.github.com/search/issues"
+        "?q=repo%3Ao%2Fr%20type%3Aissue%20in%3Atitle%20%22Hello%20World%22"
+    )
     responses.add(
         responses.GET,
-        "https://api.github.com/search/issues?q=repo%3Ao%2Fr%20type%3Aissue%20in%3Atitle%20%22Hello%20World%22",
-        json={"items": [{"number": 1, "title": "Hello world"}, {"number": 2, "title": "Hello World"}]},
+        search_url,
+        json={
+            "items": [
+                {"number": 1, "title": "Hello world"},
+                {"number": 2, "title": "Hello World"},
+            ]
+        },
         status=200,
     )
     responses.add(
@@ -43,6 +52,11 @@ def test_search_issue_by_title_exact_match():
 @responses.activate
 def test_error_response_raises():
     gh = GitHubClient(token="tok", repo="o/r")
-    responses.add(responses.POST, "https://api.github.com/repos/o/r/issues", status=400, body=json.dumps({"message": "bad"}))
+    responses.add(
+        responses.POST,
+        "https://api.github.com/repos/o/r/issues",
+        status=400,
+        body=json.dumps({"message": "bad"}),
+    )
     with pytest.raises(GitHubAPIError):
         gh.create_issue("t", "b")
