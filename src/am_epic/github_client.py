@@ -84,10 +84,12 @@ class GitHubClient:
         from urllib.parse import quote
 
         q = f"repo:{self.owner}/{self.repo} type:issue in:title \"{title}\""
-        resp = self._request("GET", f"/search/issues?q={quote(q)}")
+        resp = self._request("GET", f"/search/issues?q={quote(q, safe='')}")
         items = resp.json().get("items", [])
+        expected_title = title.strip()
         for it in items:
-            if it.get("title", "").strip().lower() == title.strip().lower():
+            current = it.get("title", "").strip()
+            if current == expected_title:
                 # Fetch full issue to get fields like labels array with objects
                 num = it.get("number")
                 return self.get_issue(num)

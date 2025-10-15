@@ -167,3 +167,8 @@ class SaveManager:
         # Ensure data is on disk
         with path.open("r", encoding="utf-8") as f:
             os.fsync(f.fileno())
+        if not bak.exists():
+            try:
+                shutil.copy2(str(path), str(bak))
+            except Exception:
+                pass
