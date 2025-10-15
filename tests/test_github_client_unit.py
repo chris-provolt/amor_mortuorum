@@ -24,12 +24,15 @@ def test_ensure_label_creates_when_missing():
 def test_search_issue_by_title_exact_match():
     gh = GitHubClient(token="tok", repo="o/r")
     # search returns two results but only one exact title
+    search_url = (
+        "https://api.github.com/search/issues"
+        "?q=repo%3Ao%2Fr%20type%3Aissue%20in%3Atitle%20%22Hello%20World%22"
+    )
     responses.add(
         responses.GET,
-        (
-            "https://api.github.com/search/issues?q=repo%3Ao%2Fr%20type%3Aissue%20"
-            "in%3Atitle%20%22Hello%20World%22"
-        ),
+        search_url,
+        "https://api.github.com/search/issues?q=repo%3Ao%2Fr%20type%3Aissue%20in%3Atitle%20%22Hello%20World%22",
+
         json={
             "items": [
                 {"number": 1, "title": "Hello world"},

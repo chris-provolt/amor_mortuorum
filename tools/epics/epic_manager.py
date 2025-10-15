@@ -142,7 +142,11 @@ def ensure_issue(repo: Any, title: str, body: str, labels: List[Any], dry_run: b
     return create_issue(repo, title, body, labels, dry_run=dry_run)
 
 
-def build_checklist(repo_full_name: str, epic_title: str, child_issues: List[Tuple[str, Any]]) -> str:
+def build_checklist(
+    repo_full_name: str,
+    epic_title: str,
+    child_issues: List[Tuple[str, Any]],
+) -> str:
     """Build a standardized, updatable checklist for the epic comment.
 
     child_issues: list of (child_title, issue_obj)
@@ -186,7 +190,9 @@ def upsert_epic_children_comment(epic_issue: Any, checklist_body: str) -> None:
             break
     if managed is None:
         epic_issue.create_comment(checklist_body)
-        logging.info("Added checklist comment to epic #%s", getattr(epic_issue, "number", "?"))
+        logging.info(
+            "Added checklist comment to epic #%s", getattr(epic_issue, "number", "?")
+        )
     else:
         # PyGithub Comment has .edit(body)
         if hasattr(managed, "edit"):
@@ -194,7 +200,10 @@ def upsert_epic_children_comment(epic_issue: Any, checklist_body: str) -> None:
         else:
             # Fallback: append a new one
             epic_issue.create_comment(checklist_body)
-        logging.info("Updated checklist comment on epic #%s", getattr(epic_issue, "number", "?"))
+            logging.info(
+                "Updated checklist comment on epic #%s",
+                getattr(epic_issue, "number", "?"),
+            )
 
 
 def link_child_to_epic(child_issue: Any, epic_issue: Any) -> None:
@@ -303,10 +312,13 @@ def connect_repo(repo_full_name: str, token: Optional[str]) -> Any:  # pragma: n
     try:
         return gh.get_repo(repo_full_name)
     except GithubException as exc:
-        raise EpicManagerError(f"Unable to access repo '{repo_full_name}': {exc}")
+        raise EpicManagerError(
+            f"Unable to access repo '{repo_full_name}': {exc}"
+        )
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:  # pragma: no cover - thin wrapper
+
     parser = argparse.ArgumentParser(
         description="Create/Update an Epic and its child issues from YAML config."
     )

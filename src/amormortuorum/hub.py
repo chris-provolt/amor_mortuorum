@@ -65,7 +65,12 @@ class GraveyardHub:
         self.ctx.crypt.deposit(player, item_id, quantity)
         self.save_manager.save(self.ctx.save)
 
-    def crypt_withdraw(self, player: Player, slot_index: int, quantity: Optional[int] = None) -> None:
+    def crypt_withdraw(
+        self,
+        player: Player,
+        slot_index: int,
+        quantity: Optional[int] = None,
+    ) -> None:
         self.ctx.crypt.withdraw(player, slot_index, quantity)
         self.save_manager.save(self.ctx.save)
 

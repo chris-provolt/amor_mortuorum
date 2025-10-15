@@ -46,7 +46,11 @@ class InputManager:
     - Can be extended to support gamepad, axes, and chords
     """
 
-    def __init__(self, window: arcade.Window, mapping: Dict[str, Iterable[str]] | None = None) -> None:
+    def __init__(
+        self,
+        window: arcade.Window,
+        mapping: Dict[str, Iterable[str]] | None = None,
+    ) -> None:
         self.window = window
         self._mapping: Dict[str, Set[int]] = {}
         self._pressed: Set[int] = set()

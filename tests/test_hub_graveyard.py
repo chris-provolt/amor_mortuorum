@@ -103,9 +103,16 @@ def test_crypt_capacity_and_withdraw(tmp_path: Path):
     # Try depositing a fourth distinct item -> full
     player.inventory.add(cat.get("potion_small"), 1)
     try:
+
         # A distinct item needs an id not already in the crypt; reusing potion_small just stacks.
         # Force a failure by attempting to deposit another unique id.
         # The nonexistent entry should trigger NotFound.
+
+        # Re-using potion_small would stack; pick a new id to force the crypt to reject it.
+        # Expect a NotFound because the item is not present in the catalog or crypt slots.
+        # New distinct only if we pick an id not in crypt; we reuse potion_small but it stacks instead.
+        # To force a failure, attempt to deposit another distinct item (not present) -> expect NotFound.
+
         hub.crypt_deposit(player, "nonexistent", 1)
         assert False, "Expected NotFound"
     except NotFound:
