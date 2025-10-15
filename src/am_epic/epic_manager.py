@@ -75,7 +75,8 @@ class EpicManager:
             missing = [label for label in labels if label not in existing_labels]
             if missing:
                 self.gh.add_labels(existing["number"], missing)
-            # Optionally refresh body if missing checklist markers for epic only; but keep user's edits for children
+            # Optionally refresh the body if epic markers are missing, but keep user edits on
+            # child issues intact.
             return existing
         return self.gh.create_issue(title=title, body=body, labels=labels, assignees=assignees)
 

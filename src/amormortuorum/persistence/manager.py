@@ -68,7 +68,8 @@ class SaveManager:
                 raise SaveValidationError("SaveGame.run must be present for full save")
             if not save.run.in_graveyard and not self.policy.allow_save_and_quit:
                 raise SaveNotAllowed(
-                    "Full save not allowed outside the Graveyard. Return to Graveyard or enable save-and-quit."
+                    "Full save not allowed outside the Graveyard. Return to Graveyard or enable"
+                    " save-and-quit."
                 )
             save.touch()
             text = encode_save(save)

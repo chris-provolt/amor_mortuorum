@@ -58,7 +58,12 @@ class GitHubClient:
             return resp.json()
         return None
 
-    def ensure_label(self, name: str, color: str = "b60205", description: Optional[str] = None) -> Dict[str, Any]:
+    def ensure_label(
+        self,
+        name: str,
+        color: str = "b60205",
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Ensure a label exists; create if missing."""
         label = self.get_label(name)
         if label:

@@ -14,7 +14,13 @@ class RequestException(Exception):
 
 
 class Response:
-    def __init__(self, status_code: int, *, json_data: Any | None = None, text: str | None = None) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        *,
+        json_data: Any | None = None,
+        text: str | None = None,
+    ) -> None:
         self.status_code = status_code
         self._json_data = json_data
         self.text = text or ""
