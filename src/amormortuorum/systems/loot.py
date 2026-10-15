@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 from random import Random
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
-from ..data import QUALITIES, GameData, ItemDef
+from ..data import QUALITIES, GameData, ItemDef, RelicDef
+
+# Relics that only bosses award (see bosses.json); the rest can turn up in chests.
+RELIC_CHEST_BASE = 0.02
+RELIC_CHEST_PER_TIER = 0.015
 
 
 def tier_for_floor(floor: int, data: GameData) -> str:
@@ -51,3 +55,28 @@ def roll_chest_gold(rng: Random, floor: int, chance: float = 0.25) -> Optional[i
     if rng.random() < chance:
         return roll_gold(rng, floor)
     return None
+
+
+def relic_chest_chance(floor: int, data: GameData) -> float:
+    """Chance a chest holds a relic: 2% on T1 rising to 8% on T5."""
+    tier_index = data.tiers.index(data.tier_for_floor(floor))
+    return RELIC_CHEST_BASE + RELIC_CHEST_PER_TIER * tier_index
+
+
+def chest_relic_pool(data: GameData, collected: Iterable[str]) -> List[RelicDef]:
+    """Relics that chests may still drop: not boss-awarded and not yet collected."""
+    boss_relics = {b.relic_id for b in data.bosses.values() if b.relic_id}
+    have = set(collected)
+    return [r for r in data.relics if r.id not in boss_relics and r.id not in have]
+
+
+def roll_relic(
+    rng: Random, floor: int, data: GameData, collected: Iterable[str]
+) -> Optional[RelicDef]:
+    """Roll whether a chest on ``floor`` yields one of the remaining chest relics."""
+    pool = chest_relic_pool(data, collected)
+    if not pool:
+        return None
+    if rng.random() >= relic_chest_chance(floor, data):
+        return None
+    return rng.choice(pool)

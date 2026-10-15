@@ -9,6 +9,7 @@ from ..data import GameData
 from ..persistence import MetaState, RunState, SaveError, SaveGame, SaveManager
 from .crypt import CryptService
 from .entities import Player
+from .relics import apply_passives
 from .run import Run
 from .shop import Shop
 
@@ -101,7 +102,9 @@ class GraveyardHub:
         state: Optional[RunState] = save.run
         if state is None or not state.in_graveyard or not state.party:
             return None
-        return Run.from_run_state(state)
+        run = Run.from_run_state(state)
+        apply_passives(run, self.meta, self.data)
+        return run
 
     def end_run(self, run: Run) -> None:
         """Record a finished run in meta and clear the stored run state."""

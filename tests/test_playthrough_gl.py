@@ -455,3 +455,53 @@ def test_final_boss_victory_ends_run(app):
     assert app.state.meta.runs_completed == 1 and app.state.meta.deepest_floor == 99
     assert d.scene.menu.items[1].enabled is False  # no run to continue
     del run
+
+
+def test_relics_screen_and_chest_relic_pickup(app):
+    d = Driver(app)
+    d.boot_to_menu()
+    # Relics screen from the title (Continue is disabled with no save, so one step down)
+    d.press("down")
+    assert d.scene.menu.current.label == "Relics"
+    d.press("enter")
+    assert d.scene_name() == "RelicsScene"
+    d.press("esc")
+    assert d.scene_name() == "MainMenuScene"
+    while d.scene.menu.selected != 0:
+        d.press("up")
+
+    d.press("enter")  # New Run
+    d.press("enter")  # Enter the Dungeon
+    scene = d.scene
+    run = app.state.run
+    data = app.state.data
+    # Force the next chest to yield a relic by pre-rolling the chest stream
+    from amormortuorum.systems.loot import relic_chest_chance
+
+    class AlwaysRelic:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def random(self):
+            return 0.0  # below any relic chance
+
+        def choice(self, seq):
+            return self.inner.choice(seq)
+
+        def randint(self, a, b):
+            return self.inner.randint(a, b)
+
+    assert relic_chest_chance(run.floor, data) > 0
+    scene._chest_rng = AlwaysRelic(scene._chest_rng)
+    before = set(app.state.meta.relics.collected)
+    chest = sorted(scene.fmap.chests)[0]
+    _walk_to(d, chest)
+    if d.scene_name() == "DungeonScene" and d.scene.pos == chest:
+        gained = set(app.state.meta.relics.collected) - before
+        assert len(gained) == 1
+        assert app.state.save_manager.load_meta().relics.collected >= gained
+        assert any("Relic of the Veil" in m for m in d.scene.hud.messages)
+        # Passives are live immediately
+        from amormortuorum.systems.relics import passive_totals
+
+        assert run.leader.bonuses == passive_totals(app.state.meta, data)

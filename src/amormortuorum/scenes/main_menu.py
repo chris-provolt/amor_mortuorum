@@ -78,6 +78,10 @@ class MainMenuScene(BaseScene):
                 MenuItem("New Run", self._new_run, hint="Begin a fresh descent from the Graveyard"),
                 MenuItem("Continue", self._continue, enabled=saved is not None, hint=continue_hint),
                 MenuItem(
+                    "Relics", self._relics,
+                    hint=f"{len(meta.relics.collected)}/10 Relics of the Veil collected",
+                ),
+                MenuItem(
                     "Quit", self._quit,
                     hint=f"Relics {len(meta.relics.collected)}/10  Deepest B{meta.deepest_floor}",
                 ),
@@ -90,7 +94,7 @@ class MainMenuScene(BaseScene):
 
         state = self.app.state
         seed = state.seed if state.seed is not None else random_seed()
-        state.run = new_run(state.data, seed=seed)
+        state.run = new_run(state.data, seed=seed, meta=state.meta)
         logger.info("New run with seed %d", seed)
         self.manager.push(GraveyardScene(self.app))
 
@@ -102,6 +106,11 @@ class MainMenuScene(BaseScene):
             return
         self.app.state.run = run
         self.manager.push(GraveyardScene(self.app))
+
+    def _relics(self) -> None:
+        from .relics import RelicsScene
+
+        self.manager.push(RelicsScene(self.app))
 
     def _quit(self) -> None:
         logger.info("Quit selected from MainMenu")

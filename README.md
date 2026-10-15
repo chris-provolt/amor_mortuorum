@@ -17,11 +17,12 @@ What works today, end to end:
 - **Hazards**: hidden one-shot **spike and dart traps** that scale with depth, and from floor 2 some floors **lock the stairs room** behind doors whose **Catacomb Key** is hidden elsewhere on the floor.
 - **Fog of war and minimap**: shadowcast line of sight (walls and locked doors block), remembered tiles drawn dimmed, and a toggleable minimap (M) with icons for stairs, chests, portals, keys and sprung traps you have seen.
 - **Bosses**: mini-bosses guard the stairs on B20/40/60/80 (each drops a Relic of the Veil), and **The Oblivion Heart** waits on B99; beating it awards the final relic and ends the run in victory. Bosses enrage below half HP.
+- **Relics of the Veil**: the five non-boss relics turn up in chests (2% of chests on T1 up to 8% on T5), the collection screen lives on the title and in the Graveyard, and every relic grants a light passive (ATK/DEF/SPD, sight radius, gold or XP percent) that applies to every future run.
 - **Random encounters** that open **turn-based combat**: Attack / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling.
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.
 
-Not yet built (see [Roadmap](#roadmap)): party of up to four, relic chest drops and the collection screen, relic passives, audio, settings screen, controller support.
+Not yet built (see [Roadmap](#roadmap)): party of up to four, scrolls as MP skills, audio, settings screen, controller support.
 
 ---
 
@@ -92,6 +93,8 @@ Not yet built (see [Roadmap](#roadmap)): party of up to four, relic chest drops 
 
 ## Relics of the Veil (Meta Progression)
 - **Set:** 9 relics + **Final Relic** ("**Heart of Oblivion**").
+- **Sources:** four from the mini-bosses, the final one from The Oblivion Heart, five from rare chest finds.
+- **Passives:** each relic adds a small permanent bonus (see `relics.json`); totals show on the collection screen.
 - **Persistence:** Stored in the meta save; completion survives across runs.
 - **Names:** Lamplight of the Veil, Thorn of Epitaph, Obol of Passage, Votive Ashes, Mortis Dial, Widow's Knot, Catacomb Key, Lacrimosa Phial, Ossuary Crown, **Heart of Oblivion**.
 
@@ -147,7 +150,7 @@ src/amormortuorum/
 │   └── scenes/            # BaseScene + stack-based SceneManager (arcade-free)
 ├── data/                  # JSON content + GameData loader/validator
 │   ├── items.json  enemies.json  loot_tables.json  floor_tiers.json
-│   └── relics.json  encounters.json  shop.json
+│   └── relics.json  encounters.json  shop.json  xp_curve.json  bosses.json
 ├── systems/               # pure-Python game rules (no arcade)
 │   ├── rng.py             # seeded streams
 │   ├── procgen.py         # BSP floors, portal chance
@@ -158,10 +161,11 @@ src/amormortuorum/
 │   ├── run.py             # Run state, death/resurrection, persistence bridge
 │   ├── progression.py     # XP curve, level-ups
 │   ├── fov.py             # shadowcasting field of view, explored memory
+│   ├── relics.py          # relic passives and collection rows
 │   ├── hub.py  shop.py  crypt.py
 ├── persistence/           # SaveManager, SaveGame/MetaState/RunState, atomic writes
 ├── ui/                    # VerticalMenu model + MenuView, Hud, Minimap
-└── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, run_summary
+└── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, relics, run_summary
 tests/                     # pytest; GL-marked tests open a window (opt-in)
 tools/ci/build_binary.py   # PyInstaller one-file build
 docs/                      # design notes per epic, CI, save system
@@ -217,7 +221,7 @@ Weights per **tier** used by chests to pick a quality bucket.
 Per step the chance is `min(0.35, step_chance * (1 + 0.1 * steps_since_last_encounter))`.
 
 ### `relics.json`
-Ten entries `{"id":"veil_1".."veil_9" | "veil_final", "name", "desc"}`.
+Ten entries `{"id":"veil_1".."veil_9" | "veil_final", "name", "desc", "passive": {...}}`. Passive keys: `atk, df, spd, fov, gold_pct, xp_pct`. Relics referenced by `bosses.json` are boss-only; the rest can drop from chests.
 
 ### `bosses.json`
 ```json
@@ -281,9 +285,8 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 
 ## Roadmap
 Design notes for each epic live in `docs/epics/`. Rough order from here:
-1. Relic chest drops for the five non-boss relics, collection screen, relic passives.
-2. Party of up to four (combat already iterates a party list; needs recruitment and UI).
-3. Scrolls as skills, audio, settings screen, controller support, save-and-quit mid-run.
+1. Party of up to four (combat already iterates a party list; needs recruitment and UI).
+2. Scrolls as MP skills, audio, settings screen, controller support.
 
 ---
 

@@ -131,5 +131,9 @@ def new_run(
     for item_id, qty in STARTING_KIT.items():
         player.inventory.add(data.item(item_id), qty)
     run = Run(seed=seed, floor=1, party=[player])
+    if meta is not None:
+        from .relics import apply_passives
+
+        apply_passives(run, meta, data)
     logger.info("New run started: seed=%d", seed)
     return run

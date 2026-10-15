@@ -10,6 +10,7 @@ from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.hub import GraveyardHub
 from ..systems.progression import xp_to_next_level
+from ..systems.relics import apply_passives
 from ..ui.hud import Hud
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 
@@ -39,6 +40,7 @@ class GraveyardScene(BaseScene):
         run = self.app.state.run
         self.ctx = self.hub.enter()
         run.in_graveyard = True
+        apply_passives(run, self.app.state.meta, self.app.state.data)
         self.hub.save_run(run)
 
         self._title = arcade.Text(
@@ -81,6 +83,9 @@ class GraveyardScene(BaseScene):
                 MenuItem("Shop", self._show_shop_menu, hint="Limited stock; restocks each visit"),
                 MenuItem("Crypt", self._show_crypt_menu, hint="Store up to 3 stacks between runs"),
                 MenuItem("Bag & Equipment", self._open_inventory, hint="Equip gear, use potions"),
+                MenuItem(
+                    "Relics of the Veil", self._open_relics, hint="Your collection and passives"
+                ),
                 MenuItem("Return to Title", self._quit_to_title, hint="Your run is saved here"),
             ],
             keep_selection=False,
@@ -170,6 +175,11 @@ class GraveyardScene(BaseScene):
         from .inventory import InventoryScene
 
         self.manager.push(InventoryScene(self.app))
+
+    def _open_relics(self) -> None:
+        from .relics import RelicsScene
+
+        self.manager.push(RelicsScene(self.app))
 
     def _deposit(self, item_id: str) -> None:
         try:

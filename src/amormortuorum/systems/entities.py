@@ -162,17 +162,22 @@ class Player:
     stats: Stats = field(default_factory=Stats)
     equipment: Equipment = field(default_factory=Equipment)
     inventory: Inventory = field(default_factory=Inventory)
+    # Derived modifiers (relic passives); recomputed from meta, never persisted.
+    bonuses: Dict[str, int] = field(default_factory=dict)
 
     # Derived stats
 
+    def bonus(self, key: str) -> int:
+        return self.bonuses.get(key, 0)
+
     def effective_atk(self, data: GameData) -> int:
-        return self.stats.atk + self.equipment.bonus(data)[0]
+        return self.stats.atk + self.equipment.bonus(data)[0] + self.bonus("atk")
 
     def effective_df(self, data: GameData) -> int:
-        return self.stats.df + self.equipment.bonus(data)[1]
+        return self.stats.df + self.equipment.bonus(data)[1] + self.bonus("df")
 
     def effective_spd(self, data: GameData) -> int:
-        return self.stats.spd + self.equipment.bonus(data)[2]
+        return self.stats.spd + self.equipment.bonus(data)[2] + self.bonus("spd")
 
     def effective_max_hp(self, data: GameData) -> int:
         return self.stats.max_hp + self.equipment.bonus(data)[3]

@@ -174,10 +174,16 @@ class Battle:
         return xp, gold
 
     def apply_rewards(self) -> Tuple[int, int]:
-        """Grant rewards to the first living player (or the first player)."""
+        """Grant rewards to the first living player (or the first player).
+
+        Relic passives ``xp_pct`` / ``gold_pct`` on the recipient scale the amounts.
+        """
         xp, gold = self.rewards()
         living = self.living_players
         recipient = living[0].ref if living else self.party[0]
+        bonus = getattr(recipient, "bonus", lambda _k: 0)
+        xp = xp * (100 + bonus("xp_pct")) // 100
+        gold = gold * (100 + bonus("gold_pct")) // 100
         recipient.xp += xp  # type: ignore[union-attr]
         recipient.add_gold(gold)  # type: ignore[union-attr]
         return xp, gold

@@ -80,11 +80,19 @@ class FloorTier:
         return self.start <= floor <= self.end
 
 
+PASSIVE_KEYS: Tuple[str, ...] = ("atk", "df", "spd", "fov", "gold_pct", "xp_pct")
+
+
 @dataclass(frozen=True)
 class RelicDef:
     id: str
     name: str
     desc: str = ""
+    passive: Dict[str, int] = field(default_factory=dict)
+
+    @property
+    def is_final(self) -> bool:
+        return self.id == "veil_final"
 
 
 @dataclass(frozen=True)
@@ -189,6 +197,12 @@ class GameData:
             if tier.contains(floor):
                 return tier
         raise DataError(f"No tier covers floor {floor}")
+
+    def relic(self, relic_id: str) -> RelicDef:
+        for r in self.relics:
+            if r.id == relic_id:
+                return r
+        raise DataError(f"Unknown relic id: {relic_id}")
 
     def items_of_quality(self, quality: str) -> List[ItemDef]:
         return [it for it in self.items.values() if it.quality == quality]
@@ -348,6 +362,12 @@ class GameData:
         relic_ids = [r.id for r in self.relics]
         if len(set(relic_ids)) != len(relic_ids):
             raise DataError("relics ids must be unique")
+        for relic in self.relics:
+            for key, value in relic.passive.items():
+                if key not in PASSIVE_KEYS:
+                    raise DataError(f"relics[{relic.id}]: unknown passive {key!r}")
+                if not isinstance(value, int):
+                    raise DataError(f"relics[{relic.id}]: passive {key!r} must be an int")
 
         # Bosses
         relic_ids_set = {r.id for r in self.relics}
@@ -398,6 +418,7 @@ def _unique_by_id(source: str, entries: list) -> dict:
 __all__ = [
     "QUALITIES",
     "EQUIP_TYPES",
+    "PASSIVE_KEYS",
     "MAX_FLOOR",
     "DataError",
     "ItemDef",

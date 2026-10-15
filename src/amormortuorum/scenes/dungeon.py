@@ -13,7 +13,7 @@ from ..systems.encounters import combat_rng, encounter_rng, roll_formation, step
 from ..systems.entities import Enemy
 from ..systems.fov import Visibility
 from ..systems.hub import GraveyardHub
-from ..systems.loot import roll_chest, roll_chest_gold
+from ..systems.loot import roll_chest, roll_chest_gold, roll_relic
 from ..systems.procgen import (
     KEY_ITEM_ID,
     TILE_SIZE,
@@ -24,6 +24,7 @@ from ..systems.procgen import (
     trap_damage,
 )
 from ..systems.progression import sync_level
+from ..systems.relics import apply_passives
 from ..systems.rng import chest_rng
 from ..ui.hud import Hud
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
@@ -94,6 +95,7 @@ class DungeonScene(BaseScene):
         self.pos = self.fmap.start
         self._chest_rng = chest_rng(run.seed, run.floor)
         self._enc_rng = encounter_rng(run.seed, run.floor)
+        self.vis.radius += run.leader.bonus("fov")
         self._build_sprites()
         self.minimap = Minimap(self.fmap, self.vis, self.app)
         self._refresh_visibility(initial=True)
@@ -294,6 +296,12 @@ class DungeonScene(BaseScene):
         if sprite is not None:
             sprite.remove_from_sprite_lists()
         leader = self.run.leader
+        relic = roll_relic(
+            self._chest_rng, self.run.floor, self.data, self.state.meta.relics.collected
+        )
+        if relic is not None:
+            self._gain_relic(relic.id)
+            return
         gold = roll_chest_gold(self._chest_rng, self.run.floor)
         if gold is not None:
             leader.add_gold(gold)
@@ -317,6 +325,19 @@ class DungeonScene(BaseScene):
         names = ", ".join(e.name for e in enemies)
         logger.info("Encounter on B%d: %s", self.run.floor, names)
         self.manager.push(CombatScene(self.app, self.active_battle))
+
+    def _gain_relic(self, relic_id: str) -> None:
+        """Add a relic to the meta collection, persist it, and refresh passives."""
+        meta = self.state.meta
+        if meta.relics.has(relic_id):
+            return
+        meta.relics.add(relic_id)
+        relic = self.data.relic(relic_id)
+        self.hud.push(f"A Relic of the Veil: {relic.name}.")
+        apply_passives(self.run, meta, self.data)
+        self.state.save_manager.save_meta(meta)
+        logger.info("Relic collected: %s (%d/%d)", relic_id, len(meta.relics.collected),
+                    len(self.data.relics))
 
     def _start_boss(self) -> None:
         from .combat import CombatScene
@@ -345,10 +366,7 @@ class DungeonScene(BaseScene):
             stairs.color = COLOR_STAIRS
         meta = self.state.meta
         if boss is not None and boss.relic_id and not meta.relics.has(boss.relic_id):
-            meta.relics.add(boss.relic_id)
-            relic = next((r for r in self.data.relics if r.id == boss.relic_id), None)
-            name = relic.name if relic else boss.relic_id
-            self.hud.push(f"A Relic of the Veil: {name}.")
+            self._gain_relic(boss.relic_id)
         meta.deepest_floor = max(meta.deepest_floor, self.run.floor)
         self.state.save_manager.save_meta(meta)
         if boss is not None and boss.final:
