@@ -16,11 +16,12 @@ What works today, end to end:
 - **Dungeon floors**: BSP rooms and corridors generated from `(seed, floor)`, tile movement, chests with depth-scaled loot or gold, stairs to the next floor, and the depth-decaying **portal** back to the Graveyard.
 - **Hazards**: hidden one-shot **spike and dart traps** that scale with depth, and from floor 2 some floors **lock the stairs room** behind doors whose **Catacomb Key** is hidden elsewhere on the floor.
 - **Fog of war and minimap**: shadowcast line of sight (walls and locked doors block), remembered tiles drawn dimmed, and a toggleable minimap (M) with icons for stairs, chests, portals, keys and sprung traps you have seen.
+- **Bosses**: mini-bosses guard the stairs on B20/40/60/80 (each drops a Relic of the Veil), and **The Oblivion Heart** waits on B99; beating it awards the final relic and ends the run in victory. Bosses enrage below half HP.
 - **Random encounters** that open **turn-based combat**: Attack / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling.
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.
 
-Not yet built (see [Roadmap](#roadmap)): party of up to four, mini-bosses and the final boss, relic drops and the collection screen, audio, settings screen, controller support.
+Not yet built (see [Roadmap](#roadmap)): party of up to four, relic chest drops and the collection screen, relic passives, audio, settings screen, controller support.
 
 ---
 
@@ -218,6 +219,13 @@ Per step the chance is `min(0.35, step_chance * (1 + 0.1 * steps_since_last_enco
 ### `relics.json`
 Ten entries `{"id":"veil_1".."veil_9" | "veil_final", "name", "desc"}`.
 
+### `bosses.json`
+```json
+{"20": {"name": "The Warden of Ash", "enemies": ["warden_of_ash"], "relic_id": "veil_3"},
+ "99": {"name": "The Oblivion Heart", "enemies": ["oblivion_heart"], "relic_id": "veil_final", "final": true}}
+```
+Boss enemies carry `"boss": true` and an `"enrage"` ATK bonus that switches on below half HP.
+
 ### `shop.json`
 `{"potion_small": {"price": 20, "qty_range": [2, 5]}, ...}`; stock per Graveyard visit is drawn from `(meta_seed, hub_cycle)`.
 
@@ -273,10 +281,9 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 
 ## Roadmap
 Design notes for each epic live in `docs/epics/`. Rough order from here:
-1. Mini-bosses at 20/40/60/80 with locked stairs; final boss at B99.
-2. Relic drops, collection screen, final relic award, relic passives.
-3. Party of up to four (combat already iterates a party list; needs recruitment and UI).
-4. Scrolls as skills, audio, settings screen, controller support, save-and-quit mid-run.
+1. Relic chest drops for the five non-boss relics, collection screen, relic passives.
+2. Party of up to four (combat already iterates a party list; needs recruitment and UI).
+3. Scrolls as skills, audio, settings screen, controller support, save-and-quit mid-run.
 
 ---
 

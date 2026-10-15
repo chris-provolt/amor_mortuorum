@@ -302,6 +302,8 @@ class Enemy:
     stats: Stats
     xp: int = 0
     gold: int = 0
+    boss: bool = False
+    enrage: int = 0
 
     @staticmethod
     def from_def(d: EnemyDef) -> "Enemy":
@@ -311,7 +313,14 @@ class Enemy:
             stats=Stats(max_hp=d.hp, hp=d.hp, max_mp=d.mp, mp=d.mp, atk=d.atk, df=d.df, spd=d.spd),
             xp=d.xp,
             gold=d.gold,
+            boss=d.boss,
+            enrage=d.enrage,
         )
+
+    @property
+    def is_enraged(self) -> bool:
+        """Below half HP a boss enters its second phase and hits harder."""
+        return self.enrage > 0 and self.stats.hp * 2 <= self.stats.max_hp
 
     @property
     def is_alive(self) -> bool:

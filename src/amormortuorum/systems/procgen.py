@@ -23,6 +23,7 @@ PORTAL_BASE_CHANCE = 0.30
 PORTAL_DECAY = 0.985
 PORTAL_MIN_CHANCE = 0.02
 
+BOSS_FLOORS: Tuple[int, ...] = (20, 40, 60, 80, 99)
 DOOR_CHANCE = 0.35  # chance that a floor locks its stairs room behind a key
 DOOR_MIN_FLOOR = 2  # floor 1 never has locked doors
 KEY_ITEM_ID = "key_catacomb"
@@ -116,6 +117,11 @@ class FloorMap:
     traps: Dict[Pos, Trap] = field(default_factory=dict)
     doors: Dict[Pos, bool] = field(default_factory=dict)  # pos -> locked
     keys: Set[Pos] = field(default_factory=set)
+    stairs_locked: bool = False  # boss floors: cleared when the boss falls
+
+    @property
+    def is_boss_floor(self) -> bool:
+        return self.floor in BOSS_FLOORS
 
     def in_bounds(self, x: int, y: int) -> bool:
         return 0 <= x < self.width and 0 <= y < self.height
@@ -482,10 +488,17 @@ def generate_floor(
         chests=chests,
         portal=portal,
         traps=traps,
+        stairs_locked=floor in BOSS_FLOORS,
     )
 
     # Locked stairs room: some floors hide the key elsewhere on the floor.
-    if floor >= DOOR_MIN_FLOOR and len(rooms) > 2 and rng.random() < DOOR_CHANCE:
+    # Boss floors are gated by the boss instead, never by a key.
+    if (
+        floor >= DOOR_MIN_FLOOR
+        and floor not in BOSS_FLOORS
+        and len(rooms) > 2
+        and rng.random() < DOOR_CHANCE
+    ):
         _try_lock_stairs(fmap, stairs_room, rng)
 
     return fmap
@@ -496,6 +509,7 @@ __all__ = [
     "PORTAL_BASE_CHANCE",
     "PORTAL_DECAY",
     "PORTAL_MIN_CHANCE",
+    "BOSS_FLOORS",
     "DOOR_CHANCE",
     "DOOR_MIN_FLOOR",
     "KEY_ITEM_ID",

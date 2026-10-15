@@ -32,6 +32,7 @@ class RunSummary:
     gold: int
     cause: str
     revived: bool = False
+    victory: bool = False
 
 
 @dataclass
@@ -91,12 +92,13 @@ class Run:
             message=f"You fell on floor {self.floor}. The Veil keeps what it takes.",
         )
 
-    def summary(self, cause: str, revived: bool = False) -> RunSummary:
+    def summary(self, cause: str, revived: bool = False, victory: bool = False) -> RunSummary:
         return RunSummary(
             floor_reached=self.floor,
             gold=sum(p.gold for p in self.party),
             cause=cause,
             revived=revived,
+            victory=victory,
         )
 
     # Persistence

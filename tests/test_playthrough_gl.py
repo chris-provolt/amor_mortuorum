@@ -397,3 +397,61 @@ def test_fog_of_war_and_minimap(app):
         assert not d.scene.minimap.enabled
         d.press("m")
         assert d.scene.minimap.enabled
+
+
+def _enter_floor(d: Driver, app, floor: int, *, mighty: bool = True):
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    run = app.state.run
+    run.floor = floor
+    if mighty:
+        run.leader.stats.max_hp = run.leader.stats.hp = 5000
+        run.leader.stats.atk = 400
+    d.press("enter")  # Enter the Dungeon
+    assert d.scene_name() == "DungeonScene"
+    return run
+
+
+def test_miniboss_gates_stairs_and_awards_relic(app):
+    d = Driver(app)
+    run = _enter_floor(d, app, 20)
+    scene = d.scene
+    assert scene.fmap.is_boss_floor and scene.fmap.stairs_locked
+    assert not app.state.meta.relics.has("veil_3")
+
+    _walk_to(d, scene.fmap.stairs)
+    assert d.scene_name() == "DungeonScene" and d.scene.pos == scene.fmap.stairs
+    d.press("enter")  # challenge the boss instead of descending
+    assert d.scene_name() == "CombatScene"
+    assert any(e.boss for e in d.scene.battle.enemies)
+    d.fight_until_done()
+    assert d.scene_name() == "DungeonScene"
+    assert not scene.fmap.stairs_locked
+    assert app.state.meta.relics.has("veil_3")
+    assert any("Relic of the Veil" in m for m in scene.hud.messages)
+    assert run.floor == 20
+    d.press("enter")  # now the stairs work
+    assert run.floor == 21
+
+    # The relic persisted to disk
+    assert app.state.save_manager.load_meta().relics.has("veil_3")
+
+
+def test_final_boss_victory_ends_run(app):
+    d = Driver(app)
+    run = _enter_floor(d, app, 99)
+    scene = d.scene
+    _walk_to(d, scene.fmap.stairs)
+    assert d.scene.pos == scene.fmap.stairs
+    d.press("enter")
+    assert d.scene_name() == "CombatScene"
+    d.fight_until_done(max_rounds=200)
+    assert d.scene_name() == "RunSummaryScene"
+    assert d.scene.summary.victory and d.scene.summary.floor_reached == 99
+    assert app.state.meta.relics.has("veil_final")
+    d.press("enter")
+    assert d.scene_name() == "MainMenuScene"
+    assert app.state.run is None
+    assert app.state.meta.runs_completed == 1 and app.state.meta.deepest_floor == 99
+    assert d.scene.menu.items[1].enabled is False  # no run to continue
+    del run

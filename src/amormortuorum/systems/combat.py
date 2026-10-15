@@ -80,7 +80,8 @@ class Battler:
     def atk(self) -> int:
         if self.is_player and self._data is not None:
             return self.ref.effective_atk(self._data)  # type: ignore[union-attr]
-        return self.stats.atk
+        bonus = self.ref.enrage if getattr(self.ref, "is_enraged", False) else 0
+        return self.stats.atk + bonus
 
     @property
     def df(self) -> int:
@@ -344,11 +345,14 @@ class Battle:
         kind: str,
         source: Optional[str] = None,
     ) -> None:
+        was_enraged = bool(getattr(target.ref, "is_enraged", False))
         dealt = target.ref.take_damage(amount)
         verb = f"uses {source} on" if source else "hits"
         events.append(LogEvent(f"{attacker.name} {verb} {target.name} for {dealt}.", kind))
         if not target.is_alive:
             events.append(LogEvent(f"{target.name} is defeated.", "defeat"))
+        elif not was_enraged and getattr(target.ref, "is_enraged", False):
+            events.append(LogEvent(f"{target.name} shudders and rages!", "info"))
 
     def _live_enemy_target(self, index: Optional[int]) -> Optional[Battler]:
         if index is not None and 0 <= index < len(self.foes) and self.foes[index].is_alive:

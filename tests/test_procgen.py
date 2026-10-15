@@ -175,3 +175,12 @@ def test_locked_stairs_rooms_have_a_reachable_key():
         assert m.is_walkable(*door)
         assert m.stairs in bfs_reachable(m, m.start)
         assert m.pickup_key(key) is True and m.pickup_key(key) is False
+
+
+@pytest.mark.parametrize("floor", [20, 40, 60, 80, 99])
+def test_boss_floors_lock_stairs_and_never_use_key_doors(floor):
+    for seed in range(1, 40):
+        m = generate_floor(seed, floor)
+        assert m.is_boss_floor and m.stairs_locked
+        assert not m.doors and not m.keys
+    assert not generate_floor(1, 21).stairs_locked

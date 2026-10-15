@@ -66,6 +66,8 @@ class EnemyDef:
     behavior: str = "chase"
     xp: int = 0
     gold: int = 0
+    boss: bool = False
+    enrage: int = 0  # extra ATK once below half HP (a simple second phase)
 
 
 @dataclass(frozen=True)
@@ -101,6 +103,15 @@ class TierEncounters:
 class ShopEntry:
     price: int
     qty_range: Tuple[int, int]
+
+
+@dataclass(frozen=True)
+class BossDef:
+    floor: int
+    name: str
+    enemies: Tuple[str, ...]
+    relic_id: Optional[str] = None
+    final: bool = False
 
 
 @dataclass(frozen=True)
@@ -147,8 +158,16 @@ class GameData:
     encounters: Dict[str, TierEncounters] = field(default_factory=dict)
     shop_pool: Dict[str, ShopEntry] = field(default_factory=dict)
     xp_curve: XpCurve = field(default_factory=XpCurve)
+    bosses: Dict[int, BossDef] = field(default_factory=dict)
 
     # Lookups
+
+    def boss_for_floor(self, floor: int) -> Optional[BossDef]:
+        return self.bosses.get(floor)
+
+    @property
+    def boss_floors(self) -> List[int]:
+        return sorted(self.bosses)
 
     def item(self, item_id: str) -> ItemDef:
         try:
@@ -211,6 +230,7 @@ class GameData:
             encounters=read("encounters.json"),
             shop=read("shop.json"),
             xp_curve=read("xp_curve.json"),
+            bosses=read("bosses.json"),
         )
 
     @classmethod
@@ -225,11 +245,21 @@ class GameData:
         encounters: Dict[str, dict],
         shop: Dict[str, dict],
         xp_curve: Optional[dict] = None,
+        bosses: Optional[Dict[str, dict]] = None,
     ) -> "GameData":
         """Build from already-parsed JSON structures and validate."""
         data = cls()
         if xp_curve is not None:
             data.xp_curve = XpCurve.from_raw(xp_curve)
+        for floor_key, spec in (bosses or {}).items():
+            floor = int(floor_key)
+            data.bosses[floor] = BossDef(
+                floor=floor,
+                name=str(spec.get("name", f"Boss of B{floor}")),
+                enemies=tuple(spec.get("enemies", ())),
+                relic_id=spec.get("relic_id"),
+                final=bool(spec.get("final", False)),
+            )
         data.items = _unique_by_id("items", [_build(ItemDef, raw, "items") for raw in items])
         data.enemies = _unique_by_id(
             "enemies", [_build(EnemyDef, raw, "enemies") for raw in enemies]
@@ -319,6 +349,24 @@ class GameData:
         if len(set(relic_ids)) != len(relic_ids):
             raise DataError("relics ids must be unique")
 
+        # Bosses
+        relic_ids_set = {r.id for r in self.relics}
+        for floor, boss in self.bosses.items():
+            if not 1 <= floor <= MAX_FLOOR:
+                raise DataError(f"bosses: floor {floor} out of range")
+            if not boss.enemies:
+                raise DataError(f"bosses[{floor}]: needs at least one enemy")
+            for eid in boss.enemies:
+                if eid not in self.enemies:
+                    raise DataError(f"bosses[{floor}]: unknown enemy {eid!r}")
+            if boss.relic_id is not None and boss.relic_id not in relic_ids_set:
+                raise DataError(f"bosses[{floor}]: unknown relic {boss.relic_id!r}")
+        finals = [b for b in self.bosses.values() if b.final]
+        if len(finals) > 1:
+            raise DataError("bosses: only one final boss allowed")
+        if finals and finals[0].floor != MAX_FLOOR:
+            raise DataError(f"bosses: the final boss must be on floor {MAX_FLOOR}")
+
         # XP curve
         curve = self.xp_curve
         if curve.max_level < 1 or len(curve.thresholds) != curve.max_level:
@@ -360,5 +408,6 @@ __all__ = [
     "TierEncounters",
     "ShopEntry",
     "XpCurve",
+    "BossDef",
     "GameData",
 ]

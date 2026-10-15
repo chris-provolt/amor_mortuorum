@@ -1,0 +1,7 @@
+{
+  "20": {"name": "The Warden of Ash", "enemies": ["warden_of_ash"], "relic_id": "veil_3"},
+  "40": {"name": "The Widow of Knots", "enemies": ["widow_of_knots"], "relic_id": "veil_6"},
+  "60": {"name": "The Ossuary King", "enemies": ["ossuary_king", "bone_guard", "bone_guard"], "relic_id": "veil_9"},
+  "80": {"name": "Lacrimosa, the Unmourned", "enemies": ["lacrimosa", "shade"], "relic_id": "veil_8"},
+  "99": {"name": "The Oblivion Heart", "enemies": ["oblivion_heart"], "relic_id": "veil_final", "final": true}
+}

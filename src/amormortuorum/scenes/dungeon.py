@@ -10,6 +10,7 @@ from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.combat import Battle, Outcome
 from ..systems.encounters import combat_rng, encounter_rng, roll_formation, step_encounter
+from ..systems.entities import Enemy
 from ..systems.fov import Visibility
 from ..systems.hub import GraveyardHub
 from ..systems.loot import roll_chest, roll_chest_gold
@@ -43,6 +44,7 @@ COLOR_DOOR_LOCKED = (140, 90, 40)
 COLOR_DOOR_OPEN = (70, 62, 52)
 COLOR_KEY = (180, 120, 230)
 COLOR_TRAP = (200, 60, 60)
+COLOR_BOSS_STAIRS = (190, 50, 120)
 
 MOVES: Dict[str, Pos] = {
     "move_up": (0, 1),
@@ -77,6 +79,7 @@ class DungeonScene(BaseScene):
         self.camera: Optional[arcade.Camera2D] = None
         self.hud: Optional[Hud] = None
         self.active_battle: Optional[Battle] = None
+        self._boss_battle = False
         self.paused = False
         self.pause_menu = VerticalMenu()
         self._pause_view: Optional[MenuView] = None
@@ -97,6 +100,9 @@ class DungeonScene(BaseScene):
         self.camera = arcade.Camera2D()
         self.hud = Hud(self.app)
         self.hud.push(f"Floor B{run.floor}. Find the stairs.")
+        boss = self.data.boss_for_floor(run.floor)
+        if boss is not None and self.fmap.stairs_locked:
+            self.hud.push(f"{boss.name} guards the way down.")
         if self.fmap.doors:
             self.hud.push("Heavy doors seal the way down. A key must be hidden here.")
         if self.fmap.portal is not None:
@@ -135,6 +141,7 @@ class DungeonScene(BaseScene):
         super().on_resume()
         battle = self.active_battle
         self.active_battle = None
+        was_boss, self._boss_battle = self._boss_battle, False
         if battle is None:
             return
         if battle.outcome is Outcome.VICTORY:
@@ -142,6 +149,8 @@ class DungeonScene(BaseScene):
             self.hud.push(f"Victory. +{xp} XP, +{gold} gold.")
             for up in sync_level(self.run.leader, self.data):
                 self.hud.push(up.describe())
+            if was_boss:
+                self._on_boss_defeated()
         elif battle.outcome is Outcome.FLED:
             self.hud.push("You escaped.")
         elif battle.outcome is Outcome.DEFEAT:
@@ -168,7 +177,8 @@ class DungeonScene(BaseScene):
                     self._door_sprites[(x, y)] = sprite
         self.features = arcade.SpriteList()
         self._feature_sprites = {}
-        self._add_feature(fmap.stairs, COLOR_STAIRS, 22)
+        stairs_color = COLOR_BOSS_STAIRS if fmap.stairs_locked else COLOR_STAIRS
+        self._add_feature(fmap.stairs, stairs_color, 22)
         for pos in fmap.chests:
             self._add_feature(pos, COLOR_CHEST, 18)
         for pos in fmap.keys:
@@ -269,6 +279,8 @@ class DungeonScene(BaseScene):
         feature = self.fmap.feature_at(*self.pos)
         if feature == "chest":
             self._open_chest()
+        elif feature == "stairs" and self.fmap.stairs_locked:
+            self.hud.push("Something ancient blocks the stairs. Press Enter to face it.")
         elif feature == "stairs":
             self.hud.push("Stairs down. Press Enter to descend.")
         elif feature == "portal":
@@ -306,9 +318,55 @@ class DungeonScene(BaseScene):
         logger.info("Encounter on B%d: %s", self.run.floor, names)
         self.manager.push(CombatScene(self.app, self.active_battle))
 
+    def _start_boss(self) -> None:
+        from .combat import CombatScene
+
+        boss = self.data.boss_for_floor(self.run.floor)
+        if boss is None:  # a boss floor without data: just unlock
+            self.fmap.stairs_locked = False
+            return
+        enemies = [Enemy.from_def(self.data.enemy(eid)) for eid in boss.enemies]
+        rng = combat_rng(self.run.seed, self.run.floor, 1000 + self.run.encounters)
+        self.run.encounters += 1
+        self.run.steps_since_encounter = 0
+        self.active_battle = Battle(self.run.party, enemies, rng, self.data)
+        self._boss_battle = True
+        logger.info("Boss fight on B%d: %s", self.run.floor, boss.name)
+        self.hud.push(f"{boss.name} rises to meet you.")
+        self.manager.push(CombatScene(self.app, self.active_battle))
+
+    def _on_boss_defeated(self) -> None:
+        from .run_summary import RunSummaryScene
+
+        boss = self.data.boss_for_floor(self.run.floor)
+        self.fmap.stairs_locked = False
+        stairs = self._feature_sprites.get(self.fmap.stairs)
+        if stairs is not None:
+            stairs.color = COLOR_STAIRS
+        meta = self.state.meta
+        if boss is not None and boss.relic_id and not meta.relics.has(boss.relic_id):
+            meta.relics.add(boss.relic_id)
+            relic = next((r for r in self.data.relics if r.id == boss.relic_id), None)
+            name = relic.name if relic else boss.relic_id
+            self.hud.push(f"A Relic of the Veil: {name}.")
+        meta.deepest_floor = max(meta.deepest_floor, self.run.floor)
+        self.state.save_manager.save_meta(meta)
+        if boss is not None and boss.final:
+            summary = self.run.summary(cause="reached the bottom of the Veil", victory=True)
+            self._hub().end_run(self.run)
+            self.manager.replace(
+                RunSummaryScene(
+                    self.app, summary, "The Heart of Oblivion stills. The dead may finally rest."
+                )
+            )
+            return
+        self.hud.push("The way down is open.")
+
     def _interact(self) -> None:
         feature = self.fmap.feature_at(*self.pos)
-        if feature == "stairs":
+        if feature == "stairs" and self.fmap.stairs_locked:
+            self._start_boss()
+        elif feature == "stairs":
             self.run.descend()
             self.manager.replace(DungeonScene(self.app))
         elif feature == "portal":
