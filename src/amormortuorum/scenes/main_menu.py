@@ -41,6 +41,8 @@ class MainMenuScene(BaseScene):
             font_size=12, anchor_x="center", anchor_y="center",
         )
         self._view = MenuView(self.menu, 0, 0, font_size=22, anchor_x="center")
+        self.menu.sfx = self.app.audio.play
+        self.app.audio.play_music("graveyard")
         self._rebuild_menu()
         self.on_resize(self.app.width, self.app.height)
         if self.app.smoke and self.app.state.run is None:
@@ -49,6 +51,7 @@ class MainMenuScene(BaseScene):
 
     def on_resume(self):
         super().on_resume()
+        self.app.audio.play_music("graveyard")
         self._rebuild_menu()
 
     def on_resize(self, width: int, height: int):
@@ -84,6 +87,7 @@ class MainMenuScene(BaseScene):
                     "Relics", self._relics,
                     hint=f"{len(meta.relics.collected)}/10 Relics of the Veil collected",
                 ),
+                MenuItem("Settings", self._settings, hint="Fullscreen, volumes, bindings"),
                 MenuItem(
                     "Quit", self._quit,
                     hint=f"Relics {len(meta.relics.collected)}/10  Deepest B{meta.deepest_floor}",
@@ -115,6 +119,11 @@ class MainMenuScene(BaseScene):
 
             logger.info("Resuming mid-run on floor B%d", run.floor)
             self.manager.push(DungeonScene(self.app))
+
+    def _settings(self) -> None:
+        from .settings import SettingsScene
+
+        self.manager.push(SettingsScene(self.app))
 
     def _relics(self) -> None:
         from .relics import RelicsScene

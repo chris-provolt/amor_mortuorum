@@ -110,6 +110,16 @@ class InputManager:
             del self._mapping[action]
             logger.info("Unbound action '%s'", action)
 
+    def mapping_names(self) -> Dict[str, List[str]]:
+        """Human-readable bindings per action (key constant names)."""
+        import arcade
+
+        names = {v: k for k, v in vars(arcade.key).items() if isinstance(v, int)}
+        return {
+            action: sorted(names.get(code, str(code)) for code in keys)
+            for action, keys in self._mapping.items()
+        }
+
     def is_pressed(self, action: str) -> bool:
         keys = self._mapping.get(action, set())
         return any(k in self._pressed for k in keys)

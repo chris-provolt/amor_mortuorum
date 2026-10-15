@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+import os
+from typing import List, Optional
 
 import arcade
 
+from .core.audio import AudioManager
 from .core.context import GameContext
+from .core.controller import ControllerInput
 from .core.input import InputManager
 from .core.scenes.manager import SceneManager
 from .core.settings import Settings
@@ -57,6 +60,14 @@ class GameApp(arcade.Window):
         # Managers
         self.scene_manager = SceneManager(self)
         self.input = InputManager(self, settings.input.mapping)
+        self.audio = AudioManager(
+            settings,
+            save_manager.root_dir / "cache" / "audio",
+            enabled=False if os.environ.get("AMOR_MUTE") == "1" else None,
+        )
+        self.controller = ControllerInput(self.dispatch_actions)
+        if not self.smoke_mode_env():
+            self.controller.start()
 
         # Smoke mode: run N frames then close (used by CI and --smoke). Scenes
         # consult ``app.smoke`` to auto-advance (start a run, enter the dungeon).
@@ -83,6 +94,14 @@ class GameApp(arcade.Window):
         except ImportError:
             return
         self.state.data = GameData.load()
+
+    @staticmethod
+    def smoke_mode_env() -> bool:
+        return os.environ.get("ARCADE_HEADLESS", "").lower() in ("1", "true")
+
+    def dispatch_actions(self, actions: List[str]) -> bool:
+        """Feed logical actions (from keys or a controller) to the active scene."""
+        return self.scene_manager.key_actions(list(actions), pressed=True)
 
     # Arcade lifecycle
     def on_draw(self):  # noqa: N802 (arcade API)

@@ -11,6 +11,13 @@ from typing import Dict, Iterable, Optional
 logger = logging.getLogger(__name__)
 
 
+def user_settings_path() -> Path:
+    """Where the Settings screen saves and where the CLI looks by default."""
+    from ..persistence.paths import default_save_root
+
+    return default_save_root() / "settings.json"
+
+
 @dataclass
 class VideoSettings:
     width: int = 1280

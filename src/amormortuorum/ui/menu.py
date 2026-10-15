@@ -27,6 +27,7 @@ class VerticalMenu:
         self.items: List[MenuItem] = list(items)
         self.wrap = wrap
         self.selected: int = 0
+        self.sfx: Optional[Callable[[str], Any]] = None  # e.g. AudioManager.play
         self._snap_to_enabled(+1)
 
     # Items
@@ -90,14 +91,24 @@ class VerticalMenu:
         handled = False
         if "move_up" in actions:
             self.move(-1)
+            self._play("menu_move")
             handled = True
         if "move_down" in actions:
             self.move(+1)
+            self._play("menu_move")
             handled = True
         if "confirm" in actions:
-            self.activate()
+            if self.activate():
+                self._play("menu_confirm")
             handled = True
         return handled
+
+    def _play(self, name: str) -> None:
+        if self.sfx is not None:
+            try:
+                self.sfx(name)
+            except Exception:  # never let audio break input
+                pass
 
 
 class MenuView:

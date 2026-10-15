@@ -1,6 +1,7 @@
 [
   {"id": "potion_small", "name": "Grave-Touched Draught", "quality": "Common", "type": "potion", "hp_restore": 15, "max_stack": 99},
   {"id": "antidote", "name": "Antidote", "quality": "Common", "type": "consumable", "hp_restore": 5, "max_stack": 50},
+  {"id": "tonic_mind", "name": "Tonic of Clear Mind", "quality": "Common", "type": "potion", "mp_restore": 8, "max_stack": 99},
   {"id": "scroll_embers", "name": "Scroll of Embers", "quality": "Common", "type": "scroll", "damage": 10, "max_stack": 20},
   {"id": "dagger_rust", "name": "Rusted Dagger", "quality": "Common", "type": "weapon", "atk": 1, "stackable": false},
   {"id": "cloth_shroud", "name": "Burial Shroud", "quality": "Common", "type": "armor", "df": 1, "stackable": false},

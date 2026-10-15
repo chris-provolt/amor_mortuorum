@@ -19,6 +19,7 @@ from .entities import Enemy, Player, Stats
 
 class ActionKind(Enum):
     ATTACK = auto()
+    SKILL = auto()
     ITEM = auto()
     DEFEND = auto()
     FLEE = auto()
@@ -44,6 +45,7 @@ class Action:
     actor: int
     target: Optional[int] = None
     item_id: Optional[str] = None
+    skill_id: Optional[str] = None
 
 
 @dataclass
@@ -167,6 +169,11 @@ class Battle:
     def all_battlers(self) -> List[Battler]:
         return self.players + self.foes
 
+    @property
+    def bag(self):
+        """The party's shared bag: the leader's inventory."""
+        return self.party[0].inventory
+
     def rewards(self) -> Tuple[int, int]:
         """Total (xp, gold) carried by every enemy in the battle."""
         xp = sum(e.xp for e in self.enemies)
@@ -174,18 +181,19 @@ class Battle:
         return xp, gold
 
     def apply_rewards(self) -> Tuple[int, int]:
-        """Grant rewards to the first living player (or the first player).
+        """Grant XP to every surviving member and gold to the leader.
 
-        Relic passives ``xp_pct`` / ``gold_pct`` on the recipient scale the amounts.
+        Relic passives ``xp_pct`` / ``gold_pct`` (shared by the party) scale the amounts.
         """
         xp, gold = self.rewards()
-        living = self.living_players
-        recipient = living[0].ref if living else self.party[0]
-        bonus = getattr(recipient, "bonus", lambda _k: 0)
+        leader = self.party[0]
+        bonus = getattr(leader, "bonus", lambda _k: 0)
         xp = xp * (100 + bonus("xp_pct")) // 100
         gold = gold * (100 + bonus("gold_pct")) // 100
-        recipient.xp += xp  # type: ignore[union-attr]
-        recipient.add_gold(gold)  # type: ignore[union-attr]
+        survivors = [b.ref for b in self.living_players] or [leader]
+        for member in survivors:
+            member.xp += xp  # type: ignore[union-attr]
+        leader.add_gold(gold)
         return xp, gold
 
     # Action intake
@@ -215,6 +223,20 @@ class Battle:
 
         if action.kind is ActionKind.ATTACK:
             self._validate_enemy_target(action)
+        elif action.kind is ActionKind.SKILL:
+            if not action.skill_id:
+                raise InvalidOperation("SKILL action requires a skill_id")
+            skill = self.data.skill(action.skill_id)  # raises DataError on unknown
+            player: Player = actor.ref  # type: ignore[assignment]
+            if skill.learn_level > player.level:
+                raise InvalidOperation(f"{player.name} has not learned {skill.name}")
+            if player.stats.mp < skill.mp:
+                raise InvalidOperation(f"Not enough MP for {skill.name}")
+            if skill.target == "ally":
+                self._validate_ally_target(action)
+            elif skill.target == "enemy":
+                self._validate_enemy_target(action)
+            # all_enemies needs no target
         elif action.kind is ActionKind.ITEM:
             if not action.item_id:
                 raise InvalidOperation("ITEM action requires an item_id")
@@ -223,18 +245,20 @@ class Battle:
             item = self.data.item(action.item_id)
             if not item.usable_in_combat:
                 raise InvalidOperation(f"{item.name} cannot be used in combat")
-            player: Player = actor.ref  # type: ignore[assignment]
-            if not player.inventory.has(item.id):
-                raise InvalidOperation(f"{player.name} has no {item.name}")
+            if not self.bag.has(item.id):
+                raise InvalidOperation(f"The bag holds no {item.name}")
             if item.damage > 0:
                 self._validate_enemy_target(action)
             else:
-                target = action.actor if action.target is None else action.target
-                if not 0 <= target < len(self.players):
-                    raise InvalidOperation(f"Invalid party target index: {target}")
-                if not self.players[target].is_alive:
-                    raise InvalidOperation(f"{self.players[target].name} is defeated")
-                action.target = target
+                self._validate_ally_target(action)
+
+    def _validate_ally_target(self, action: Action) -> None:
+        target = action.actor if action.target is None else action.target
+        if not 0 <= target < len(self.players):
+            raise InvalidOperation(f"Invalid party target index: {target}")
+        if not self.players[target].is_alive:
+            raise InvalidOperation(f"{self.players[target].name} is defeated")
+        action.target = target
 
     def _validate_enemy_target(self, action: Action) -> None:
         if action.target is None:
@@ -306,11 +330,47 @@ class Battle:
             return
         if action.kind is ActionKind.ITEM:
             self._use_item(battler, action, events)
+            return
+        if action.kind is ActionKind.SKILL:
+            self._use_skill(battler, action, events)
+
+    def _use_skill(self, battler: Battler, action: Action, events: List[LogEvent]) -> None:
+        player: Player = battler.ref  # type: ignore[assignment]
+        skill = self.data.skill(action.skill_id or "")
+        if player.stats.mp < skill.mp:
+            events.append(LogEvent(f"{battler.name} lacks the MP for {skill.name}.", "info"))
+            return
+        if skill.target == "ally":
+            target_idx = battler.index if action.target is None else action.target
+            target = self.players[target_idx]
+            if not target.is_alive:
+                events.append(LogEvent(f"{target.name} is beyond {skill.name}.", "info"))
+                return
+            player.spend_mp(skill.mp)
+            healed = target.ref.heal(skill.heal)  # type: ignore[union-attr]
+            text = f"{battler.name} casts {skill.name}: {target.name} recovers {healed} HP."
+            events.append(LogEvent(text, "heal"))
+            return
+        if skill.target == "all_enemies":
+            targets = list(self.living_enemies)
+        else:
+            single = self._live_enemy_target(action.target)
+            targets = [single] if single is not None else []
+        if not targets:
+            events.append(LogEvent(f"{battler.name} finds no foe for {skill.name}.", "info"))
+            return
+        player.spend_mp(skill.mp)
+        events.append(LogEvent(f"{battler.name} casts {skill.name}!", "item"))
+        for target in targets:
+            amount = skill.damage + player.level
+            if target.defending:
+                amount = _halved(amount)
+            self._hit(battler, target, amount, events, kind="item", source=skill.name)
 
     def _use_item(self, battler: Battler, action: Action, events: List[LogEvent]) -> None:
-        player: Player = battler.ref  # type: ignore[assignment]
         item = self.data.item(action.item_id or "")
-        if not player.inventory.has(item.id):
+        bag = self.bag
+        if not bag.has(item.id):
             events.append(LogEvent(f"{battler.name} fumbles for a missing {item.name}.", "info"))
             return
         if item.damage > 0:
@@ -318,7 +378,7 @@ class Battle:
             if target is None:
                 events.append(LogEvent(f"{battler.name} finds no foe for {item.name}.", "info"))
                 return
-            player.inventory.remove(item, 1)
+            bag.remove(item, 1)
             self._hit(battler, target, item.damage, events, kind="item", source=item.name)
             return
         target_idx = battler.index if action.target is None else action.target
@@ -326,9 +386,15 @@ class Battle:
         if not target.is_alive:
             events.append(LogEvent(f"{target.name} is beyond the reach of {item.name}.", "info"))
             return
-        player.inventory.remove(item, 1)
+        bag.remove(item, 1)
         healed = target.ref.heal(item.hp_restore)  # type: ignore[union-attr]
-        text = f"{battler.name} uses {item.name}: {target.name} recovers {healed} HP."
+        restored = target.ref.restore_mp(item.mp_restore)  # type: ignore[union-attr]
+        parts = []
+        if healed or item.hp_restore:
+            parts.append(f"recovers {healed} HP")
+        if restored or item.mp_restore:
+            parts.append(f"regains {restored} MP")
+        text = f"{battler.name} uses {item.name}: {target.name} " + " and ".join(parts) + "."
         events.append(LogEvent(text, "heal"))
 
     def _enemy_turn(self, battler: Battler, events: List[LogEvent]) -> None:

@@ -10,6 +10,7 @@ import arcade
 from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.combat import Action, ActionKind, Battle, LogEvent, Outcome
+from ..systems.party import most_wounded
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,8 @@ class CombatScene(BaseScene):
             for _ in self.battle.party
         ]
         self._view = MenuView(self.menu, 0, 0, font_size=20)
+        self.menu.sfx = self.app.audio.play
+        self.app.audio.play_music("combat")
         self._log.append(LogEvent("The dead stir.", "info"))
         self._pick_next_actor()
         self._show_command_menu()
@@ -95,6 +98,7 @@ class CombatScene(BaseScene):
         self.menu.set_items(
             [
                 MenuItem("Attack", self._attack, hint="Left/Right to change target"),
+                MenuItem("Skill", self._show_skill_menu, hint="Spend MP on a spell"),
                 MenuItem("Item", self._show_item_menu, hint="Use a potion or scroll"),
                 MenuItem("Defend", self._defend, hint="Halve damage this round"),
                 MenuItem("Flee", self._flee, hint="Chance depends on speed"),
@@ -102,14 +106,53 @@ class CombatScene(BaseScene):
             keep_selection=False,
         )
 
-    def _show_item_menu(self) -> None:
+    def _show_skill_menu(self) -> None:
         player = self.battle.party[self.actor]
         items: List[MenuItem] = []
-        for item_id, qty in sorted(player.inventory.items.items()):
+        for skill in player.known_skills(self.data):
+            if skill.heal:
+                effect = f"Heals {skill.heal}"
+            elif skill.target == "all_enemies":
+                effect = f"{skill.damage}+ to every foe"
+            else:
+                effect = f"{skill.damage}+ damage"
+            can = player.stats.mp >= skill.mp
+            items.append(
+                MenuItem(
+                    f"{skill.name:<14} {skill.mp:>3} MP",
+                    lambda sid=skill.id: self._use_skill(sid),
+                    enabled=can,
+                    hint=effect if can else f"Not enough MP ({effect})",
+                )
+            )
+        if not items:
+            self._log.append(LogEvent("No skills learned yet.", "info"))
+            return
+        items.append(MenuItem("Back", self._show_command_menu))
+        self.mode = "skill"
+        self.menu.set_items(items, keep_selection=False)
+
+    def _ally_target(self) -> int:
+        wounded = most_wounded(self.battle.party)
+        return self.actor if wounded is None else wounded
+
+    def _use_skill(self, skill_id: str) -> None:
+        skill = self.data.skill(skill_id)
+        target = self._ally_target() if skill.target == "ally" else self.target
+        self._submit(Action(ActionKind.SKILL, self.actor, target=target, skill_id=skill_id))
+
+    def _show_item_menu(self) -> None:
+        items: List[MenuItem] = []
+        for item_id, qty in sorted(self.battle.bag.items.items()):
             item = self.data.item(item_id)
             if not item.usable_in_combat:
                 continue
-            effect = f"Heals {item.hp_restore}" if item.hp_restore else f"Deals {item.damage}"
+            if item.hp_restore:
+                effect = f"Heals {item.hp_restore}"
+            elif item.mp_restore:
+                effect = f"Restores {item.mp_restore} MP"
+            else:
+                effect = f"Deals {item.damage}"
             items.append(
                 MenuItem(
                     f"{item.name} x{qty}", lambda iid=item_id: self._use_item(iid), hint=effect
@@ -137,6 +180,7 @@ class CombatScene(BaseScene):
             self._log.append(LogEvent(str(e), "info"))
             return
         self._log.extend(events)
+        self._sound_for(events)
         if self.battle.outcome is not Outcome.ONGOING:
             self.mode = "done"
             self.menu.set_items([], keep_selection=False)
@@ -144,6 +188,20 @@ class CombatScene(BaseScene):
         self._pick_next_actor()
         self._refresh_target()
         self._show_command_menu()
+
+    def _sound_for(self, events) -> None:
+        audio = self.app.audio
+        kinds = {e.kind for e in events}
+        if self.battle.outcome is Outcome.VICTORY:
+            audio.play("victory")
+        elif self.battle.outcome is Outcome.DEFEAT:
+            audio.play("defeat")
+        elif self.battle.outcome is Outcome.FLED:
+            audio.play("flee")
+        elif "attack" in kinds or "item" in kinds:
+            audio.play("hit")
+        if "heal" in kinds:
+            audio.play("heal")
 
     def _attack(self) -> None:
         self._refresh_target()
@@ -157,7 +215,7 @@ class CombatScene(BaseScene):
 
     def _use_item(self, item_id: str) -> None:
         item = self.data.item(item_id)
-        target = self.target if item.damage > 0 else self.actor
+        target = self.target if item.damage > 0 else self._ally_target()
         self._submit(Action(ActionKind.ITEM, self.actor, target=target, item_id=item_id))
 
     def _refresh_target(self) -> None:
@@ -204,7 +262,10 @@ class CombatScene(BaseScene):
 
         for row, b in zip(self._party_rows, self.battle.players):
             marker = ">" if (b.index == self.actor and self.mode != "done") else " "
-            text = f"{marker} {b.name}   HP {max(0, b.stats.hp)}/{b.stats.max_hp}"
+            text = (
+                f"{marker} {b.name}   HP {max(0, b.stats.hp)}/{b.stats.max_hp}"
+                f"   MP {b.stats.mp}/{b.stats.max_mp}"
+            )
             if b.defending:
                 text += "  [guard]"
             if row.text != text:
@@ -251,7 +312,7 @@ class CombatScene(BaseScene):
         if self.menu.handle_actions(actions):
             return True
         if "cancel" in actions:
-            if self.mode == "item":
+            if self.mode in ("item", "skill"):
                 self._show_command_menu()
             return True
         return False

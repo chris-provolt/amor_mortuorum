@@ -23,6 +23,7 @@ class InventoryScene(BaseScene):
         super().__init__(app)
         self.run = app.state.run
         self.data = app.state.data
+        self.member = 0  # index into run.party; Left/Right cycles
         self.menu = VerticalMenu()
         self._view: MenuView | None = None
         self._title: arcade.Text | None = None
@@ -42,6 +43,7 @@ class InventoryScene(BaseScene):
         ]
         self._msg = arcade.Text("", 0, 0, color=MSG, font_size=14, anchor_x="center")
         self._view = MenuView(self.menu, 0, 0, font_size=17)
+        self.menu.sfx = self.app.audio.play
         self._build_menu()
         self.on_resize(self.app.width, self.app.height)
 
@@ -57,8 +59,16 @@ class InventoryScene(BaseScene):
 
     # Menu
 
+    @property
+    def player(self):
+        return self.run.party[self.member]
+
+    @property
+    def bag(self):
+        return self.run.leader.inventory
+
     def _build_menu(self) -> None:
-        p = self.run.leader
+        p = self.player
         items: List[MenuItem] = []
         for slot in EQUIP_SLOTS:
             item_id = p.equipment.slots.get(slot)
@@ -71,8 +81,8 @@ class InventoryScene(BaseScene):
                     hint="Enter: unequip to bag" if item_id else "",
                 )
             )
-        items.append(MenuItem("Bag", enabled=False))
-        for item_id, qty in sorted(p.inventory.items.items()):
+        items.append(MenuItem("Bag (shared)", enabled=False))
+        for item_id, qty in sorted(self.bag.items.items()):
             item = self.data.item(item_id)
             if item.slot is not None:
                 stat = f"ATK+{item.atk}" if item.atk else f"DEF+{item.df}" if item.df else (
@@ -85,12 +95,16 @@ class InventoryScene(BaseScene):
                         hint=f"Enter: equip ({item.type}, {stat})",
                     )
                 )
-            elif item.is_consumable and item.hp_restore > 0:
+            elif item.is_consumable and (item.hp_restore > 0 or item.mp_restore > 0):
+                effect = (
+                    f"heals {item.hp_restore}" if item.hp_restore
+                    else f"restores {item.mp_restore} MP"
+                )
                 items.append(
                     MenuItem(
                         f"  {item.name} x{qty}",
                         lambda iid=item_id: self._use(iid),
-                        hint=f"Enter: use (heals {item.hp_restore})",
+                        hint=f"Enter: use ({effect})",
                     )
                 )
             else:
@@ -106,17 +120,17 @@ class InventoryScene(BaseScene):
     def _equip(self, item_id: str) -> None:
         item = self.data.item(item_id)
         try:
-            previous = self.run.leader.equip_from_inventory(item, self.data)
+            previous = self.player.equip_from(self.bag, item, self.data)
         except AmorError as e:
             self._say(str(e))
             return
         swap = f" (swapped out {self.data.item(previous).name})" if previous else ""
-        self._say(f"Equipped {item.name}{swap}.")
+        self._say(f"{self.player.name} equips {item.name}{swap}.")
         self._build_menu()
 
     def _unequip(self, slot: str) -> None:
         try:
-            item_id = self.run.leader.unequip_to_inventory(slot, self.data)
+            item_id = self.player.unequip_to(self.bag, slot, self.data)
         except AmorError as e:
             self._say(str(e))
             return
@@ -126,16 +140,25 @@ class InventoryScene(BaseScene):
 
     def _use(self, item_id: str) -> None:
         item = self.data.item(item_id)
-        p = self.run.leader
-        if p.hp >= p.max_hp:
+        p = self.player
+        if not p.is_alive:
+            self._say(f"{p.name} is down; only rest at the Graveyard helps now.")
+            return
+        if item.hp_restore and not item.mp_restore and p.hp >= p.max_hp:
             self._say("You are already at full health.")
             return
+        if item.mp_restore and not item.hp_restore and p.stats.mp >= p.stats.max_mp:
+            self._say("Your mind is already clear.")
+            return
+        mp_before = p.stats.mp
         try:
-            healed = p.use_consumable(item)
+            healed = p.use_consumable_from(self.bag, item)
         except AmorError as e:
             self._say(str(e))
             return
-        self._say(f"Used {item.name}: recovered {healed} HP.")
+        gained_mp = p.stats.mp - mp_before
+        effect = f"recovered {healed} HP" if item.hp_restore else f"regained {gained_mp} MP"
+        self._say(f"{p.name} uses {item.name}: {effect}.")
         self._build_menu()
 
     def _back(self) -> None:
@@ -144,11 +167,14 @@ class InventoryScene(BaseScene):
     # Rendering and input
 
     def _refresh_panel(self) -> None:
-        p = self.run.leader
+        p = self.player
         d = self.data
         nxt = xp_to_next_level(p, d)
+        who = f"{p.name}   Level {p.level}"
+        if len(self.run.party) > 1:
+            who += f"   ({self.member + 1}/{len(self.run.party)}, Left/Right to switch)"
         lines = [
-            f"{p.name}   Level {p.level}",
+            who,
             f"XP {p.xp}" + (f"   next in {nxt}" if nxt is not None else "   (max)"),
             f"HP {p.hp}/{p.max_hp}   MP {p.stats.mp}/{p.stats.max_mp}",
             f"ATK {p.effective_atk(d)}  (base {p.stats.atk})",
@@ -177,6 +203,12 @@ class InventoryScene(BaseScene):
         if not pressed:
             return False
         if self.menu.handle_actions(actions):
+            return True
+        if "move_left" in actions or "move_right" in actions:
+            step = 1 if "move_right" in actions else -1
+            self.member = (self.member + step) % len(self.run.party)
+            self._say("")
+            self._build_menu()
             return True
         if "cancel" in actions or "menu" in actions:
             self._back()

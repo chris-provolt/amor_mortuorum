@@ -22,6 +22,8 @@ def _raw():
         shop=read("shop.json"),
         xp_curve=read("xp_curve.json"),
         bosses=read("bosses.json"),
+        skills=read("skills.json"),
+        companions=read("companions.json"),
     )
 
 

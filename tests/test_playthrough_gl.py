@@ -17,7 +17,8 @@ pytestmark = [
 
 
 @pytest.fixture
-def app(tmp_path):
+def app(tmp_path, monkeypatch):
+    monkeypatch.setenv("AMOR_MUTE", "1")
     from amormortuorum.app import GameApp
     from amormortuorum.core.settings import Settings
     from amormortuorum.persistence import SaveManager
@@ -541,3 +542,136 @@ def test_save_and_quit_then_continue_mid_run(app):
 
     hub = GraveyardHub(app.state.save_manager, app.state.data, meta=app.state.meta)
     assert hub.peek_run() is None
+
+
+def test_skill_menu_casts_ember(app):
+    from amormortuorum.systems.combat import Battle, Outcome
+    from amormortuorum.systems.entities import Enemy
+    from amormortuorum.scenes.combat import CombatScene
+    from amormortuorum.systems.rng import stream_rng
+
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    d.press("enter")  # Enter the Dungeon
+    run = app.state.run
+    data = app.state.data
+    run.leader.stats.max_hp = run.leader.stats.hp = 500
+    foe = Enemy.from_def(data.enemy("skel_basic"))
+    battle = Battle(run.party, [foe], stream_rng(9, 1, "t"), data)
+    d.scene.active_battle = battle
+    app.scene_manager.push(CombatScene(app, battle))
+    d.frame()
+
+    mp = run.leader.stats.mp
+    d.press("down")  # Skill
+    assert d.scene.menu.current.label == "Skill"
+    d.press("enter")
+    assert d.scene.mode == "skill"
+    assert "Ember" in d.scene.menu.current.label
+    d.press("enter")  # cast
+    assert run.leader.stats.mp == mp - data.skill("ember").mp
+    assert any("casts Ember" in e.text for e in d.scene._log)
+    assert foe.stats.hp <= 0 or battle.outcome is Outcome.ONGOING
+    d.fight_until_done()
+    assert d.scene_name() == "DungeonScene"
+
+
+def test_recruit_companion_and_switch_members_in_bag(app):
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    run = app.state.run
+    data = app.state.data
+    run.leader.gold = 500
+
+    # Graveyard: Enter, Rest, Shop, Crypt, Recruit, ...
+    labels = [it.label for it in d.scene.menu.items]
+    for _ in range(labels.index("Recruit")):
+        d.press("down")
+    d.press("enter")
+    assert d.scene.mode == "recruit"
+    d.press("enter")  # first companion (Ossian)
+    assert len(run.party) == 2 and run.party[1].name == "Ossian"
+    assert run.leader.gold == 500 - data.companion("ossian").cost
+    d.press("esc")
+
+    # Bag: Right switches to Ossian; equipping from the shared bag goes to him
+    run.leader.inventory.add(data.item("blade_bone"), 1)
+    d.press("tab")
+    assert d.scene_name() == "InventoryScene" and d.scene.member == 0
+    d.press("right")
+    assert d.scene.member == 1
+    labels = [it.label for it in d.scene.menu.items]
+    idx = next(i for i, label in enumerate(labels) if "Bone Shard Blade" in label)
+    for _ in range(idx - d.scene.menu.selected):
+        d.press("down")
+    d.press("enter")
+    assert run.party[1].equipment.slots["weapon"] == "blade_bone"
+    assert run.leader.equipment.slots["weapon"] is None
+    d.press("esc")
+
+    # Two-member party fights; both survivors gain XP
+    d.press("enter")  # Enter the Dungeon (cursor reset)
+    assert d.scene_name() == "DungeonScene"
+    from amormortuorum.systems.combat import Battle
+    from amormortuorum.systems.entities import Enemy
+    from amormortuorum.scenes.combat import CombatScene
+    from amormortuorum.systems.rng import stream_rng
+
+    for m in run.party:
+        m.stats.max_hp = m.stats.hp = 500
+    xp0 = [m.xp for m in run.party]
+    foe = Enemy.from_def(data.enemy("skel_basic"))
+    battle = Battle(run.party, [foe], stream_rng(4, 1, "t"), data)
+    d.scene.active_battle = battle
+    app.scene_manager.push(CombatScene(app, battle))
+    d.frame()
+    d.fight_until_done()
+    assert d.scene_name() == "DungeonScene"
+    assert all(m.xp > x for m, x in zip(run.party, xp0))
+
+    # Save/continue keeps the companion
+    d.press("esc")
+    labels = [it.label for it in d.scene.pause_menu.items]
+    for _ in range(labels.index("Save & Quit") - d.scene.pause_menu.selected):
+        d.press("down")
+    d.press("enter")
+    d.press("down")
+    d.press("enter")  # Continue
+    assert [m.name for m in app.state.run.party] == ["Wanderer", "Ossian"]
+
+
+def test_settings_screen_adjusts_volume_and_saves(app, tmp_path, monkeypatch):
+    from amormortuorum.core import settings as settings_mod
+    from amormortuorum.scenes import settings as settings_scene
+
+    target = tmp_path / "settings.json"
+    monkeypatch.setattr(settings_mod, "user_settings_path", lambda: target)
+    monkeypatch.setattr(settings_scene, "user_settings_path", lambda: target)
+
+    d = Driver(app)
+    d.boot_to_menu()
+    while d.scene.menu.current.label != "Settings":
+        d.press("down")
+    d.press("enter")
+    assert d.scene_name() == "SettingsScene"
+
+    d.press("down")  # Music volume
+    assert d.scene.menu.current.payload == "music"
+    before = app.settings.audio.music_volume
+    d.press("left")
+    assert app.settings.audio.music_volume == round(before - 0.1, 2)
+    d.press("right")
+    d.press("right")
+    assert app.settings.audio.music_volume == round(before + 0.1, 2)
+
+    while d.scene.menu.current.label != "Save":
+        d.press("down")
+    d.press("enter")
+    assert target.exists()
+    import json
+
+    assert json.loads(target.read_text())["audio"]["music_volume"] == round(before + 0.1, 2)
+    d.press("esc")
+    assert d.scene_name() == "MainMenuScene"

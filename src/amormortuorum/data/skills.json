@@ -1,0 +1,8 @@
+[
+  {"id": "ember", "name": "Ember", "mp": 3, "damage": 12, "target": "enemy", "learn_level": 1, "desc": "A gout of grave-fire."},
+  {"id": "mend", "name": "Mend", "mp": 4, "heal": 20, "target": "ally", "learn_level": 2, "desc": "Knit flesh with whispered rites."},
+  {"id": "grave_frost", "name": "Grave Frost", "mp": 6, "damage": 24, "target": "enemy", "learn_level": 4, "desc": "Cold that creeps up from the ossuary."},
+  {"id": "dirge", "name": "Dirge", "mp": 10, "damage": 16, "target": "all_enemies", "learn_level": 7, "desc": "A song the dead cannot bear."},
+  {"id": "lament", "name": "Lament", "mp": 12, "heal": 60, "target": "ally", "learn_level": 9, "desc": "Tears that close any wound."},
+  {"id": "oblivion_bolt", "name": "Oblivion Bolt", "mp": 20, "damage": 70, "target": "enemy", "learn_level": 14, "desc": "A shard of the Veil itself."}
+]

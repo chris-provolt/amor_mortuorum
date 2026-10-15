@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 EQUIP_SLOTS: Tuple[str, ...] = EQUIP_TYPES
 
 # Level-1 baseline for a new wanderer.
-BASE_STATS = {"max_hp": 40, "max_mp": 5, "atk": 7, "df": 3, "spd": 5}
+BASE_STATS = {"max_hp": 40, "max_mp": 8, "atk": 7, "df": 3, "spd": 5}
 STARTING_GOLD = 50
 
 
@@ -162,6 +162,8 @@ class Player:
     stats: Stats = field(default_factory=Stats)
     equipment: Equipment = field(default_factory=Equipment)
     inventory: Inventory = field(default_factory=Inventory)
+    # Which companion template this member came from (None for the leader).
+    companion_id: Optional[str] = None
     # Derived modifiers (relic passives); recomputed from meta, never persisted.
     bonuses: Dict[str, int] = field(default_factory=dict)
 
@@ -204,6 +206,22 @@ class Player:
         self.stats.hp = min(self.stats.max_hp, self.stats.hp + amount)
         return self.stats.hp - before
 
+    def restore_mp(self, amount: int) -> int:
+        """Restore up to ``amount`` MP; return MP actually restored."""
+        if amount <= 0:
+            return 0
+        before = self.stats.mp
+        self.stats.mp = min(self.stats.max_mp, self.stats.mp + amount)
+        return self.stats.mp - before
+
+    def spend_mp(self, amount: int) -> None:
+        if amount > self.stats.mp:
+            raise InvalidOperation(f"{self.name} lacks the MP ({self.stats.mp}/{amount})")
+        self.stats.mp -= amount
+
+    def known_skills(self, data: GameData):
+        return data.skills_known_at(self.level)
+
     def heal_full(self) -> None:
         logger.debug("Healing %s to full: %s -> %s", self.name, self.stats.hp, self.stats.max_hp)
         self.stats.hp = self.stats.max_hp
@@ -233,33 +251,45 @@ class Player:
     def has_item(self, item_id: str) -> bool:
         return self.inventory.has(item_id)
 
-    def equip_from_inventory(self, item: ItemDef, data: GameData) -> Optional[str]:
-        """Move ``item`` from the inventory into its slot; previous item returns to the bag."""
-        if not self.inventory.has(item.id):
-            raise InvalidOperation(f"{item.name} is not in the inventory")
-        self.inventory.remove(item, 1)
+    def equip_from(self, bag: Inventory, item: ItemDef, data: GameData) -> Optional[str]:
+        """Move ``item`` from ``bag`` into its slot; the previous item returns to ``bag``."""
+        if not bag.has(item.id):
+            raise InvalidOperation(f"{item.name} is not in the bag")
+        bag.remove(item, 1)
         previous = self.equipment.equip(item)
         if previous is not None and data.has_item(previous):
-            self.inventory.add(data.item(previous), 1)
+            bag.add(data.item(previous), 1)
         return previous
 
-    def unequip_to_inventory(self, slot: str, data: GameData) -> Optional[str]:
-        """Move the item in ``slot`` back to the bag. Returns its id, or None if empty."""
+    def unequip_to(self, bag: Inventory, slot: str, data: GameData) -> Optional[str]:
+        """Move the item in ``slot`` into ``bag``. Returns its id, or None if empty."""
         item_id = self.equipment.slots.get(slot)
         if item_id is None:
             return None
-        self.inventory.add(data.item(item_id), 1)  # may raise on a full stack
+        bag.add(data.item(item_id), 1)  # may raise on a full stack
         self.equipment.unequip(slot)
         return item_id
 
-    def use_consumable(self, item: ItemDef) -> int:
-        """Use a healing consumable outside combat. Returns HP restored."""
-        if not self.inventory.has(item.id):
-            raise InvalidOperation(f"{item.name} is not in the inventory")
-        if not item.is_consumable or item.hp_restore <= 0:
+    def use_consumable_from(self, bag: Inventory, item: ItemDef) -> int:
+        """Use a restorative consumable from ``bag`` outside combat. Returns HP restored."""
+        if not bag.has(item.id):
+            raise InvalidOperation(f"{item.name} is not in the bag")
+        if not item.is_consumable or (item.hp_restore <= 0 and item.mp_restore <= 0):
             raise InvalidOperation(f"{item.name} cannot be used here")
-        self.inventory.remove(item, 1)
+        bag.remove(item, 1)
+        self.restore_mp(item.mp_restore)
         return self.heal(item.hp_restore)
+
+    # Own-inventory conveniences (the leader's bag is the party bag)
+
+    def equip_from_inventory(self, item: ItemDef, data: GameData) -> Optional[str]:
+        return self.equip_from(self.inventory, item, data)
+
+    def unequip_to_inventory(self, slot: str, data: GameData) -> Optional[str]:
+        return self.unequip_to(self.inventory, slot, data)
+
+    def use_consumable(self, item: ItemDef) -> int:
+        return self.use_consumable_from(self.inventory, item)
 
     # Serialization
 
@@ -272,6 +302,7 @@ class Player:
             "stats": self.stats.to_dict(),
             "equipment": self.equipment.to_dict(),
             "inventory": self.inventory.to_dict(),
+            "companion_id": self.companion_id,
         }
 
     @staticmethod
@@ -284,6 +315,7 @@ class Player:
             stats=Stats.from_dict(data.get("stats", {})),
             equipment=Equipment.from_dict(data.get("equipment", {})),
             inventory=Inventory.from_dict(data.get("inventory", {})),
+            companion_id=data.get("companion_id") or None,
         )
 
 

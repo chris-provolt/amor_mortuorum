@@ -40,9 +40,12 @@ class Hud:
         arcade.draw_lbwh_rectangle_filled(0, height - 92, self.app.width, 92, PANEL)
         if run is not None:
             p = run.leader
+            members = "   ".join(
+                f"{m.name} {max(0, m.hp)}/{m.max_hp}" + ("" if m.is_alive else " (down)")
+                for m in run.party
+            )
             status = (
-                f"{p.name}  HP {p.hp}/{p.max_hp}  Lv {p.level}  "
-                f"Gold {p.gold}  Floor B{run.floor}  Seed {run.seed}"
+                f"{members}   Lv {p.level}   Gold {p.gold}   Floor B{run.floor}   Seed {run.seed}"
             )
         else:
             status = "Amor Mortuorum"

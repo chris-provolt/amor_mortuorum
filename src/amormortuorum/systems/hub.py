@@ -73,6 +73,11 @@ class GraveyardHub:
         player.heal_full()
         logger.info("%s rested at the Graveyard and is fully healed.", player.name)
 
+    def rest_party(self, run: Run) -> None:
+        for member in run.party:
+            member.heal_full()
+        logger.info("The party rested at the Graveyard.")
+
     def crypt_deposit(self, player: Player, item_id: str, quantity: int = 1) -> None:
         self.ctx.crypt.deposit(player, item_id, quantity)
         self.save_manager.save_meta(self.ctx.meta)

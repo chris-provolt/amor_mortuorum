@@ -1,0 +1,6 @@
+[
+  {"id": "ossian", "name": "Ossian", "cost": 60, "desc": "A gravedigger who never learned fear.", "stats": {"max_hp": 55, "max_mp": 2, "atk": 9, "df": 4, "spd": 3}},
+  {"id": "sister_vel", "name": "Sister Vel", "cost": 80, "desc": "Keeps the rites, and the party, alive.", "stats": {"max_hp": 30, "max_mp": 16, "atk": 4, "df": 2, "spd": 6}},
+  {"id": "pale_cassia", "name": "Pale Cassia", "cost": 100, "desc": "Quick hands, quicker knives.", "stats": {"max_hp": 34, "max_mp": 6, "atk": 8, "df": 2, "spd": 9}},
+  {"id": "brother_moss", "name": "Brother Moss", "cost": 120, "desc": "Carries a shield older than the Graveyard.", "stats": {"max_hp": 48, "max_mp": 4, "atk": 6, "df": 7, "spd": 4}}
+]
