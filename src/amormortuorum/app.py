@@ -5,10 +5,11 @@ from typing import Optional
 
 import arcade
 
+from .core.context import GameContext
 from .core.input import InputManager
 from .core.scenes.manager import SceneManager
 from .core.settings import Settings
-from .scenes.boot import BootScene
+from .persistence import SaveError, SaveManager
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +20,20 @@ class GameApp(arcade.Window):
 
     Responsibilities:
     - Configure and initialize the Arcade window using Settings
-    - Own the SceneManager and InputManager
+    - Own the GameContext, SceneManager and InputManager
     - Delegate events (update/draw/input) to the active Scene
     """
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        save_manager: Optional[SaveManager] = None,
+        seed: Optional[int] = None,
+        smoke_frames: Optional[int] = None,
+    ) -> None:
         self.settings = settings
 
-        # Window configuration
         super().__init__(
             width=settings.video.width,
             height=settings.video.height,
@@ -36,18 +43,27 @@ class GameApp(arcade.Window):
             vsync=settings.video.vsync,
             center_window=True,
         )
+        self.background_color = arcade.color.BLACK
 
-        # Apply scaling for UI/text (logical to physical)
-        arcade.set_viewport(0, self.width, 0, self.height)
-
-        # Background
-        arcade.set_background_color(arcade.color.BLACK)
+        # Shared state
+        save_manager = save_manager or SaveManager()
+        self.state = GameContext(settings=settings, save_manager=save_manager, seed=seed)
+        try:
+            self.state.meta = save_manager.load_meta()
+        except SaveError:
+            logger.info("No existing meta save; starting fresh")
+        self._load_game_data()
 
         # Managers
         self.scene_manager = SceneManager(self)
         self.input = InputManager(self, settings.input.mapping)
 
-        # Boot into the first scene
+        # Smoke mode: run N frames then close (used by CI and --smoke)
+        self._smoke_frames_left = smoke_frames
+
+        # Boot into the first scene (late import keeps scene modules optional at import time)
+        from .scenes.boot import BootScene
+
         self.scene_manager.push(BootScene(self))
 
         logger.info(
@@ -58,21 +74,32 @@ class GameApp(arcade.Window):
             settings.video.vsync,
         )
 
+    def _load_game_data(self) -> None:
+        """Load static game data if the data package exists (added in a later phase)."""
+        try:
+            from .data import GameData
+        except ImportError:
+            return
+        self.state.data = GameData.load()
+
     # Arcade lifecycle
     def on_draw(self):  # noqa: N802 (arcade API)
-        arcade.start_render()
+        self.clear()
         self.scene_manager.draw()
 
     def on_update(self, delta_time: float):  # noqa: N802 (arcade API)
         self.scene_manager.update(delta_time)
+        if self._smoke_frames_left is not None:
+            self._smoke_frames_left -= 1
+            if self._smoke_frames_left <= 0:
+                logger.info("Smoke run complete; closing window")
+                self.close()
 
     # Input events: delegate through InputManager, then to scene if not handled
     def on_key_press(self, key: int, modifiers: int):  # noqa: N802 (arcade API)
         actions = self.input.process_key_press(key, modifiers)
-        # Let active scene consume the action(s)
         handled = self.scene_manager.key_actions(actions, pressed=True)
         if not handled:
-            # If no action handled, pass raw event to scene
             self.scene_manager.key_event("press", key, modifiers)
 
     def on_key_release(self, key: int, modifiers: int):  # noqa: N802 (arcade API)
@@ -104,5 +131,5 @@ class GameApp(arcade.Window):
     def toggle_fullscreen(self, fullscreen: Optional[bool] = None) -> None:
         if fullscreen is None:
             fullscreen = not self.fullscreen
-        super().set_fullscreen(fullscreen)
+        self.set_fullscreen(fullscreen)
         logger.info("Fullscreen toggled: %s", fullscreen)

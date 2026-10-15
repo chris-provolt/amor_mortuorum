@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-import arcade
+if TYPE_CHECKING:  # pragma: no cover - type hints only
+    from .manager import SceneManager
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,9 @@ class BaseScene:
     Lifecycle hooks:
     - on_enter(): Called when scene is pushed onto the manager
     - on_exit(): Called when scene is popped from the manager
+    - on_pause(): Called when another scene is pushed on top of this one
+    - on_resume(): Called when the scene above this one is popped
+    - on_resize(width, height): Called when the window is resized
     - update(delta_time)
     - draw()
 
@@ -23,9 +27,12 @@ class BaseScene:
       Return True if the scene handled the action(s) to stop propagation
     - on_key_press(key, modifiers); on_key_release(key, modifiers)
     - on_mouse_press/release/motion
+
+    ``app`` is the window (``GameApp``); scenes reach shared state via ``app.ctx``.
+    It is typed as ``Any`` so the scene stack can be unit-tested with a dummy object.
     """
 
-    def __init__(self, app: arcade.Window) -> None:
+    def __init__(self, app: Any) -> None:
         self.app = app
         self.manager: Optional["SceneManager"] = None  # set by SceneManager
 
@@ -35,6 +42,15 @@ class BaseScene:
 
     def on_exit(self):
         logger.debug("%s.on_exit", type(self).__name__)
+
+    def on_pause(self):
+        logger.debug("%s.on_pause", type(self).__name__)
+
+    def on_resume(self):
+        logger.debug("%s.on_resume", type(self).__name__)
+
+    def on_resize(self, width: int, height: int):
+        pass
 
     def update(self, delta_time: float):
         pass
@@ -60,7 +76,3 @@ class BaseScene:
 
     def on_mouse_motion(self, x: float, y: float, dx: float, dy: float):
         pass
-
-
-# Late import to avoid circular type reference for type hints
-from .manager import SceneManager  # noqa: E402

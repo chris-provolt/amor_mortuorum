@@ -3,7 +3,6 @@ import logging
 import os
 from pathlib import Path
 
-from .app import GameApp
 from .core.settings import Settings
 from .utils.logging import configure_logging
 
@@ -25,6 +24,24 @@ def parse_args(argv=None):
         action="store_true",
         help="Enable verbose debug logging.",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Seed for new runs (default: random). Same seed reproduces the same floors.",
+    )
+    parser.add_argument(
+        "--profile",
+        default="default",
+        help="Save profile name (separate meta/run saves per profile).",
+    )
+    parser.add_argument(
+        "--smoke",
+        type=int,
+        default=None,
+        metavar="FRAMES",
+        help="Run the game for FRAMES frames then exit (CI smoke test).",
+    )
     return parser.parse_args(argv)
 
 
@@ -32,12 +49,23 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     configure_logging(level=logging.DEBUG if args.debug else logging.INFO)
 
-    # Make headless mode opt-in via env for CI/testing, not default in normal runs.
+    # Headless mode is opt-in via env for CI/testing. It must be configured
+    # before arcade is imported, so the app import happens after this block.
     if os.environ.get("AMOR_HEADLESS") == "1":
+        os.environ.setdefault("ARCADE_HEADLESS", "True")
         os.environ.setdefault("PYGLET_HEADLESS", "1")
 
-    settings = Settings.load(user_path=args.settings_path)
+    from .app import GameApp
+    from .persistence import SaveManager
 
-    app = GameApp(settings)
+    settings = Settings.load(user_path=args.settings_path)
+    save_manager = SaveManager(profile_id=args.profile)
+
+    app = GameApp(
+        settings,
+        save_manager=save_manager,
+        seed=args.seed,
+        smoke_frames=args.smoke,
+    )
     app.run()
     return 0

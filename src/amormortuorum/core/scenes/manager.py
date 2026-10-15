@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
-
-import arcade
+from typing import Any, List, Optional, Type
 
 from .base_scene import BaseScene
 
@@ -13,19 +11,23 @@ logger = logging.getLogger(__name__)
 class SceneManager:
     """A stack-based scene manager.
 
-    - push(scene): push a new scene on top; calls on_enter
-    - pop(): remove top scene; calls on_exit
+    - push(scene): push a new scene on top; pauses the previous top, calls on_enter
+    - pop(): remove top scene; calls on_exit, then on_resume on the new top
     - replace(scene): convenience to pop then push
-    - update/draw: only top scene is active for now
+    - pop_until(scene_type): pop scenes until the top is an instance of scene_type
+    - update/draw: only the top scene is active
 
-    Future: Could support overlay/UI scenes that draw underneath.
+    The manager is arcade-free so it can be unit-tested with a dummy window.
     """
 
-    def __init__(self, app: arcade.Window):
+    def __init__(self, app: Any):
         self._stack: List[BaseScene] = []
         self.app = app
 
     def push(self, scene: BaseScene) -> None:
+        previous = self.current
+        if previous is not None:
+            previous.on_pause()
         scene.manager = self
         self._stack.append(scene)
         logger.debug("Scene pushed: %s", type(scene).__name__)
@@ -40,15 +42,53 @@ class SceneManager:
             scene.on_exit()
         finally:
             scene.manager = None
+        if self.current is not None:
+            self.current.on_resume()
         return scene
 
     def replace(self, scene: BaseScene) -> None:
-        self.pop()
-        self.push(scene)
+        # Pop without resuming the scene underneath; the new scene takes over immediately.
+        if self._stack:
+            old = self._stack.pop()
+            try:
+                old.on_exit()
+            finally:
+                old.manager = None
+        scene.manager = self
+        self._stack.append(scene)
+        logger.debug("Scene replaced with: %s", type(scene).__name__)
+        scene.on_enter()
+
+    def pop_until(self, scene_type: Type[BaseScene]) -> Optional[BaseScene]:
+        """Pop scenes until the top is an instance of ``scene_type``.
+
+        Returns the scene now on top, or ``None`` if no such scene was in the stack
+        (in which case the stack is left empty).
+        """
+        while self._stack and not isinstance(self._stack[-1], scene_type):
+            scene = self._stack.pop()
+            try:
+                scene.on_exit()
+            finally:
+                scene.manager = None
+        if self.current is not None:
+            self.current.on_resume()
+        return self.current
+
+    def clear(self) -> None:
+        while self._stack:
+            scene = self._stack.pop()
+            try:
+                scene.on_exit()
+            finally:
+                scene.manager = None
 
     @property
     def current(self) -> Optional[BaseScene]:
         return self._stack[-1] if self._stack else None
+
+    def __len__(self) -> int:
+        return len(self._stack)
 
     def update(self, delta_time: float):
         if self.current:
@@ -85,5 +125,5 @@ class SceneManager:
             self.current.on_mouse_motion(x, y, dx, dy)
 
     def resize(self, width: int, height: int):
-        arcade.set_viewport(0, width, 0, height)
-        # Scenes can override draw using current viewport; if needed, provide hook later
+        for scene in self._stack:
+            scene.on_resize(width, height)
