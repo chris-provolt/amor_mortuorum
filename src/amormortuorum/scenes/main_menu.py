@@ -8,6 +8,7 @@ from ..core.scenes.base_scene import BaseScene
 from ..systems.hub import GraveyardHub
 from ..systems.rng import random_seed
 from ..systems.run import new_run
+from ..systems.stats import bump, check_achievements
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 from ..ui.theme import fs
 
@@ -88,6 +89,11 @@ class MainMenuScene(BaseScene):
                     "Relics", self._relics,
                     hint=f"{len(meta.relics.collected)}/10 Relics of the Veil collected",
                 ),
+                MenuItem("Records", self._records, hint="Lifetime statistics and achievements"),
+                MenuItem(
+                    f"Profile: {self.app.state.save_manager.profile_id}", self._profiles,
+                    hint="Switch or create a save profile",
+                ),
                 MenuItem("Settings", self._settings, hint="Fullscreen, volumes, bindings"),
                 MenuItem(
                     "Quit", self._quit,
@@ -103,6 +109,9 @@ class MainMenuScene(BaseScene):
         state = self.app.state
         seed = state.seed if state.seed is not None else random_seed()
         state.run = new_run(state.data, seed=seed, meta=state.meta)
+        bump(state.meta, "runs_started")
+        check_achievements(state.meta, state.data)
+        state.save_manager.save_meta(state.meta)
         logger.info("New run with seed %d", seed)
         self.manager.push(GraveyardScene(self.app))
 
@@ -120,6 +129,16 @@ class MainMenuScene(BaseScene):
 
             logger.info("Resuming mid-run on floor B%d", run.floor)
             self.manager.push(DungeonScene(self.app))
+
+    def _records(self) -> None:
+        from .records import RecordsScene
+
+        self.manager.push(RecordsScene(self.app))
+
+    def _profiles(self) -> None:
+        from .profiles import ProfilesScene
+
+        self.manager.push(ProfilesScene(self.app))
 
     def _settings(self) -> None:
         from .settings import SettingsScene

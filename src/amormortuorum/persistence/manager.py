@@ -43,6 +43,14 @@ class SaveManager:
 
     # Public API
 
+    @staticmethod
+    def list_profiles(root_dir: Optional[Path] = None) -> list:
+        """Profile ids that have a save folder under ``root_dir`` (sorted)."""
+        base = (root_dir or default_save_root()) / "profiles"
+        if not base.exists():
+            return []
+        return sorted(p.name for p in base.iterdir() if p.is_dir())
+
     def save_meta(self, meta: MetaState) -> Path:
         """Persist only meta state. Always allowed."""
         with self.lock:

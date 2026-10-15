@@ -707,3 +707,56 @@ def test_rebind_key_from_settings(app):
     assert d.scene.mode == "main"
     d.press("esc")
     assert d.scene_name() == "MainMenuScene"
+
+
+def test_records_and_profile_switch(app, tmp_path, monkeypatch):
+    from amormortuorum.core import settings as settings_mod
+    from amormortuorum.scenes import profiles as profiles_scene
+
+    target = tmp_path / "settings.json"
+    monkeypatch.setattr(settings_mod, "user_settings_path", lambda: target)
+    monkeypatch.setattr(profiles_scene, "user_settings_path", lambda: target)
+
+    d = Driver(app)
+    d.boot_to_menu()
+    # Starting a run counts; so does walking
+    d.press("enter")  # New Run
+    assert app.state.meta.stats.get("runs_started") == 1
+    d.press("enter")  # Enter the Dungeon
+    d.press("right")
+    d.press("left")
+    assert app.state.meta.stats.get("steps", 0) >= 1
+    d.press("esc")
+    while d.scene.pause_menu.current.label != "Abandon run":
+        d.press("down")
+    d.press("enter")
+    assert d.scene_name() == "MainMenuScene"
+
+    while d.scene.menu.current.label != "Records":
+        d.press("down")
+    d.press("enter")
+    assert d.scene_name() == "RecordsScene"
+    d.press("esc")
+
+    while not d.scene.menu.current.label.startswith("Profile:"):
+        d.press("down")
+    d.press("enter")
+    assert d.scene_name() == "ProfilesScene"
+    while d.scene.menu.current.label != "New profile":
+        d.press("down")
+    d.press("enter")
+    assert app.state.save_manager.profile_id == "profile2"
+    assert app.state.meta.stats == {}  # fresh profile
+    assert app.settings.game.profile == "profile2"
+    assert target.exists()
+    d.press("esc")
+    assert any(it.label == "Profile: profile2" for it in d.scene.menu.items)
+    # Switching back restores the first profile's counters
+    while not d.scene.menu.current.label.startswith("Profile:"):
+        d.press("down")
+    d.press("enter")
+    while not d.scene.menu.current.label.startswith("play"):
+        d.press("down")
+    d.press("enter")
+    assert app.state.save_manager.profile_id == "play"
+    assert app.state.meta.stats.get("runs_started") == 1

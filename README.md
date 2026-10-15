@@ -25,6 +25,8 @@ What works today, end to end:
 - **Audio**: named sound hooks (menus, steps, chests, combat, level-ups, relics, bosses) and ambient loops for the Graveyard, dungeon and combat. Placeholder tones are synthesized with the standard library on first run; drop real `.wav` files into `resources/audio/` to replace them.
 - **Settings screen** (title menu and pause menu): fullscreen, music and SFX volume, VSync, a view of the key bindings, and Save to a per-user `settings.json` that the game loads automatically.
 - **Controller support**: any pyglet-recognised gamepad, hot-pluggable. D-pad or left stick moves, A confirms, B cancels, Y opens the bag, X toggles the map, Start pauses.
+- **Records and achievements**: lifetime counters (runs, deaths, floors, battles, chests, gold, steps) with fourteen data-driven achievements (`achievements.json`) announced on the HUD when unlocked.
+- **Profiles**: switch or create save profiles from the title menu; the choice is remembered in `settings.json` and `--profile` still overrides it.
 - **Save & Quit** from the pause menu: a one-shot mid-run save that resumes at the start of the current floor and is consumed on load.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.
 
@@ -166,7 +168,8 @@ src/amormortuorum/
 ├── data/                  # JSON content + GameData loader/validator
 │   ├── items.json  enemies.json  loot_tables.json  floor_tiers.json
 │   ├── relics.json  encounters.json  shop.json  xp_curve.json
-│   └── bosses.json  skills.json  companions.json
+│   ├── bosses.json  skills.json  companions.json
+│   └── balance.json  achievements.json
 ├── systems/               # pure-Python game rules (no arcade)
 │   ├── rng.py             # seeded streams
 │   ├── procgen.py         # BSP floors, portal chance
@@ -179,11 +182,13 @@ src/amormortuorum/
 │   ├── fov.py             # shadowcasting field of view, explored memory
 │   ├── relics.py          # relic passives and collection rows
 │   ├── party.py           # recruiting, shared bag, most-wounded targeting
+│   ├── stats.py           # lifetime counters and achievement checks
 │   ├── hub.py  shop.py  crypt.py
 ├── persistence/           # SaveManager, SaveGame/MetaState/RunState, atomic writes
 ├── ui/                    # VerticalMenu model + MenuView, Hud, Minimap
 ├── resources/audio/       # optional real .wav assets (override placeholders)
-└── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, relics, settings, run_summary
+└── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, relics,
+                           #   records, profiles, settings, run_summary
 tests/                     # pytest; GL-marked tests open a window (opt-in)
 tools/ci/build_binary.py   # PyInstaller one-file build
 docs/                      # design notes per epic, CI, save system
@@ -316,7 +321,6 @@ Design notes for each epic live in `docs/epics/`. Every epic now has a first imp
 1. Hand playtesting against the simulator's numbers (see Balance Model); the auto-policy never flees and never misjudges a potion, so real runs end earlier.
 2. Real art and audio assets (sprites, tiles, SFX, music) replacing the placeholders.
 3. Visible wandering enemies with grid pathfinding (today encounters are random per step).
-4. Run statistics, achievements, and a profile picker for multiple save profiles.
 
 ---
 

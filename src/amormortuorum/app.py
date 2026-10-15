@@ -97,6 +97,20 @@ class GameApp(arcade.Window):
             return
         self.state.data = GameData.load()
 
+    def switch_profile(self, profile_id: str) -> None:
+        """Point the game at another save profile (new or existing) and reload meta."""
+        from .persistence import MetaState
+
+        old = self.state.save_manager
+        self.state.save_manager = SaveManager(root_dir=old.root_dir, profile_id=profile_id)
+        try:
+            self.state.meta = self.state.save_manager.load_meta()
+        except SaveError:
+            self.state.meta = MetaState()
+        self.state.run = None
+        self.settings.game.profile = profile_id
+        logger.info("Switched to profile %r", profile_id)
+
     @staticmethod
     def smoke_mode_env() -> bool:
         return os.environ.get("ARCADE_HEADLESS", "").lower() in ("1", "true")

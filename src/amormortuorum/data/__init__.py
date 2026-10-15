@@ -154,6 +154,21 @@ class CompanionDef:
     desc: str = ""
 
 
+TRACKED_STATS: Tuple[str, ...] = (
+    "runs_started", "runs_won", "deaths", "revives", "deepest_floor", "battles_won",
+    "enemies_slain", "bosses_slain", "chests_opened", "gold_earned", "steps", "relics",
+)
+
+
+@dataclass(frozen=True)
+class AchievementDef:
+    id: str
+    name: str
+    stat: str
+    at_least: int
+    desc: str = ""
+
+
 @dataclass(frozen=True)
 class Balance:
     """Global tuning knobs (data/balance.json)."""
@@ -229,6 +244,7 @@ class GameData:
     skills: Dict[str, SkillDef] = field(default_factory=dict)
     companions: Dict[str, CompanionDef] = field(default_factory=dict)
     balance: Balance = field(default_factory=Balance)
+    achievements: List[AchievementDef] = field(default_factory=list)
 
     # Lookups
 
@@ -327,6 +343,7 @@ class GameData:
             skills=read("skills.json"),
             companions=read("companions.json"),
             balance=read("balance.json"),
+            achievements=read("achievements.json"),
         )
 
     @classmethod
@@ -345,9 +362,13 @@ class GameData:
         skills: Optional[List[dict]] = None,
         companions: Optional[List[dict]] = None,
         balance: Optional[dict] = None,
+        achievements: Optional[List[dict]] = None,
     ) -> "GameData":
         """Build from already-parsed JSON structures and validate."""
         data = cls()
+        data.achievements = [
+            _build(AchievementDef, raw, "achievements") for raw in (achievements or [])
+        ]
         if balance:
             data.balance = Balance.from_raw(balance)
         data.companions = _unique_by_id(
@@ -503,6 +524,17 @@ class GameData:
             if comp.stats["max_hp"] < 1:
                 raise DataError(f"companions[{comp.id}]: max_hp must be >= 1")
 
+        # Achievements
+        seen_ach = set()
+        for ach in self.achievements:
+            if ach.id in seen_ach:
+                raise DataError(f"achievements: duplicate id {ach.id!r}")
+            seen_ach.add(ach.id)
+            if ach.stat not in TRACKED_STATS:
+                raise DataError(f"achievements[{ach.id}]: unknown stat {ach.stat!r}")
+            if ach.at_least < 1:
+                raise DataError(f"achievements[{ach.id}]: at_least must be >= 1")
+
         # Balance
         b = self.balance
         for name in ("enemy_atk_per_floor", "enemy_df_per_floor", "enemy_hp_per_floor",
@@ -561,5 +593,7 @@ __all__ = [
     "SKILL_TARGETS",
     "CompanionDef",
     "Balance",
+    "AchievementDef",
+    "TRACKED_STATS",
     "GameData",
 ]

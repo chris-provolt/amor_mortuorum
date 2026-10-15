@@ -25,6 +25,7 @@ def _raw():
         skills=read("skills.json"),
         companions=read("companions.json"),
         balance=read("balance.json"),
+        achievements=read("achievements.json"),
     )
 
 
