@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 EQUIP_SLOTS: Tuple[str, ...] = EQUIP_TYPES
 
 # Level-1 baseline for a new wanderer.
-BASE_STATS = {"max_hp": 40, "max_mp": 5, "atk": 7, "df": 3, "spd": 5}
+BASE_STATS = {"max_hp": 40, "max_mp": 8, "atk": 7, "df": 3, "spd": 5}
 STARTING_GOLD = 50
 
 
@@ -204,6 +204,22 @@ class Player:
         self.stats.hp = min(self.stats.max_hp, self.stats.hp + amount)
         return self.stats.hp - before
 
+    def restore_mp(self, amount: int) -> int:
+        """Restore up to ``amount`` MP; return MP actually restored."""
+        if amount <= 0:
+            return 0
+        before = self.stats.mp
+        self.stats.mp = min(self.stats.max_mp, self.stats.mp + amount)
+        return self.stats.mp - before
+
+    def spend_mp(self, amount: int) -> None:
+        if amount > self.stats.mp:
+            raise InvalidOperation(f"{self.name} lacks the MP ({self.stats.mp}/{amount})")
+        self.stats.mp -= amount
+
+    def known_skills(self, data: GameData):
+        return data.skills_known_at(self.level)
+
     def heal_full(self) -> None:
         logger.debug("Healing %s to full: %s -> %s", self.name, self.stats.hp, self.stats.max_hp)
         self.stats.hp = self.stats.max_hp
@@ -256,9 +272,10 @@ class Player:
         """Use a healing consumable outside combat. Returns HP restored."""
         if not self.inventory.has(item.id):
             raise InvalidOperation(f"{item.name} is not in the inventory")
-        if not item.is_consumable or item.hp_restore <= 0:
+        if not item.is_consumable or (item.hp_restore <= 0 and item.mp_restore <= 0):
             raise InvalidOperation(f"{item.name} cannot be used here")
         self.inventory.remove(item, 1)
+        self.restore_mp(item.mp_restore)
         return self.heal(item.hp_restore)
 
     # Serialization

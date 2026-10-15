@@ -541,3 +541,36 @@ def test_save_and_quit_then_continue_mid_run(app):
 
     hub = GraveyardHub(app.state.save_manager, app.state.data, meta=app.state.meta)
     assert hub.peek_run() is None
+
+
+def test_skill_menu_casts_ember(app):
+    from amormortuorum.systems.combat import Battle, Outcome
+    from amormortuorum.systems.entities import Enemy
+    from amormortuorum.scenes.combat import CombatScene
+    from amormortuorum.systems.rng import stream_rng
+
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    d.press("enter")  # Enter the Dungeon
+    run = app.state.run
+    data = app.state.data
+    run.leader.stats.max_hp = run.leader.stats.hp = 500
+    foe = Enemy.from_def(data.enemy("skel_basic"))
+    battle = Battle(run.party, [foe], stream_rng(9, 1, "t"), data)
+    d.scene.active_battle = battle
+    app.scene_manager.push(CombatScene(app, battle))
+    d.frame()
+
+    mp = run.leader.stats.mp
+    d.press("down")  # Skill
+    assert d.scene.menu.current.label == "Skill"
+    d.press("enter")
+    assert d.scene.mode == "skill"
+    assert "Ember" in d.scene.menu.current.label
+    d.press("enter")  # cast
+    assert run.leader.stats.mp == mp - data.skill("ember").mp
+    assert any("casts Ember" in e.text for e in d.scene._log)
+    assert foe.stats.hp <= 0 or battle.outcome is Outcome.ONGOING
+    d.fight_until_done()
+    assert d.scene_name() == "DungeonScene"

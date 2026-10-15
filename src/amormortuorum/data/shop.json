@@ -1,6 +1,7 @@
 {
   "potion_small": {"price": 20, "qty_range": [2, 5]},
   "antidote": {"price": 12, "qty_range": [1, 4]},
+  "tonic_mind": {"price": 25, "qty_range": [1, 3]},
   "scroll_embers": {"price": 45, "qty_range": [1, 3]},
   "potion_medium": {"price": 60, "qty_range": [0, 2]}
 }

@@ -33,6 +33,7 @@ class ItemDef:
     stackable: bool = True
     max_stack: int = 99
     hp_restore: int = 0
+    mp_restore: int = 0
     damage: int = 0
     atk: int = 0
     df: int = 0
@@ -51,7 +52,9 @@ class ItemDef:
 
     @property
     def usable_in_combat(self) -> bool:
-        return self.is_consumable and (self.hp_restore > 0 or self.damage > 0)
+        return self.is_consumable and (
+            self.hp_restore > 0 or self.mp_restore > 0 or self.damage > 0
+        )
 
 
 @dataclass(frozen=True)
@@ -81,6 +84,23 @@ class FloorTier:
 
 
 PASSIVE_KEYS: Tuple[str, ...] = ("atk", "df", "spd", "fov", "gold_pct", "xp_pct")
+SKILL_TARGETS: Tuple[str, ...] = ("enemy", "all_enemies", "ally")
+
+
+@dataclass(frozen=True)
+class SkillDef:
+    id: str
+    name: str
+    mp: int
+    target: str = "enemy"
+    damage: int = 0
+    heal: int = 0
+    learn_level: int = 1
+    desc: str = ""
+
+    @property
+    def is_offensive(self) -> bool:
+        return self.damage > 0
 
 
 @dataclass(frozen=True)
@@ -167,8 +187,20 @@ class GameData:
     shop_pool: Dict[str, ShopEntry] = field(default_factory=dict)
     xp_curve: XpCurve = field(default_factory=XpCurve)
     bosses: Dict[int, BossDef] = field(default_factory=dict)
+    skills: Dict[str, SkillDef] = field(default_factory=dict)
 
     # Lookups
+
+    def skill(self, skill_id: str) -> SkillDef:
+        try:
+            return self.skills[skill_id]
+        except KeyError as e:
+            raise DataError(f"Unknown skill id: {skill_id}") from e
+
+    def skills_known_at(self, level: int) -> List[SkillDef]:
+        """Skills a character of ``level`` knows, in learning order."""
+        known = [sk for sk in self.skills.values() if sk.learn_level <= level]
+        return sorted(known, key=lambda sk: (sk.learn_level, sk.id))
 
     def boss_for_floor(self, floor: int) -> Optional[BossDef]:
         return self.bosses.get(floor)
@@ -245,6 +277,7 @@ class GameData:
             shop=read("shop.json"),
             xp_curve=read("xp_curve.json"),
             bosses=read("bosses.json"),
+            skills=read("skills.json"),
         )
 
     @classmethod
@@ -260,9 +293,13 @@ class GameData:
         shop: Dict[str, dict],
         xp_curve: Optional[dict] = None,
         bosses: Optional[Dict[str, dict]] = None,
+        skills: Optional[List[dict]] = None,
     ) -> "GameData":
         """Build from already-parsed JSON structures and validate."""
         data = cls()
+        data.skills = _unique_by_id(
+            "skills", [_build(SkillDef, raw, "skills") for raw in (skills or [])]
+        )
         if xp_curve is not None:
             data.xp_curve = XpCurve.from_raw(xp_curve)
         for floor_key, spec in (bosses or {}).items():
@@ -387,6 +424,19 @@ class GameData:
         if finals and finals[0].floor != MAX_FLOOR:
             raise DataError(f"bosses: the final boss must be on floor {MAX_FLOOR}")
 
+        # Skills
+        for sk in self.skills.values():
+            if sk.target not in SKILL_TARGETS:
+                raise DataError(f"skills[{sk.id}]: unknown target {sk.target!r}")
+            if sk.mp < 0 or sk.learn_level < 1:
+                raise DataError(f"skills[{sk.id}]: mp must be >= 0 and learn_level >= 1")
+            if (sk.damage > 0) == (sk.heal > 0):
+                raise DataError(f"skills[{sk.id}]: needs exactly one of damage or heal")
+            if sk.heal > 0 and sk.target != "ally":
+                raise DataError(f"skills[{sk.id}]: healing skills target an ally")
+            if sk.damage > 0 and sk.target == "ally":
+                raise DataError(f"skills[{sk.id}]: damaging skills target enemies")
+
         # XP curve
         curve = self.xp_curve
         if curve.max_level < 1 or len(curve.thresholds) != curve.max_level:
@@ -430,5 +480,7 @@ __all__ = [
     "ShopEntry",
     "XpCurve",
     "BossDef",
+    "SkillDef",
+    "SKILL_TARGETS",
     "GameData",
 ]

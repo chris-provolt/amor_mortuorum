@@ -85,12 +85,16 @@ class InventoryScene(BaseScene):
                         hint=f"Enter: equip ({item.type}, {stat})",
                     )
                 )
-            elif item.is_consumable and item.hp_restore > 0:
+            elif item.is_consumable and (item.hp_restore > 0 or item.mp_restore > 0):
+                effect = (
+                    f"heals {item.hp_restore}" if item.hp_restore
+                    else f"restores {item.mp_restore} MP"
+                )
                 items.append(
                     MenuItem(
                         f"  {item.name} x{qty}",
                         lambda iid=item_id: self._use(iid),
-                        hint=f"Enter: use (heals {item.hp_restore})",
+                        hint=f"Enter: use ({effect})",
                     )
                 )
             else:
@@ -127,15 +131,21 @@ class InventoryScene(BaseScene):
     def _use(self, item_id: str) -> None:
         item = self.data.item(item_id)
         p = self.run.leader
-        if p.hp >= p.max_hp:
+        if item.hp_restore and not item.mp_restore and p.hp >= p.max_hp:
             self._say("You are already at full health.")
             return
+        if item.mp_restore and not item.hp_restore and p.stats.mp >= p.stats.max_mp:
+            self._say("Your mind is already clear.")
+            return
+        mp_before = p.stats.mp
         try:
             healed = p.use_consumable(item)
         except AmorError as e:
             self._say(str(e))
             return
-        self._say(f"Used {item.name}: recovered {healed} HP.")
+        gained_mp = p.stats.mp - mp_before
+        effect = f"recovered {healed} HP" if item.hp_restore else f"regained {gained_mp} MP"
+        self._say(f"Used {item.name}: {effect}.")
         self._build_menu()
 
     def _back(self) -> None:

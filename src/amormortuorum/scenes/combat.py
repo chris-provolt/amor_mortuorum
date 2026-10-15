@@ -95,12 +95,44 @@ class CombatScene(BaseScene):
         self.menu.set_items(
             [
                 MenuItem("Attack", self._attack, hint="Left/Right to change target"),
+                MenuItem("Skill", self._show_skill_menu, hint="Spend MP on a spell"),
                 MenuItem("Item", self._show_item_menu, hint="Use a potion or scroll"),
                 MenuItem("Defend", self._defend, hint="Halve damage this round"),
                 MenuItem("Flee", self._flee, hint="Chance depends on speed"),
             ],
             keep_selection=False,
         )
+
+    def _show_skill_menu(self) -> None:
+        player = self.battle.party[self.actor]
+        items: List[MenuItem] = []
+        for skill in player.known_skills(self.data):
+            if skill.heal:
+                effect = f"Heals {skill.heal}"
+            elif skill.target == "all_enemies":
+                effect = f"{skill.damage}+ to every foe"
+            else:
+                effect = f"{skill.damage}+ damage"
+            can = player.stats.mp >= skill.mp
+            items.append(
+                MenuItem(
+                    f"{skill.name:<14} {skill.mp:>3} MP",
+                    lambda sid=skill.id: self._use_skill(sid),
+                    enabled=can,
+                    hint=effect if can else f"Not enough MP ({effect})",
+                )
+            )
+        if not items:
+            self._log.append(LogEvent("No skills learned yet.", "info"))
+            return
+        items.append(MenuItem("Back", self._show_command_menu))
+        self.mode = "skill"
+        self.menu.set_items(items, keep_selection=False)
+
+    def _use_skill(self, skill_id: str) -> None:
+        skill = self.data.skill(skill_id)
+        target = self.actor if skill.target == "ally" else self.target
+        self._submit(Action(ActionKind.SKILL, self.actor, target=target, skill_id=skill_id))
 
     def _show_item_menu(self) -> None:
         player = self.battle.party[self.actor]
@@ -109,7 +141,12 @@ class CombatScene(BaseScene):
             item = self.data.item(item_id)
             if not item.usable_in_combat:
                 continue
-            effect = f"Heals {item.hp_restore}" if item.hp_restore else f"Deals {item.damage}"
+            if item.hp_restore:
+                effect = f"Heals {item.hp_restore}"
+            elif item.mp_restore:
+                effect = f"Restores {item.mp_restore} MP"
+            else:
+                effect = f"Deals {item.damage}"
             items.append(
                 MenuItem(
                     f"{item.name} x{qty}", lambda iid=item_id: self._use_item(iid), hint=effect
@@ -204,7 +241,10 @@ class CombatScene(BaseScene):
 
         for row, b in zip(self._party_rows, self.battle.players):
             marker = ">" if (b.index == self.actor and self.mode != "done") else " "
-            text = f"{marker} {b.name}   HP {max(0, b.stats.hp)}/{b.stats.max_hp}"
+            text = (
+                f"{marker} {b.name}   HP {max(0, b.stats.hp)}/{b.stats.max_hp}"
+                f"   MP {b.stats.mp}/{b.stats.max_mp}"
+            )
             if b.defending:
                 text += "  [guard]"
             if row.text != text:
@@ -251,7 +291,7 @@ class CombatScene(BaseScene):
         if self.menu.handle_actions(actions):
             return True
         if "cancel" in actions:
-            if self.mode == "item":
+            if self.mode in ("item", "skill"):
                 self._show_command_menu()
             return True
         return False
