@@ -104,6 +104,12 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
 - **Persistence:** Stored in the meta save; completion survives across runs.
 - **Names:** Lamplight of the Veil, Thorn of Epitaph, Obol of Passage, Votive Ashes, Mortis Dial, Widow's Knot, Catacomb Key, Lacrimosa Phial, Ossuary Crown, **Heart of Oblivion**.
 
+## Balance Model
+- **Enemies scale per floor** (`balance.json`): ATK +0.45, DEF +0.15, HP +2.5%, XP and gold +3% per floor below B1. Tier bases in `enemies.json` are the stats at B1 and rise gently across tiers; depth does the rest.
+- **Players** gain +6 HP, +1 MP and +1 ATK per level, +1 DEF every second level and +1 SPD every third (`xp_curve.json`, 40 levels). The stairs restore 10% HP and 15% MP on every descent.
+- **Encounters**: per-step chance starts at the tier's `step_chance` (3-5%), grows 5% per quiet step and caps at 20%, giving roughly 3-5 fights per floor.
+- **Measured with** `python tools/balance/simulate.py --runs 80 --party N`, which plays whole runs with an auto-policy. Current targets: solo runs end around B20-40, pairs around B40 with a long tail to B80, full parties reach the nineties and clear B99 a few percent of the time. Re-run it after touching any number.
+
 ## Procedural Generation
 - **Algorithm:** BSP split into leaves, one room per leaf, L-shaped corridors joining sibling subtrees; the whole floor is connected.
 - **Features:** Start room, stairs in the room farthest from the start, 1-5 chests scaling with depth, a portal on a chance roll, 0-4 hidden traps, and (35% of floors from B2) locked doors on every entrance of the stairs room with a key placed somewhere still reachable.
@@ -114,7 +120,7 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
 - **Formula** (`systems/procgen.py`):
   ```py
   PORTAL_BASE_CHANCE = 0.30     # 30% on Floor 1
-  PORTAL_DECAY       = 0.985    # multiplicative decay per floor
+  PORTAL_DECAY       = 0.99     # multiplicative decay per floor
   PORTAL_MIN_CHANCE  = 0.02     # floor at 2%
   # chance(floor) = max(PORTAL_MIN_CHANCE, PORTAL_BASE_CHANCE * (PORTAL_DECAY ** (floor-1)))
   ```
@@ -307,7 +313,7 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 
 ## Roadmap
 Design notes for each epic live in `docs/epics/`. Every epic now has a first implementation; what remains is polish:
-1. A balance pass across all five tiers (enemy stats, boss HP, loot and XP curves are first guesses).
+1. Hand playtesting against the simulator's numbers (see Balance Model); the auto-policy never flees and never misjudges a potion, so real runs end earlier.
 2. Real art and audio assets (sprites, tiles, SFX, music) replacing the placeholders.
 3. Accessibility: colourblind-safe minimap icons, screen-shake and font-scale toggles, in-game key rebinding.
 4. Cellular-cavern floors as a second generator; enemy pathfinding on the map.

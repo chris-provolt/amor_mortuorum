@@ -107,3 +107,12 @@ def test_unequip_and_use_consumable(data):
         p.use_consumable(data.item("potion_small"))  # none left
     with pytest.raises(InvalidOperation):
         p.use_consumable(data.item("blade_bone"))  # not a consumable
+
+
+def test_enemy_scaling_with_depth(data):
+    base = Enemy.from_def(data.enemy("skel_basic"))
+    deep = Enemy.from_def(data.enemy("skel_basic"), floor=50, balance=data.balance)
+    assert deep.stats.atk > base.stats.atk and deep.stats.df > base.stats.df
+    assert deep.stats.max_hp > base.stats.max_hp and deep.xp > base.xp
+    same = Enemy.from_def(data.enemy("skel_basic"), floor=1, balance=data.balance)
+    assert same.stats.to_dict() == base.stats.to_dict()

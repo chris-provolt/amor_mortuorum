@@ -20,7 +20,7 @@ from .rng import floor_rng
 TILE_SIZE = 32
 
 PORTAL_BASE_CHANCE = 0.30
-PORTAL_DECAY = 0.985
+PORTAL_DECAY = 0.99
 PORTAL_MIN_CHANCE = 0.02
 
 BOSS_FLOORS: Tuple[int, ...] = (20, 40, 60, 80, 99)

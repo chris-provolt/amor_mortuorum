@@ -14,11 +14,12 @@
   {"id": "buckler_grave", "name": "Gravewood Buckler", "quality": "Uncommon", "type": "shield", "df": 2, "stackable": false},
   {"id": "hood_wraith", "name": "Wraith Hood", "quality": "Uncommon", "type": "helm", "df": 2, "stackable": false},
 
-  {"id": "potion_large", "name": "Lacrimal Elixir", "quality": "Rare", "type": "potion", "hp_restore": 70, "max_stack": 99},
+  {"id": "potion_large", "name": "Lacrimal Elixir", "quality": "Rare", "type": "potion", "hp_restore": 120, "max_stack": 99},
   {"id": "armor_shroud", "name": "Shroudmail", "quality": "Rare", "type": "armor", "df": 4, "stackable": false},
   {"id": "blade_mourning", "name": "Mourning Blade", "quality": "Rare", "type": "weapon", "atk": 5, "stackable": false},
   {"id": "boots_silent", "name": "Boots of the Silent", "quality": "Rare", "type": "accessory", "spd": 1, "stackable": false},
 
+  {"id": "potion_grand", "name": "Requiem Draught", "quality": "Epic", "type": "potion", "hp_restore": 250, "max_stack": 99},
   {"id": "res_token", "name": "Resurrection Token", "quality": "Epic", "type": "token", "revive": true, "max_stack": 3},
   {"id": "ring_mourning", "name": "Ring of Mourning", "quality": "Epic", "type": "accessory", "spd": 2, "stackable": false},
   {"id": "blade_oblivion", "name": "Oblivion Edge", "quality": "Epic", "type": "weapon", "atk": 8, "stackable": false},

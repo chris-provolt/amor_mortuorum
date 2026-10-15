@@ -22,7 +22,8 @@ def data() -> GameData:
 
 def test_encounter_chance_grows_then_caps():
     assert encounter_chance(0.05, 0) == pytest.approx(0.05)
-    assert encounter_chance(0.05, 10) == pytest.approx(0.10)
+    assert encounter_chance(0.05, 10) == pytest.approx(0.075)
+    assert encounter_chance(0.05, 10, cap=0.5, growth=0.1) == pytest.approx(0.10)
     assert encounter_chance(0.05, 1000) == ENCOUNTER_CAP
     assert encounter_chance(0.9, 0) == ENCOUNTER_CAP
     assert encounter_chance(0.05, -5) == pytest.approx(0.05)
@@ -54,7 +55,9 @@ def test_roll_formation_returns_known_fresh_enemies(data):
         for e in enemies:
             assert isinstance(e, Enemy)
             assert e.def_id in allowed
-            assert e.is_alive and e.stats.hp == data.enemy(e.def_id).hp
+            expected = Enemy.from_def(data.enemy(e.def_id), floor, data.balance)
+            assert e.is_alive and e.stats.hp == expected.stats.hp
+            assert e.stats.hp >= data.enemy(e.def_id).hp  # scaled up with depth
     # Fresh instances each roll
     a = roll_formation(Random(5), 1, data)
     b = roll_formation(Random(5), 1, data)

@@ -22,8 +22,12 @@ def test_new_run_has_starting_kit_and_floor_one(data):
 def test_descend_caps_at_max_floor(data):
     run = new_run(data, seed=1)
     run.steps_since_encounter = 9
+    run.leader.take_damage(20)
+    run.leader.stats.mp = 0
     assert run.descend() == 2
     assert run.steps_since_encounter == 0
+    assert run.leader.hp == run.leader.max_hp - 20 + run.leader.max_hp * 10 // 100
+    assert run.leader.stats.mp == max(1, run.leader.stats.max_mp * 15 // 100)
     run.floor = MAX_FLOOR
     assert run.descend() == MAX_FLOOR
 

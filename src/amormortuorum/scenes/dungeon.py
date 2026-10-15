@@ -9,8 +9,13 @@ import arcade
 from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.combat import Battle, Outcome
-from ..systems.encounters import combat_rng, encounter_rng, roll_formation, step_encounter
-from ..systems.entities import Enemy
+from ..systems.encounters import (
+    boss_formation,
+    combat_rng,
+    encounter_rng,
+    roll_formation,
+    step_encounter,
+)
 from ..systems.fov import Visibility
 from ..systems.hub import GraveyardHub
 from ..systems.loot import roll_chest, roll_chest_gold, roll_relic
@@ -364,7 +369,7 @@ class DungeonScene(BaseScene):
         if boss is None:  # a boss floor without data: just unlock
             self.fmap.stairs_locked = False
             return
-        enemies = [Enemy.from_def(self.data.enemy(eid)) for eid in boss.enemies]
+        enemies = boss_formation(self.run.floor, self.data)
         rng = combat_rng(self.run.seed, self.run.floor, 1000 + self.run.encounters)
         self.run.encounters += 1
         self.run.steps_since_encounter = 0

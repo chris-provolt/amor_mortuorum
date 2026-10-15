@@ -2,6 +2,7 @@ import pytest
 
 from amormortuorum.systems.procgen import (
     DOOR_MIN_FLOOR,
+    PORTAL_DECAY,
     PORTAL_MIN_CHANCE,
     TRAP_KINDS,
     FloorMap,
@@ -83,8 +84,8 @@ def test_border_is_wall(seed, floor):
 
 def test_portal_chance_formula():
     assert portal_chance(1) == 0.30
-    assert portal_chance(50) == pytest.approx(0.30 * 0.985 ** 49)
-    assert portal_chance(99) == pytest.approx(max(0.02, 0.30 * 0.985 ** 98))
+    assert portal_chance(50) == pytest.approx(0.30 * PORTAL_DECAY ** 49)
+    assert portal_chance(99) == pytest.approx(max(0.02, 0.30 * PORTAL_DECAY ** 98))
     assert portal_chance(10_000) == PORTAL_MIN_CHANCE
 
 

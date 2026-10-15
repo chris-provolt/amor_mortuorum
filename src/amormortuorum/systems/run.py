@@ -16,6 +16,8 @@ from .entities import Player, new_player
 logger = logging.getLogger(__name__)
 
 RESURRECTION_TOKEN_ID = "res_token"
+DESCENT_HP_PCT = 10
+DESCENT_MP_PCT = 15
 STARTING_KIT = {"potion_small": 2, RESURRECTION_TOKEN_ID: 1}
 
 
@@ -55,10 +57,19 @@ class Run:
         return any(p.is_alive for p in self.party)
 
     def descend(self) -> int:
-        """Advance to the next floor (capped at MAX_FLOOR) and reset step counters."""
+        """Advance to the next floor (capped at MAX_FLOOR) and reset step counters.
+
+        The stairwell is a moment's rest: living members recover a little HP and MP
+        (``DESCENT_HP_PCT`` / ``DESCENT_MP_PCT``), which keeps long portal-less
+        stretches survivable without removing the pressure.
+        """
         self.floor = min(MAX_FLOOR, self.floor + 1)
         self.steps_since_encounter = 0
         self.encounters = 0
+        for member in self.party:
+            if member.is_alive:
+                member.heal(max(1, member.max_hp * DESCENT_HP_PCT // 100))
+                member.restore_mp(max(1, member.stats.max_mp * DESCENT_MP_PCT // 100))
         logger.info("Descended to floor %d", self.floor)
         return self.floor
 

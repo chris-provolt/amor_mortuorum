@@ -1,45 +1,147 @@
 {
   "T1": {
-    "step_chance": 0.05,
+    "step_chance": 0.03,
     "formations": [
-      {"enemies": ["skel_basic"], "weight": 6},
-      {"enemies": ["skel_basic", "skel_basic"], "weight": 4},
-      {"enemies": ["wraith"], "weight": 3},
-      {"enemies": ["bone_guard"], "weight": 2},
-      {"enemies": ["skel_basic", "wraith"], "weight": 2}
+      {
+        "enemies": [
+          "skel_basic"
+        ],
+        "weight": 6
+      },
+      {
+        "enemies": [
+          "skel_basic",
+          "skel_basic"
+        ],
+        "weight": 4
+      },
+      {
+        "enemies": [
+          "wraith"
+        ],
+        "weight": 3
+      },
+      {
+        "enemies": [
+          "bone_guard"
+        ],
+        "weight": 2
+      },
+      {
+        "enemies": [
+          "skel_basic",
+          "wraith"
+        ],
+        "weight": 2
+      }
     ]
   },
   "T2": {
-    "step_chance": 0.06,
+    "step_chance": 0.035,
     "formations": [
-      {"enemies": ["ghoul"], "weight": 5},
-      {"enemies": ["grave_hound", "grave_hound"], "weight": 4},
-      {"enemies": ["bone_guard", "wraith"], "weight": 3},
-      {"enemies": ["ghoul", "skel_basic", "skel_basic"], "weight": 2}
+      {
+        "enemies": [
+          "ghoul"
+        ],
+        "weight": 5
+      },
+      {
+        "enemies": [
+          "grave_hound",
+          "grave_hound"
+        ],
+        "weight": 4
+      },
+      {
+        "enemies": [
+          "bone_guard",
+          "wraith"
+        ],
+        "weight": 3
+      },
+      {
+        "enemies": [
+          "ghoul",
+          "skel_basic",
+          "skel_basic"
+        ],
+        "weight": 2
+      }
     ]
   },
   "T3": {
-    "step_chance": 0.07,
+    "step_chance": 0.04,
     "formations": [
-      {"enemies": ["revenant"], "weight": 5},
-      {"enemies": ["lich_acolyte", "ghoul"], "weight": 4},
-      {"enemies": ["grave_hound", "grave_hound", "ghoul"], "weight": 3}
+      {
+        "enemies": [
+          "revenant"
+        ],
+        "weight": 5
+      },
+      {
+        "enemies": [
+          "lich_acolyte",
+          "ghoul"
+        ],
+        "weight": 4
+      },
+      {
+        "enemies": [
+          "grave_hound",
+          "grave_hound",
+          "ghoul"
+        ],
+        "weight": 3
+      }
     ]
   },
   "T4": {
-    "step_chance": 0.08,
+    "step_chance": 0.045,
     "formations": [
-      {"enemies": ["shade"], "weight": 5},
-      {"enemies": ["bone_colossus"], "weight": 3},
-      {"enemies": ["revenant", "lich_acolyte"], "weight": 4}
+      {
+        "enemies": [
+          "shade"
+        ],
+        "weight": 5
+      },
+      {
+        "enemies": [
+          "bone_colossus"
+        ],
+        "weight": 3
+      },
+      {
+        "enemies": [
+          "revenant",
+          "lich_acolyte"
+        ],
+        "weight": 4
+      }
     ]
   },
   "T5": {
-    "step_chance": 0.09,
+    "step_chance": 0.05,
     "formations": [
-      {"enemies": ["grave_titan"], "weight": 4},
-      {"enemies": ["oblivion_spawn"], "weight": 4},
-      {"enemies": ["shade", "shade", "revenant"], "weight": 3}
+      {
+        "enemies": [
+          "grave_titan"
+        ],
+        "weight": 4
+      },
+      {
+        "enemies": [
+          "oblivion_spawn"
+        ],
+        "weight": 4
+      },
+      {
+        "enemies": [
+          "shade",
+          "shade",
+          "revenant"
+        ],
+        "weight": 3
+      }
     ]
   }
 }

@@ -24,6 +24,7 @@ def _raw():
         bosses=read("bosses.json"),
         skills=read("skills.json"),
         companions=read("companions.json"),
+        balance=read("balance.json"),
     )
 
 
