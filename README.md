@@ -20,10 +20,12 @@ What works today, end to end:
 - **Relics of the Veil**: the five non-boss relics turn up in chests (2% of chests on T1 up to 8% on T5), the collection screen lives on the title and in the Graveyard, and every relic grants a light passive (ATK/DEF/SPD, sight radius, gold or XP percent) that applies to every future run.
 - **Random encounters** that open **turn-based combat**: Attack / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling.
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
+- **Skills**: six spells learned by level (`skills.json`) and cast for MP from the combat Skill menu: single-target, all-enemy, and healing. Resting and the Tonic of Clear Mind restore MP.
+- **Party of up to four**: recruit companions at the Graveyard for gold; they level with you, share the leader's bag and gold, carry their own equipment, act in SPD order, and every survivor earns full XP. Heals target the most wounded ally.
 - **Save & Quit** from the pause menu: a one-shot mid-run save that resumes at the start of the current floor and is consumed on load.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.
 
-Not yet built (see [Roadmap](#roadmap)): party of up to four, scrolls as MP skills, audio, settings screen, controller support.
+Not yet built (see [Roadmap](#roadmap)): audio, settings screen, controller support.
 
 ---
 
@@ -79,11 +81,11 @@ Not yet built (see [Roadmap](#roadmap)): party of up to four, scrolls as MP skil
 
 ## Combat
 - **Style:** Turn-based, menu-driven, classic JRPG feel.
-- **Actions:** Attack, Skill(Scroll), Item, Defend, Flee.
+- **Actions:** Attack, Skill (MP spells learned by level), Item, Defend, Flee.
 - **Turn Order:** Per round, sort all living battlers by **SPD** (descending). Ties break deterministically (players first, then index).
-- **Damage:** `dmg = max(1, atk - df + small_rng)`; defending halves incoming damage; defeat sets HP to 0. Items apply immediately: potions heal, scrolls deal flat damage.
+- **Damage:** `dmg = max(1, atk - df + small_rng)`; defending halves incoming damage; defeat sets HP to 0. Items apply immediately: potions heal, scrolls deal flat damage. Skills deal `damage + level` ignoring DEF, or heal an ally, and cost MP.
 - **Flee:** `clamp(0.5 + 0.05 * (party_spd - max_enemy_spd), 0.1, 0.9)`.
-- **Party:** 1-4 members (the slice plays solo). Enemy formations vary by floor tier.
+- **Party:** 1-4 members; companions are hired in the Graveyard (`companions.json`). Enemy formations vary by floor tier.
 
 ## Items, Loot & Economy
 - **Equip Slots:** `weapon, armor, helm, shield, accessory`.
@@ -123,7 +125,7 @@ Not yet built (see [Roadmap](#roadmap)): party of up to four, scrolls as MP skil
   - **Movement / menu cursor:** Arrow Keys / WASD
   - **Confirm / interact (stairs, portal):** Enter / Space
   - **Back / pause:** Esc
-  - **Bag & Equipment:** Tab
+  - **Bag & Equipment:** Tab (Left / Right switches party member)
   - **Minimap toggle:** M
   - **Combat target:** Left / Right
 - **Planned:** screen-shake and colourblind toggles (minimap icons are colour-only today), font scaling, controller support.
@@ -151,7 +153,8 @@ src/amormortuorum/
 │   └── scenes/            # BaseScene + stack-based SceneManager (arcade-free)
 ├── data/                  # JSON content + GameData loader/validator
 │   ├── items.json  enemies.json  loot_tables.json  floor_tiers.json
-│   └── relics.json  encounters.json  shop.json  xp_curve.json  bosses.json
+│   ├── relics.json  encounters.json  shop.json  xp_curve.json
+│   └── bosses.json  skills.json  companions.json
 ├── systems/               # pure-Python game rules (no arcade)
 │   ├── rng.py             # seeded streams
 │   ├── procgen.py         # BSP floors, portal chance
@@ -163,6 +166,7 @@ src/amormortuorum/
 │   ├── progression.py     # XP curve, level-ups
 │   ├── fov.py             # shadowcasting field of view, explored memory
 │   ├── relics.py          # relic passives and collection rows
+│   ├── party.py           # recruiting, shared bag, most-wounded targeting
 │   ├── hub.py  shop.py  crypt.py
 ├── persistence/           # SaveManager, SaveGame/MetaState/RunState, atomic writes
 ├── ui/                    # VerticalMenu model + MenuView, Hud, Minimap
@@ -223,6 +227,16 @@ Per step the chance is `min(0.35, step_chance * (1 + 0.1 * steps_since_last_enco
 
 ### `relics.json`
 Ten entries `{"id":"veil_1".."veil_9" | "veil_final", "name", "desc", "passive": {...}}`. Passive keys: `atk, df, spd, fov, gold_pct, xp_pct`. Relics referenced by `bosses.json` are boss-only; the rest can drop from chests.
+
+### `skills.json`
+```json
+[{"id": "ember", "name": "Ember", "mp": 3, "damage": 12, "target": "enemy", "learn_level": 1},
+ {"id": "mend", "name": "Mend", "mp": 4, "heal": 20, "target": "ally", "learn_level": 2}]
+```
+Targets: `enemy`, `all_enemies`, `ally`. Exactly one of `damage` or `heal`.
+
+### `companions.json`
+`{"id": "ossian", "name": "Ossian", "cost": 60, "desc": "...", "stats": {"max_hp": 55, "max_mp": 2, "atk": 9, "df": 4, "spd": 3}}`; recruits are levelled to the leader's XP.
 
 ### `bosses.json`
 ```json
@@ -286,8 +300,9 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 
 ## Roadmap
 Design notes for each epic live in `docs/epics/`. Rough order from here:
-1. Party of up to four (combat already iterates a party list; needs recruitment and UI).
-2. Scrolls as MP skills, audio, settings screen, controller support.
+1. Audio hooks and placeholder sound effects wired to the volume settings.
+2. Settings screen (fullscreen, volumes, key bindings).
+3. Controller support.
 
 ---
 
