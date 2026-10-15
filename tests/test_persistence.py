@@ -37,8 +37,8 @@ def test_crypt_capacity_and_persistence(tmp_path: Path):
 
 def test_relic_collection_validation():
     rc = RelicCollection()
-    rc.add("veil_fragment_1")
-    assert rc.has("veil_fragment_1")
+    rc.add("veil_1")
+    assert rc.has("veil_1")
 
     with pytest.raises(SaveValidationError):
         rc.add("unknown_relic")

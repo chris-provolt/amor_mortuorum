@@ -9,19 +9,8 @@ from .errors import SaveValidationError
 # Increment when making breaking schema changes
 SCHEMA_VERSION = 1
 
-# Canonical set of relic identifiers (9 + 1 as per design)
-DEFAULT_RELIC_IDS: Set[str] = {
-    "veil_fragment_1",
-    "veil_fragment_2",
-    "veil_fragment_3",
-    "veil_fragment_4",
-    "veil_fragment_5",
-    "veil_fragment_6",
-    "veil_fragment_7",
-    "veil_fragment_8",
-    "veil_fragment_9",
-    "veil_final",
-}
+# Canonical set of relic identifiers (9 + 1 as per design; matches data/relics.json)
+DEFAULT_RELIC_IDS: Set[str] = {f"veil_{i}" for i in range(1, 10)} | {"veil_final"}
 
 
 @dataclass
@@ -122,30 +111,60 @@ class RelicCollection:
 
 @dataclass
 class MetaState:
-    """Persistent meta-progression data that survives across runs."""
+    """Persistent meta-progression data that survives across runs.
+
+    - ``hub_cycle``: number of Graveyard visits; drives deterministic shop restocks
+    - ``meta_seed``: profile-level seed mixed into hub randomness (shop stock)
+    - ``runs_completed`` / ``deepest_floor``: lightweight lifetime stats
+    """
 
     relics: RelicCollection = field(default_factory=RelicCollection)
     crypt: Crypt = field(default_factory=Crypt)
-    # Future meta fields: achievements, stats, currencies, settings, etc.
+    hub_cycle: int = 0
+    meta_seed: int = 1337
+    runs_completed: int = 0
+    deepest_floor: int = 0
+
+    def __post_init__(self) -> None:
+        for name in ("hub_cycle", "meta_seed", "runs_completed", "deepest_floor"):
+            if not isinstance(getattr(self, name), int):
+                raise SaveValidationError(f"MetaState.{name} must be an integer")
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"relics": self.relics.to_dict(), "crypt": self.crypt.to_dict()}
+        return {
+            "relics": self.relics.to_dict(),
+            "crypt": self.crypt.to_dict(),
+            "hub_cycle": self.hub_cycle,
+            "meta_seed": self.meta_seed,
+            "runs_completed": self.runs_completed,
+            "deepest_floor": self.deepest_floor,
+        }
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "MetaState":
         return MetaState(
             relics=RelicCollection.from_dict(data.get("relics", {})),
             crypt=Crypt.from_dict(data.get("crypt", {})),
+            hub_cycle=int(data.get("hub_cycle", 0)),
+            meta_seed=int(data.get("meta_seed", 1337)),
+            runs_completed=int(data.get("runs_completed", 0)),
+            deepest_floor=int(data.get("deepest_floor", 0)),
         )
 
 
 @dataclass
 class RunState:
-    """Current run state (not meta). Full save only allowed at Graveyard by policy."""
+    """Current run state (not meta). Full save only allowed at Graveyard by policy.
+
+    ``party`` holds serialized players (see ``systems.entities.Player.to_dict``);
+    persistence treats them as opaque dicts.
+    """
 
     floor: int = 1
     in_graveyard: bool = True
     rng_seed: int = 0
+    party: List[Dict[str, Any]] = field(default_factory=list)
+    steps_since_encounter: int = 0
     started_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     last_updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -156,6 +175,10 @@ class RunState:
             raise SaveValidationError("RunState.in_graveyard must be a boolean")
         if not isinstance(self.rng_seed, int):
             raise SaveValidationError("RunState.rng_seed must be an integer")
+        if not isinstance(self.party, list) or not all(isinstance(p, dict) for p in self.party):
+            raise SaveValidationError("RunState.party must be a list of dicts")
+        if not isinstance(self.steps_since_encounter, int) or self.steps_since_encounter < 0:
+            raise SaveValidationError("RunState.steps_since_encounter must be a non-negative int")
 
     def touch(self) -> None:
         self.last_updated_at = datetime.now(timezone.utc).isoformat()
@@ -165,6 +188,8 @@ class RunState:
             "floor": self.floor,
             "in_graveyard": self.in_graveyard,
             "rng_seed": self.rng_seed,
+            "party": [dict(p) for p in self.party],
+            "steps_since_encounter": self.steps_since_encounter,
             "started_at": self.started_at,
             "last_updated_at": self.last_updated_at,
         }
@@ -175,6 +200,8 @@ class RunState:
             floor=int(data.get("floor", 1)),
             in_graveyard=bool(data.get("in_graveyard", True)),
             rng_seed=int(data.get("rng_seed", 0)),
+            party=list(data.get("party", []) or []),
+            steps_since_encounter=int(data.get("steps_since_encounter", 0)),
             started_at=data.get("started_at") or datetime.now(timezone.utc).isoformat(),
             last_updated_at=data.get("last_updated_at") or datetime.now(timezone.utc).isoformat(),
         )

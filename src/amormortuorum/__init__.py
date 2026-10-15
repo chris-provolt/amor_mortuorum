@@ -1,49 +1,36 @@
 """
-Amor Mortuorum core package.
+Amor Mortuorum: a dark roguelite built with Python + Arcade.
 
-This package provides headless domain logic for the Graveyard hub including:
-- Player and item models
-- Limited-stock Shop with deterministic, cycle-based restocking
-- Crypt persistent storage (3 slots) across runs
-- Save system for meta progression and crypt contents
-- GraveyardHub service orchestrating rest, shop, and crypt interactions
+Layout:
+- ``data``: static game content loaded from JSON (items, enemies, tables)
+- ``systems``: pure-Python rules (procgen, combat, loot, run state, hub)
+- ``persistence``: save files (meta progression + run state)
+- ``core`` / ``scenes`` / ``ui``: the Arcade application layer
 
-UI layers (Arcade, CLI, etc.) should import and compose these services.
+Importing this package does not import arcade.
 """
-from .models import Item, ItemCatalog, Inventory, Player
-from .hub import GraveyardHub
-from .shop import Shop
-from .crypt import Crypt
-from .save import SaveManager, SaveData
-from .errors import (
-    AmorError,
-    InsufficientGold,
-    OutOfStock,
-    CryptFull,
-    InvalidOperation,
-    NotFound,
-)
-
 from importlib.metadata import PackageNotFoundError, version
 
+from .errors import (
+    AmorError,
+    CryptFull,
+    InsufficientGold,
+    InvalidOperation,
+    NotFound,
+    OutOfStock,
+)
+
 __all__ = [
-    "Item",
-    "ItemCatalog",
-    "Inventory",
-    "Player",
-    "GraveyardHub",
-    "Shop",
-    "Crypt",
-    "SaveManager",
-    "SaveData",
     "AmorError",
     "InsufficientGold",
     "OutOfStock",
     "CryptFull",
     "InvalidOperation",
     "NotFound",
+    "__version__",
 ]
+
 try:
-    __version__ = version("amormortuorum")
+    __version__ = version("amor-mortuorum")
 except PackageNotFoundError:  # pragma: no cover
     __version__ = "0.0.0"

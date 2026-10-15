@@ -87,6 +87,19 @@ class SaveManager:
                 # Fall back to meta; run state may be None
                 return self._load_save_with_fallback(self.meta_path)
 
+    def clear_run(self) -> None:
+        """Forget the stored run (run over) while keeping meta progression."""
+        with self.lock:
+            save = self._load_or_init_save()
+            save.run = None
+            save.touch()
+            self._atomic_write(self.meta_path, encode_save(save))
+            for path in (self.run_path, self.run_path.with_suffix(".json.bak")):
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    pass
+
     # Internal utilities
 
     def _load_or_init_save(self) -> SaveGame:
