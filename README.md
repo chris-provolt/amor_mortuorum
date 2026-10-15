@@ -10,13 +10,20 @@ _A re-imagining of Lufia II's Ancient Cave as a modern, dark roguelite built wit
 What works today, end to end:
 
 - Title screen with **New Run** / **Continue** / **Quit**.
-- **Graveyard hub**: rest, 3-slot **Crypt** (deposit/withdraw, persists across runs), and the stairs down. Entering the Graveyard writes the save.
+- **Graveyard hub**: rest, a limited-stock **Shop** that restocks each visit, a 3-slot **Crypt** (deposit/withdraw, persists across runs), and the stairs down. Entering the Graveyard writes the save.
+- **Bag & Equipment** screen (Tab anywhere): equip and unequip the five slots, use potions outside combat, see effective stats and XP to the next level.
+- **XP and levelling** from a data-driven curve (`xp_curve.json`): stats grow per level, speed every third level.
 - **Dungeon floors**: BSP rooms and corridors generated from `(seed, floor)`, tile movement, chests with depth-scaled loot or gold, stairs to the next floor, and the depth-decaying **portal** back to the Graveyard.
+- **Hazards**: hidden one-shot **spike and dart traps** that scale with depth, and from floor 2 some floors **lock the stairs room** behind doors whose **Catacomb Key** is hidden elsewhere on the floor.
+- **Fog of war and minimap**: shadowcast line of sight (walls and locked doors block), remembered tiles drawn dimmed, and a toggleable minimap (M) with icons for stairs, chests, portals, keys and sprung traps you have seen.
+- **Bosses**: mini-bosses guard the stairs on B20/40/60/80 (each drops a Relic of the Veil), and **The Oblivion Heart** waits on B99; beating it awards the final relic and ends the run in victory. Bosses enrage below half HP.
+- **Relics of the Veil**: the five non-boss relics turn up in chests (2% of chests on T1 up to 8% on T5), the collection screen lives on the title and in the Graveyard, and every relic grants a light passive (ATK/DEF/SPD, sight radius, gold or XP percent) that applies to every future run.
 - **Random encounters** that open **turn-based combat**: Attack / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling.
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
+- **Save & Quit** from the pause menu: a one-shot mid-run save that resumes at the start of the current floor and is consumed on load.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.
 
-Not yet built (see [Roadmap](#roadmap)): shop UI, equipment screen, traps/doors/keys, fog of war and minimap, mini-bosses and the final boss, relic drops and the collection screen, XP curve and levelling, audio, settings screen, controller support.
+Not yet built (see [Roadmap](#roadmap)): party of up to four, scrolls as MP skills, audio, settings screen, controller support.
 
 ---
 
@@ -87,12 +94,14 @@ Not yet built (see [Roadmap](#roadmap)): shop UI, equipment screen, traps/doors/
 
 ## Relics of the Veil (Meta Progression)
 - **Set:** 9 relics + **Final Relic** ("**Heart of Oblivion**").
+- **Sources:** four from the mini-bosses, the final one from The Oblivion Heart, five from rare chest finds.
+- **Passives:** each relic adds a small permanent bonus (see `relics.json`); totals show on the collection screen.
 - **Persistence:** Stored in the meta save; completion survives across runs.
 - **Names:** Lamplight of the Veil, Thorn of Epitaph, Obol of Passage, Votive Ashes, Mortis Dial, Widow's Knot, Catacomb Key, Lacrimosa Phial, Ossuary Crown, **Heart of Oblivion**.
 
 ## Procedural Generation
 - **Algorithm:** BSP split into leaves, one room per leaf, L-shaped corridors joining sibling subtrees; the whole floor is connected.
-- **Features:** Start room, stairs in the room farthest from the start, 1-5 chests scaling with depth, and a portal on a chance roll.
+- **Features:** Start room, stairs in the room farthest from the start, 1-5 chests scaling with depth, a portal on a chance roll, 0-4 hidden traps, and (35% of floors from B2) locked doors on every entrance of the stairs room with a key placed somewhere still reachable.
 - **Determinism:** Floor layout derives from `floor_rng(seed, floor)`; chest contents from `chest_rng(seed, floor)`; encounters and each battle from named streams (see [Testing & Determinism](#testing--determinism)).
 
 ## Portals to Graveyard (Depth-Scaling)
@@ -114,8 +123,10 @@ Not yet built (see [Roadmap](#roadmap)): shop UI, equipment screen, traps/doors/
   - **Movement / menu cursor:** Arrow Keys / WASD
   - **Confirm / interact (stairs, portal):** Enter / Space
   - **Back / pause:** Esc
+  - **Bag & Equipment:** Tab
+  - **Minimap toggle:** M
   - **Combat target:** Left / Right
-- **Planned:** screen-shake and colourblind toggles, font scaling, controller support, minimap toggle (`M`).
+- **Planned:** screen-shake and colourblind toggles (minimap icons are colour-only today), font scaling, controller support.
 
 ## Tech Stack
 - **Language:** Python **3.10+** (tested on 3.11 and 3.13)
@@ -140,7 +151,7 @@ src/amormortuorum/
 │   └── scenes/            # BaseScene + stack-based SceneManager (arcade-free)
 ├── data/                  # JSON content + GameData loader/validator
 │   ├── items.json  enemies.json  loot_tables.json  floor_tiers.json
-│   └── relics.json  encounters.json  shop.json
+│   └── relics.json  encounters.json  shop.json  xp_curve.json  bosses.json
 ├── systems/               # pure-Python game rules (no arcade)
 │   ├── rng.py             # seeded streams
 │   ├── procgen.py         # BSP floors, portal chance
@@ -149,10 +160,13 @@ src/amormortuorum/
 │   ├── combat.py          # Battle: actions, turn order, damage, outcome
 │   ├── encounters.py      # step rolls and formations
 │   ├── run.py             # Run state, death/resurrection, persistence bridge
+│   ├── progression.py     # XP curve, level-ups
+│   ├── fov.py             # shadowcasting field of view, explored memory
+│   ├── relics.py          # relic passives and collection rows
 │   ├── hub.py  shop.py  crypt.py
 ├── persistence/           # SaveManager, SaveGame/MetaState/RunState, atomic writes
-├── ui/                    # VerticalMenu model + MenuView, Hud
-└── scenes/                # boot, main_menu, graveyard, dungeon, combat, run_summary
+├── ui/                    # VerticalMenu model + MenuView, Hud, Minimap
+└── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, relics, run_summary
 tests/                     # pytest; GL-marked tests open a window (opt-in)
 tools/ci/build_binary.py   # PyInstaller one-file build
 docs/                      # design notes per epic, CI, save system
@@ -208,7 +222,14 @@ Weights per **tier** used by chests to pick a quality bucket.
 Per step the chance is `min(0.35, step_chance * (1 + 0.1 * steps_since_last_encounter))`.
 
 ### `relics.json`
-Ten entries `{"id":"veil_1".."veil_9" | "veil_final", "name", "desc"}`.
+Ten entries `{"id":"veil_1".."veil_9" | "veil_final", "name", "desc", "passive": {...}}`. Passive keys: `atk, df, spd, fov, gold_pct, xp_pct`. Relics referenced by `bosses.json` are boss-only; the rest can drop from chests.
+
+### `bosses.json`
+```json
+{"20": {"name": "The Warden of Ash", "enemies": ["warden_of_ash"], "relic_id": "veil_3"},
+ "99": {"name": "The Oblivion Heart", "enemies": ["oblivion_heart"], "relic_id": "veil_final", "final": true}}
+```
+Boss enemies carry `"boss": true` and an `"enrage"` ATK bonus that switches on below half HP.
 
 ### `shop.json`
 `{"potion_small": {"price": 20, "qty_range": [2, 5]}, ...}`; stock per Graveyard visit is drawn from `(meta_seed, hub_cycle)`.
@@ -218,7 +239,7 @@ Ten entries `{"id":"veil_1".."veil_9" | "veil_final", "name", "desc"}`.
 ## Save System
 - **Location:** per-profile folder under the platform data dir (`%APPDATA%\AmorMortuorum\profiles\<profile>` on Windows, `~/Library/Application Support/AmorMortuorum` on macOS, `~/.local/share/amormortuorum` on Linux). Choose a profile with `--profile`.
 - **Files:** `meta.json` (relics, crypt, hub cycle, lifetime stats) and `run.json` (floor, seed, party, inventory). Writes are atomic with a `.bak` copy and corruption recovery.
-- **Rules:** A full save (meta + run) is written only in the **Graveyard**. In the dungeon only meta changes are saved. **Continue** resumes at the Graveyard on the floor you were about to enter. Dying without a token clears the run and keeps meta.
+- **Rules:** A full save (meta + run) is written only in the **Graveyard**. In the dungeon only meta changes are saved, except **Save & Quit** from the pause menu, which writes a one-shot mid-run save. **Continue** resumes at the Graveyard on the floor you were about to enter, or at the start of the saved floor after a Save & Quit (that save is cleared as soon as it loads). Dying without a token clears the run and keeps meta.
 - **Schema:** versioned (`schema_version`) with a migration hook in `persistence/codec.py`.
 
 ---
@@ -264,15 +285,9 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 ---
 
 ## Roadmap
-Design notes for each epic live in `docs/epics/`. Rough order after the slice:
-1. Shop UI in the Graveyard (service and data already exist).
-2. Equipment and inventory screen (`Equipment.equip` already aggregates stats).
-3. XP curve and levelling; party of up to four.
-4. Traps, locked doors and keys in procgen.
-5. Fog of war and minimap.
-6. Mini-bosses at 20/40/60/80 with locked stairs; final boss at B99.
-7. Relic drops, collection screen, final relic award, relic passives.
-8. Scrolls as skills, audio, settings screen, controller support, save-and-quit mid-run.
+Design notes for each epic live in `docs/epics/`. Rough order from here:
+1. Party of up to four (combat already iterates a party list; needs recruitment and UI).
+2. Scrolls as MP skills, audio, settings screen, controller support.
 
 ---
 

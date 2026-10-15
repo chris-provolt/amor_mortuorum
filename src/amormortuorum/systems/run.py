@@ -32,6 +32,7 @@ class RunSummary:
     gold: int
     cause: str
     revived: bool = False
+    victory: bool = False
 
 
 @dataclass
@@ -91,12 +92,13 @@ class Run:
             message=f"You fell on floor {self.floor}. The Veil keeps what it takes.",
         )
 
-    def summary(self, cause: str, revived: bool = False) -> RunSummary:
+    def summary(self, cause: str, revived: bool = False, victory: bool = False) -> RunSummary:
         return RunSummary(
             floor_reached=self.floor,
             gold=sum(p.gold for p in self.party),
             cause=cause,
             revived=revived,
+            victory=victory,
         )
 
     # Persistence
@@ -129,5 +131,9 @@ def new_run(
     for item_id, qty in STARTING_KIT.items():
         player.inventory.add(data.item(item_id), qty)
     run = Run(seed=seed, floor=1, party=[player])
+    if meta is not None:
+        from .relics import apply_passives
+
+        apply_passives(run, meta, data)
     logger.info("New run started: seed=%d", seed)
     return run

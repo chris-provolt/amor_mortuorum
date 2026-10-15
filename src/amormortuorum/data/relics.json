@@ -1,12 +1,12 @@
 [
-  {"id": "veil_1", "name": "Lamplight of the Veil", "desc": "Faintly parts the darkness."},
-  {"id": "veil_2", "name": "Thorn of Epitaph", "desc": "Wounds that never heal."},
-  {"id": "veil_3", "name": "Obol of Passage", "desc": "A coin for the ferryman."},
-  {"id": "veil_4", "name": "Votive Ashes", "desc": "What remains of a prayer."},
-  {"id": "veil_5", "name": "Mortis Dial", "desc": "It counts down, never up."},
-  {"id": "veil_6", "name": "Widow's Knot", "desc": "Tied once, never undone."},
-  {"id": "veil_7", "name": "Catacomb Key", "desc": "Opens doors best left shut."},
-  {"id": "veil_8", "name": "Lacrimosa Phial", "desc": "Tears of the unmourned."},
-  {"id": "veil_9", "name": "Ossuary Crown", "desc": "Ruler of the silent."},
-  {"id": "veil_final", "name": "Heart of Oblivion", "desc": "The final relic, beyond the deepest door."}
+  {"id": "veil_1", "name": "Lamplight of the Veil", "desc": "Faintly parts the darkness.", "passive": {"fov": 2}},
+  {"id": "veil_2", "name": "Thorn of Epitaph", "desc": "Wounds that never heal.", "passive": {"atk": 1}},
+  {"id": "veil_3", "name": "Obol of Passage", "desc": "A coin for the ferryman.", "passive": {"gold_pct": 15}},
+  {"id": "veil_4", "name": "Votive Ashes", "desc": "What remains of a prayer.", "passive": {"df": 1}},
+  {"id": "veil_5", "name": "Mortis Dial", "desc": "It counts down, never up.", "passive": {"spd": 1}},
+  {"id": "veil_6", "name": "Widow's Knot", "desc": "Tied once, never undone.", "passive": {"df": 1}},
+  {"id": "veil_7", "name": "Catacomb Key", "desc": "Opens doors best left shut.", "passive": {"xp_pct": 10}},
+  {"id": "veil_8", "name": "Lacrimosa Phial", "desc": "Tears of the unmourned.", "passive": {"atk": 1, "spd": 1}},
+  {"id": "veil_9", "name": "Ossuary Crown", "desc": "Ruler of the silent.", "passive": {"atk": 1, "df": 1}},
+  {"id": "veil_final", "name": "Heart of Oblivion", "desc": "The final relic, beyond the deepest door.", "passive": {"xp_pct": 25, "gold_pct": 25}}
 ]

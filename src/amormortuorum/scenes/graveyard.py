@@ -9,6 +9,8 @@ import arcade
 from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.hub import GraveyardHub
+from ..systems.progression import xp_to_next_level
+from ..systems.relics import apply_passives
 from ..ui.hud import Hud
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 
@@ -38,6 +40,7 @@ class GraveyardScene(BaseScene):
         run = self.app.state.run
         self.ctx = self.hub.enter()
         run.in_graveyard = True
+        apply_passives(run, self.app.state.meta, self.app.state.data)
         self.hub.save_run(run)
 
         self._title = arcade.Text(
@@ -77,11 +80,41 @@ class GraveyardScene(BaseScene):
                     "Enter the Dungeon", self._enter_dungeon, hint="Descend to the next floor"
                 ),
                 MenuItem("Rest", self._rest, hint="Recover all HP and MP"),
+                MenuItem("Shop", self._show_shop_menu, hint="Limited stock; restocks each visit"),
                 MenuItem("Crypt", self._show_crypt_menu, hint="Store up to 3 stacks between runs"),
+                MenuItem("Bag & Equipment", self._open_inventory, hint="Equip gear, use potions"),
+                MenuItem(
+                    "Relics of the Veil", self._open_relics, hint="Your collection and passives"
+                ),
                 MenuItem("Return to Title", self._quit_to_title, hint="Your run is saved here"),
             ],
             keep_selection=False,
         )
+
+    def _show_shop_menu(self) -> None:
+        self.mode = "shop"
+        leader = self.app.state.run.leader
+        data = self.app.state.data
+        items: List[MenuItem] = []
+        for item_id, entry in sorted(self.ctx.shop.stock().items()):
+            item = data.item(item_id)
+            effect = (
+                f"Heals {item.hp_restore}" if item.hp_restore
+                else f"Deals {item.damage} in combat" if item.damage
+                else item.type
+            )
+            items.append(
+                MenuItem(
+                    f"{item.name:<24} {entry.price:>4}g   x{entry.quantity}",
+                    lambda iid=item_id: self._buy(iid),
+                    enabled=leader.gold >= entry.price,
+                    hint=effect if leader.gold >= entry.price else f"Not enough gold ({effect})",
+                )
+            )
+        if not items:
+            items.append(MenuItem("Sold out", None, enabled=False))
+        items.append(MenuItem("Back", self._show_main_menu))
+        self.menu.set_items(items, keep_selection=False)
 
     def _show_crypt_menu(self) -> None:
         self.mode = "crypt"
@@ -126,6 +159,28 @@ class GraveyardScene(BaseScene):
         self.hub.rest(self.app.state.run.leader)
         self.hud.push("You rest among the stones. HP and MP restored.")
 
+    def _buy(self, item_id: str) -> None:
+        leader = self.app.state.run.leader
+        try:
+            spent = self.ctx.shop.buy(leader, item_id, 1)
+            self.hud.push(f"Bought {self.app.state.data.item(item_id).name} for {spent} gold.")
+        except AmorError as e:
+            self.hud.push(str(e))
+        selected = self.menu.selected
+        self._show_shop_menu()
+        self.menu.selected = min(selected, len(self.menu) - 1)
+        self.menu.move(0)
+
+    def _open_inventory(self) -> None:
+        from .inventory import InventoryScene
+
+        self.manager.push(InventoryScene(self.app))
+
+    def _open_relics(self) -> None:
+        from .relics import RelicsScene
+
+        self.manager.push(RelicsScene(self.app))
+
     def _deposit(self, item_id: str) -> None:
         try:
             self.hub.crypt_deposit(self.app.state.run.leader, item_id, 1)
@@ -154,8 +209,10 @@ class GraveyardScene(BaseScene):
         data = self.app.state.data
         meta = self.app.state.meta
         p = run.leader
+        nxt = xp_to_next_level(p, data)
+        xp_text = f"XP {p.xp}" + (f" (next in {nxt})" if nxt is not None else " (max)")
         lines = [
-            f"{p.name}   HP {p.hp}/{p.max_hp}   Lv {p.level}   XP {p.xp}",
+            f"{p.name}   HP {p.hp}/{p.max_hp}   Lv {p.level}   {xp_text}",
             f"ATK {p.effective_atk(data)}  DEF {p.effective_df(data)}  SPD {p.effective_spd(data)}",
             f"Next floor: B{run.floor}      Gold: {p.gold}",
             "",
@@ -190,7 +247,10 @@ class GraveyardScene(BaseScene):
         if self.menu.handle_actions(actions):
             return True
         if "cancel" in actions:
-            if self.mode == "crypt":
+            if self.mode != "main":
                 self._show_main_menu()
+            return True
+        if "menu" in actions:
+            self._open_inventory()
             return True
         return False

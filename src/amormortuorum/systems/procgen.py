@@ -13,7 +13,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import IntEnum
 from random import Random
-from typing import List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from .rng import floor_rng
 
@@ -23,12 +23,41 @@ PORTAL_BASE_CHANCE = 0.30
 PORTAL_DECAY = 0.985
 PORTAL_MIN_CHANCE = 0.02
 
+BOSS_FLOORS: Tuple[int, ...] = (20, 40, 60, 80, 99)
+DOOR_CHANCE = 0.35  # chance that a floor locks its stairs room behind a key
+DOOR_MIN_FLOOR = 2  # floor 1 never has locked doors
+KEY_ITEM_ID = "key_catacomb"
+TRAP_KINDS: Tuple[str, ...] = ("spikes", "darts")
+
 Pos = Tuple[int, int]
 
 
 class Tile(IntEnum):
     WALL = 0
     FLOOR = 1
+    DOOR = 2
+
+
+@dataclass
+class Trap:
+    """A hidden floor trap; one-shot (disarms when triggered)."""
+
+    kind: str
+    revealed: bool = False
+    armed: bool = True
+
+
+def trap_damage(kind: str, floor: int) -> int:
+    """Damage dealt by a trap of ``kind`` on ``floor``."""
+    if kind == "spikes":
+        return 4 + floor // 3
+    return 2 + floor // 4
+
+
+def trap_count_for_floor(floor: int, rng: Random) -> int:
+    """Floor 1 may have none; deeper floors carry up to four."""
+    low = 0 if floor == 1 else 1
+    return rng.randint(low, 2 + min(2, floor // 25))
 
 
 def portal_chance(floor: int) -> float:
@@ -85,6 +114,14 @@ class FloorMap:
     stairs: Pos
     chests: Set[Pos] = field(default_factory=set)
     portal: Optional[Pos] = None
+    traps: Dict[Pos, Trap] = field(default_factory=dict)
+    doors: Dict[Pos, bool] = field(default_factory=dict)  # pos -> locked
+    keys: Set[Pos] = field(default_factory=set)
+    stairs_locked: bool = False  # boss floors: cleared when the boss falls
+
+    @property
+    def is_boss_floor(self) -> bool:
+        return self.floor in BOSS_FLOORS
 
     def in_bounds(self, x: int, y: int) -> bool:
         return 0 <= x < self.width and 0 <= y < self.height
@@ -94,8 +131,16 @@ class FloorMap:
             return Tile.WALL
         return self.tiles[y][x]
 
+    def is_locked_door(self, x: int, y: int) -> bool:
+        return self.tile(x, y) == Tile.DOOR and self.doors.get((x, y), False)
+
     def is_walkable(self, x: int, y: int) -> bool:
-        return self.tile(x, y) == Tile.FLOOR
+        t = self.tile(x, y)
+        if t == Tile.FLOOR:
+            return True
+        if t == Tile.DOOR:
+            return not self.doors.get((x, y), False)
+        return False
 
     def feature_at(self, x: int, y: int) -> Optional[str]:
         pos = (x, y)
@@ -105,6 +150,13 @@ class FloorMap:
             return "chest"
         if self.portal is not None and pos == self.portal:
             return "portal"
+        if pos in self.keys:
+            return "key"
+        if self.is_locked_door(x, y):
+            return "door"
+        trap = self.traps.get(pos)
+        if trap is not None and trap.revealed:
+            return "trap"
         return None
 
     def remove_chest(self, pos: Pos) -> bool:
@@ -114,20 +166,93 @@ class FloorMap:
             return True
         return False
 
+    def pickup_key(self, pos: Pos) -> bool:
+        if pos in self.keys:
+            self.keys.discard(pos)
+            return True
+        return False
 
-def bfs_reachable(fmap: FloorMap, start: Pos) -> Set[Pos]:
-    """All floor tiles reachable from ``start`` by 4-neighbour movement."""
-    if not fmap.is_walkable(*start):
+    def unlock_door(self, pos: Pos) -> bool:
+        """Unlock the door at ``pos``; return whether it was a locked door."""
+        if self.doors.get(pos, False):
+            self.doors[pos] = False
+            return True
+        return False
+
+    def trigger_trap(self, pos: Pos) -> Optional[Trap]:
+        """Spring an armed trap at ``pos`` (reveals and disarms it). Returns it, or None."""
+        trap = self.traps.get(pos)
+        if trap is None or not trap.armed:
+            return None
+        trap.armed = False
+        trap.revealed = True
+        return trap
+
+
+def bfs_reachable(fmap: FloorMap, start: Pos, *, through_locked_doors: bool = False) -> Set[Pos]:
+    """All tiles reachable from ``start`` by 4-neighbour movement.
+
+    Locked doors block unless ``through_locked_doors`` is set.
+    """
+
+    def passable(x: int, y: int) -> bool:
+        if fmap.is_walkable(x, y):
+            return True
+        return through_locked_doors and fmap.tile(x, y) == Tile.DOOR
+
+    if not passable(*start):
         return set()
     seen: Set[Pos] = {start}
     queue = deque([start])
     while queue:
         x, y = queue.popleft()
         for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-            if (nx, ny) not in seen and fmap.is_walkable(nx, ny):
+            if (nx, ny) not in seen and passable(nx, ny):
                 seen.add((nx, ny))
                 queue.append((nx, ny))
     return seen
+
+
+def _room_entrances(tiles: List[List[int]], room: Room) -> List[Pos]:
+    """Floor tiles just outside ``room`` that touch one of its cells."""
+    cells = set(room.inner_cells())
+    out: Set[Pos] = set()
+    height = len(tiles)
+    width = len(tiles[0]) if tiles else 0
+    for cx, cy in cells:
+        for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
+            if (nx, ny) in cells or not (0 <= nx < width and 0 <= ny < height):
+                continue
+            if tiles[ny][nx] == Tile.FLOOR:
+                out.add((nx, ny))
+    return sorted(out)
+
+
+def _try_lock_stairs(fmap: FloorMap, stairs_room: Room, rng: Random) -> bool:
+    """Turn every entrance of the stairs room into a locked door and drop one key
+    somewhere still reachable. Reverts and returns False if that is impossible."""
+    entrances = _room_entrances(fmap.tiles, stairs_room)
+    if not entrances:
+        return False
+    for ex, ey in entrances:
+        fmap.tiles[ey][ex] = int(Tile.DOOR)
+        fmap.doors[(ex, ey)] = True
+    reachable = bfs_reachable(fmap, fmap.start)
+    stairs_cells = set(stairs_room.inner_cells())
+    blocked = fmap.chests | set(fmap.traps) | {fmap.start}
+    if fmap.portal is not None:
+        blocked.add(fmap.portal)
+    key_candidates = sorted(
+        p for p in reachable
+        if p not in stairs_cells and p not in blocked and _manhattan(p, fmap.start) > 3
+    )
+    if fmap.stairs in reachable or not key_candidates:
+        for ex, ey in entrances:
+            fmap.tiles[ey][ex] = int(Tile.FLOOR)
+            del fmap.doors[(ex, ey)]
+        return False
+    fmap.keys.add(rng.choice(key_candidates))
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -331,7 +456,27 @@ def generate_floor(
             if cells:
                 portal = rng.choice(cells)
 
-    return FloorMap(
+    # Traps: hidden one-shot hazards on any floor tile away from the start and features.
+    occupied = reserved | chests | ({portal} if portal is not None else set())
+    entrances = set(_room_entrances(tiles, stairs_room))
+    trap_candidates = [
+        (x, y)
+        for y in range(height)
+        for x in range(width)
+        if tiles[y][x] == Tile.FLOOR
+        and (x, y) not in occupied
+        and (x, y) not in entrances
+        and _manhattan((x, y), start) > 2
+    ]
+    traps: Dict[Pos, Trap] = {}
+    for _ in range(trap_count_for_floor(floor, rng)):
+        if not trap_candidates:
+            break
+        pos = rng.choice(trap_candidates)
+        trap_candidates.remove(pos)
+        traps[pos] = Trap(kind=rng.choice(TRAP_KINDS))
+
+    fmap = FloorMap(
         floor=floor,
         seed=seed,
         width=width,
@@ -342,7 +487,21 @@ def generate_floor(
         stairs=stairs,
         chests=chests,
         portal=portal,
+        traps=traps,
+        stairs_locked=floor in BOSS_FLOORS,
     )
+
+    # Locked stairs room: some floors hide the key elsewhere on the floor.
+    # Boss floors are gated by the boss instead, never by a key.
+    if (
+        floor >= DOOR_MIN_FLOOR
+        and floor not in BOSS_FLOORS
+        and len(rooms) > 2
+        and rng.random() < DOOR_CHANCE
+    ):
+        _try_lock_stairs(fmap, stairs_room, rng)
+
+    return fmap
 
 
 __all__ = [
@@ -350,12 +509,20 @@ __all__ = [
     "PORTAL_BASE_CHANCE",
     "PORTAL_DECAY",
     "PORTAL_MIN_CHANCE",
+    "BOSS_FLOORS",
+    "DOOR_CHANCE",
+    "DOOR_MIN_FLOOR",
+    "KEY_ITEM_ID",
+    "TRAP_KINDS",
     "Pos",
     "Tile",
+    "Trap",
     "Room",
     "FloorMap",
     "portal_chance",
     "chest_count_for_floor",
+    "trap_damage",
+    "trap_count_for_floor",
     "generate_floor",
     "bfs_reachable",
 ]

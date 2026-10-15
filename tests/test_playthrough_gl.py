@@ -43,6 +43,8 @@ class Driver:
             "right": arcade.key.RIGHT,
             "enter": arcade.key.ENTER,
             "esc": arcade.key.ESCAPE,
+            "tab": arcade.key.TAB,
+            "m": arcade.key.M,
         }
 
     def frame(self, dt: float = 1 / 60):
@@ -230,3 +232,312 @@ def test_death_without_token_ends_run_and_clears_save(app):
     assert app.state.meta.runs_completed == 1
     # Continue is disabled; New Run still works
     assert d.scene.menu.items[1].enabled is False
+
+
+def test_shop_and_inventory_screens(app):
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    assert d.scene_name() == "GraveyardScene"
+    run = app.state.run
+    data = app.state.data
+    leader = run.leader
+    gold_before = leader.gold
+
+    # Shop: buy the first affordable item once
+    d.press("down")
+    d.press("down")
+    d.press("enter")  # Shop (Enter, Rest, Shop, ...)
+    assert d.scene.mode == "shop"
+    stock = d.scene.ctx.shop.stock()
+    first_id = sorted(stock)[0]
+    assert leader.gold >= stock[first_id].price, "seeded stock should be affordable"
+    bag_before = leader.inventory.count(first_id)
+    d.press("enter")  # buy one
+    assert leader.gold == gold_before - stock[first_id].price
+    assert leader.inventory.count(first_id) == bag_before + 1
+    d.press("esc")
+    assert d.scene.mode == "main"
+
+    # Inventory: equip a blade from the bag via Tab, then unequip it
+    leader.inventory.add(data.item("blade_bone"), 1)
+    base_atk = leader.effective_atk(data)
+    d.press("tab")
+    assert d.scene_name() == "InventoryScene"
+    labels = [it.label for it in d.scene.menu.items]
+    idx = next(i for i, label in enumerate(labels) if "Bone Shard Blade" in label)
+    for _ in range(idx - d.scene.menu.selected):
+        d.press("down")
+    d.press("enter")  # equip
+    assert leader.equipment.slots["weapon"] == "blade_bone"
+    assert leader.effective_atk(data) == base_atk + 3
+    while d.scene.menu.selected != 0:
+        d.press("up")
+    d.press("enter")  # unequip weapon slot
+    assert leader.equipment.slots["weapon"] is None
+    assert leader.inventory.count("blade_bone") == 1
+    d.press("esc")
+    assert d.scene_name() == "GraveyardScene"
+
+    # Level-up after a victory in the dungeon is reflected in the HUD and stats
+    d.press("enter")  # Enter the Dungeon (cursor reset to first item)
+    assert d.scene_name() == "DungeonScene"
+    from amormortuorum.systems.combat import Battle
+    from amormortuorum.systems.entities import Enemy
+    from amormortuorum.scenes.combat import CombatScene
+    from amormortuorum.systems.rng import stream_rng
+
+    leader.xp = data.xp_curve.xp_for_level(2) - 1
+    weak = Enemy.from_def(data.enemy("skel_basic"))
+    weak.stats.hp = 1
+    battle = Battle(run.party, [weak], stream_rng(3, 1, "t"), data)
+    d.scene.active_battle = battle
+    app.scene_manager.push(CombatScene(app, battle))
+    d.frame()
+    d.fight_until_done()
+    assert d.scene_name() == "DungeonScene"
+    assert leader.level == 2
+    assert any("Level 2!" in m for m in d.scene.hud.messages)
+
+
+def test_locked_floor_key_door_and_trap(app):
+    from amormortuorum.systems.procgen import KEY_ITEM_ID, generate_floor
+
+    # Pick a floor-5 seed whose stairs room is locked and that carries a trap
+    seed = next(
+        s for s in range(1, 200) if generate_floor(s, 5).doors and generate_floor(s, 5).traps
+    )
+    app.state.seed = seed
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    run = app.state.run
+    run.floor = 5
+    run.leader.stats.max_hp = run.leader.stats.hp = 500  # survive whatever floor 5 throws
+    run.leader.stats.atk = 60
+    d.press("enter")  # Enter the Dungeon
+    assert d.scene_name() == "DungeonScene"
+    scene = d.scene
+    fmap = scene.fmap
+    assert fmap.doors and fmap.keys and fmap.traps
+    assert fmap.floor == 5 and fmap.seed == seed
+
+    # The door blocks until we hold a key
+    door = next(iter(fmap.doors))
+    assert not run.leader.inventory.has(KEY_ITEM_ID)
+
+    # Walk to a trap first: it reveals, deals damage, and is spent
+    trap_pos = next(iter(fmap.traps))
+    hp_before = run.leader.hp
+    _walk_to(d, trap_pos)
+    if d.scene_name() == "DungeonScene" and d.scene.pos == trap_pos:
+        assert fmap.traps[trap_pos].revealed and not fmap.traps[trap_pos].armed
+        assert run.leader.hp < hp_before or run.leader.hp == run.leader.max_hp
+        assert fmap.feature_at(*trap_pos) == "trap"
+
+    # Pick up the key
+    key_pos = next(iter(fmap.keys))
+    _walk_to(d, key_pos)
+    assert d.scene_name() == "DungeonScene"
+    assert run.leader.inventory.has(KEY_ITEM_ID)
+    assert not fmap.keys
+
+    # Step into a door from a reachable neighbour: it unlocks and consumes the key
+    from amormortuorum.systems.procgen import bfs_reachable
+
+    outside = bfs_reachable(fmap, d.scene.pos)
+    door, approach = next(
+        (dr, n)
+        for dr in fmap.doors
+        for n in ((dr[0] + 1, dr[1]), (dr[0] - 1, dr[1]), (dr[0], dr[1] + 1), (dr[0], dr[1] - 1))
+        if n in outside
+    )
+    _walk_to(d, approach)
+    assert d.scene.pos == approach
+    step = {(1, 0): "right", (-1, 0): "left", (0, 1): "up", (0, -1): "down"}[
+        (door[0] - approach[0], door[1] - approach[1])
+    ]
+    d.press(step)
+    assert fmap.is_walkable(*door)
+    assert not run.leader.inventory.has(KEY_ITEM_ID)
+    assert any("key turns" in m for m in d.scene.hud.messages)
+
+    # Now the stairs are reachable; descend
+    _walk_to(d, fmap.stairs)
+    assert d.scene_name() == "DungeonScene" and d.scene.pos == fmap.stairs
+    d.press("enter")
+    assert run.floor == 6
+
+
+def test_fog_of_war_and_minimap(app):
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    d.press("enter")  # Enter the Dungeon
+    scene = d.scene
+    assert scene.pos in scene.vis.visible
+    explored_before = set(scene.vis.explored)
+    assert explored_before, "the start area is explored on entry"
+    # Tiles outside sight are invisible; the start tile is fully lit
+    assert scene._tile_sprites[scene.pos].alpha == 255
+    unseen = next(p for p in scene._tile_sprites if p not in scene.vis.explored)
+    assert scene._tile_sprites[unseen].alpha == 0
+
+    # Walk towards the stairs for a few steps; explored area grows
+    _walk_to(d, scene.fmap.stairs)
+    if d.scene_name() == "DungeonScene":
+        assert d.scene.vis.explored > explored_before
+        start_state = d.scene.vis.state(scene.fmap.start)
+        assert start_state in ("visible", "explored")
+
+    # Minimap toggles with M and draws without error in both states
+    if d.scene_name() == "DungeonScene":
+        assert d.scene.minimap.enabled
+        d.press("m")
+        assert not d.scene.minimap.enabled
+        d.press("m")
+        assert d.scene.minimap.enabled
+
+
+def _enter_floor(d: Driver, app, floor: int, *, mighty: bool = True):
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    run = app.state.run
+    run.floor = floor
+    if mighty:
+        run.leader.stats.max_hp = run.leader.stats.hp = 5000
+        run.leader.stats.atk = 400
+    d.press("enter")  # Enter the Dungeon
+    assert d.scene_name() == "DungeonScene"
+    return run
+
+
+def test_miniboss_gates_stairs_and_awards_relic(app):
+    d = Driver(app)
+    run = _enter_floor(d, app, 20)
+    scene = d.scene
+    assert scene.fmap.is_boss_floor and scene.fmap.stairs_locked
+    assert not app.state.meta.relics.has("veil_3")
+
+    _walk_to(d, scene.fmap.stairs)
+    assert d.scene_name() == "DungeonScene" and d.scene.pos == scene.fmap.stairs
+    d.press("enter")  # challenge the boss instead of descending
+    assert d.scene_name() == "CombatScene"
+    assert any(e.boss for e in d.scene.battle.enemies)
+    d.fight_until_done()
+    assert d.scene_name() == "DungeonScene"
+    assert not scene.fmap.stairs_locked
+    assert app.state.meta.relics.has("veil_3")
+    assert any("Relic of the Veil" in m for m in scene.hud.messages)
+    assert run.floor == 20
+    d.press("enter")  # now the stairs work
+    assert run.floor == 21
+
+    # The relic persisted to disk
+    assert app.state.save_manager.load_meta().relics.has("veil_3")
+
+
+def test_final_boss_victory_ends_run(app):
+    d = Driver(app)
+    run = _enter_floor(d, app, 99)
+    scene = d.scene
+    _walk_to(d, scene.fmap.stairs)
+    assert d.scene.pos == scene.fmap.stairs
+    d.press("enter")
+    assert d.scene_name() == "CombatScene"
+    d.fight_until_done(max_rounds=200)
+    assert d.scene_name() == "RunSummaryScene"
+    assert d.scene.summary.victory and d.scene.summary.floor_reached == 99
+    assert app.state.meta.relics.has("veil_final")
+    d.press("enter")
+    assert d.scene_name() == "MainMenuScene"
+    assert app.state.run is None
+    assert app.state.meta.runs_completed == 1 and app.state.meta.deepest_floor == 99
+    assert d.scene.menu.items[1].enabled is False  # no run to continue
+    del run
+
+
+def test_relics_screen_and_chest_relic_pickup(app):
+    d = Driver(app)
+    d.boot_to_menu()
+    # Relics screen from the title (Continue is disabled with no save, so one step down)
+    d.press("down")
+    assert d.scene.menu.current.label == "Relics"
+    d.press("enter")
+    assert d.scene_name() == "RelicsScene"
+    d.press("esc")
+    assert d.scene_name() == "MainMenuScene"
+    while d.scene.menu.selected != 0:
+        d.press("up")
+
+    d.press("enter")  # New Run
+    d.press("enter")  # Enter the Dungeon
+    scene = d.scene
+    run = app.state.run
+    data = app.state.data
+    # Force the next chest to yield a relic by pre-rolling the chest stream
+    from amormortuorum.systems.loot import relic_chest_chance
+
+    class AlwaysRelic:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def random(self):
+            return 0.0  # below any relic chance
+
+        def choice(self, seq):
+            return self.inner.choice(seq)
+
+        def randint(self, a, b):
+            return self.inner.randint(a, b)
+
+    assert relic_chest_chance(run.floor, data) > 0
+    scene._chest_rng = AlwaysRelic(scene._chest_rng)
+    before = set(app.state.meta.relics.collected)
+    chest = sorted(scene.fmap.chests)[0]
+    _walk_to(d, chest)
+    if d.scene_name() == "DungeonScene" and d.scene.pos == chest:
+        gained = set(app.state.meta.relics.collected) - before
+        assert len(gained) == 1
+        assert app.state.save_manager.load_meta().relics.collected >= gained
+        assert any("Relic of the Veil" in m for m in d.scene.hud.messages)
+        # Passives are live immediately
+        from amormortuorum.systems.relics import passive_totals
+
+        assert run.leader.bonuses == passive_totals(app.state.meta, data)
+
+
+def test_save_and_quit_then_continue_mid_run(app):
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    d.press("enter")  # Enter the Dungeon
+    run = app.state.run
+    run.floor = 3
+    seed = run.seed
+    d.scene.run.leader.take_damage(5)
+    hp = run.leader.hp
+
+    d.press("esc")  # pause
+    labels = [it.label for it in d.scene.pause_menu.items]
+    target = labels.index("Save & Quit")
+    for _ in range(target - d.scene.pause_menu.selected):
+        d.press("down")
+    d.press("enter")
+    assert d.scene_name() == "MainMenuScene"
+    assert app.state.run is None
+    assert "mid-run" in d.scene.menu.items[1].hint
+
+    d.press("down")  # Continue
+    assert d.scene.menu.current.label == "Continue"
+    d.press("enter")
+    assert d.scene_name() == "DungeonScene"
+    resumed = app.state.run
+    assert resumed.floor == 3 and resumed.seed == seed and resumed.leader.hp == hp
+    assert d.scene.fmap.floor == 3
+
+    # The mid-run save was consumed: quitting again without saving loses it
+    from amormortuorum.systems.hub import GraveyardHub
+
+    hub = GraveyardHub(app.state.save_manager, app.state.data, meta=app.state.meta)
+    assert hub.peek_run() is None

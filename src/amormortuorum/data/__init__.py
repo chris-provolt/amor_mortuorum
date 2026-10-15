@@ -66,6 +66,8 @@ class EnemyDef:
     behavior: str = "chase"
     xp: int = 0
     gold: int = 0
+    boss: bool = False
+    enrage: int = 0  # extra ATK once below half HP (a simple second phase)
 
 
 @dataclass(frozen=True)
@@ -78,11 +80,19 @@ class FloorTier:
         return self.start <= floor <= self.end
 
 
+PASSIVE_KEYS: Tuple[str, ...] = ("atk", "df", "spd", "fov", "gold_pct", "xp_pct")
+
+
 @dataclass(frozen=True)
 class RelicDef:
     id: str
     name: str
     desc: str = ""
+    passive: Dict[str, int] = field(default_factory=dict)
+
+    @property
+    def is_final(self) -> bool:
+        return self.id == "veil_final"
 
 
 @dataclass(frozen=True)
@@ -103,6 +113,49 @@ class ShopEntry:
     qty_range: Tuple[int, int]
 
 
+@dataclass(frozen=True)
+class BossDef:
+    floor: int
+    name: str
+    enemies: Tuple[str, ...]
+    relic_id: Optional[str] = None
+    final: bool = False
+
+
+@dataclass(frozen=True)
+class XpCurve:
+    """``thresholds[i]`` is the total XP needed to reach level ``i + 1``."""
+
+    max_level: int = 30
+    thresholds: Tuple[int, ...] = tuple(int(20 * (n ** 1.6)) for n in range(30))
+    per_level: Dict[str, int] = field(
+        default_factory=lambda: {"max_hp": 6, "max_mp": 1, "atk": 1, "df": 1}
+    )
+    spd_every: int = 3
+
+    def xp_for_level(self, level: int) -> int:
+        level = max(1, min(level, self.max_level))
+        return self.thresholds[level - 1]
+
+    def level_for_xp(self, xp: int) -> int:
+        level = 1
+        for i, needed in enumerate(self.thresholds):
+            if xp >= needed:
+                level = i + 1
+            else:
+                break
+        return min(level, self.max_level)
+
+    @staticmethod
+    def from_raw(raw: dict) -> "XpCurve":
+        return XpCurve(
+            max_level=int(raw.get("max_level", 30)),
+            thresholds=tuple(int(t) for t in raw.get("thresholds", ())),
+            per_level={k: int(v) for k, v in raw.get("per_level", {}).items()},
+            spd_every=int(raw.get("spd_every", 3)),
+        )
+
+
 @dataclass
 class GameData:
     items: Dict[str, ItemDef] = field(default_factory=dict)
@@ -112,8 +165,17 @@ class GameData:
     relics: List[RelicDef] = field(default_factory=list)
     encounters: Dict[str, TierEncounters] = field(default_factory=dict)
     shop_pool: Dict[str, ShopEntry] = field(default_factory=dict)
+    xp_curve: XpCurve = field(default_factory=XpCurve)
+    bosses: Dict[int, BossDef] = field(default_factory=dict)
 
     # Lookups
+
+    def boss_for_floor(self, floor: int) -> Optional[BossDef]:
+        return self.bosses.get(floor)
+
+    @property
+    def boss_floors(self) -> List[int]:
+        return sorted(self.bosses)
 
     def item(self, item_id: str) -> ItemDef:
         try:
@@ -135,6 +197,12 @@ class GameData:
             if tier.contains(floor):
                 return tier
         raise DataError(f"No tier covers floor {floor}")
+
+    def relic(self, relic_id: str) -> RelicDef:
+        for r in self.relics:
+            if r.id == relic_id:
+                return r
+        raise DataError(f"Unknown relic id: {relic_id}")
 
     def items_of_quality(self, quality: str) -> List[ItemDef]:
         return [it for it in self.items.values() if it.quality == quality]
@@ -175,6 +243,8 @@ class GameData:
             relics=read("relics.json"),
             encounters=read("encounters.json"),
             shop=read("shop.json"),
+            xp_curve=read("xp_curve.json"),
+            bosses=read("bosses.json"),
         )
 
     @classmethod
@@ -188,9 +258,22 @@ class GameData:
         relics: List[dict],
         encounters: Dict[str, dict],
         shop: Dict[str, dict],
+        xp_curve: Optional[dict] = None,
+        bosses: Optional[Dict[str, dict]] = None,
     ) -> "GameData":
         """Build from already-parsed JSON structures and validate."""
         data = cls()
+        if xp_curve is not None:
+            data.xp_curve = XpCurve.from_raw(xp_curve)
+        for floor_key, spec in (bosses or {}).items():
+            floor = int(floor_key)
+            data.bosses[floor] = BossDef(
+                floor=floor,
+                name=str(spec.get("name", f"Boss of B{floor}")),
+                enemies=tuple(spec.get("enemies", ())),
+                relic_id=spec.get("relic_id"),
+                final=bool(spec.get("final", False)),
+            )
         data.items = _unique_by_id("items", [_build(ItemDef, raw, "items") for raw in items])
         data.enemies = _unique_by_id(
             "enemies", [_build(EnemyDef, raw, "enemies") for raw in enemies]
@@ -279,6 +362,41 @@ class GameData:
         relic_ids = [r.id for r in self.relics]
         if len(set(relic_ids)) != len(relic_ids):
             raise DataError("relics ids must be unique")
+        for relic in self.relics:
+            for key, value in relic.passive.items():
+                if key not in PASSIVE_KEYS:
+                    raise DataError(f"relics[{relic.id}]: unknown passive {key!r}")
+                if not isinstance(value, int):
+                    raise DataError(f"relics[{relic.id}]: passive {key!r} must be an int")
+
+        # Bosses
+        relic_ids_set = {r.id for r in self.relics}
+        for floor, boss in self.bosses.items():
+            if not 1 <= floor <= MAX_FLOOR:
+                raise DataError(f"bosses: floor {floor} out of range")
+            if not boss.enemies:
+                raise DataError(f"bosses[{floor}]: needs at least one enemy")
+            for eid in boss.enemies:
+                if eid not in self.enemies:
+                    raise DataError(f"bosses[{floor}]: unknown enemy {eid!r}")
+            if boss.relic_id is not None and boss.relic_id not in relic_ids_set:
+                raise DataError(f"bosses[{floor}]: unknown relic {boss.relic_id!r}")
+        finals = [b for b in self.bosses.values() if b.final]
+        if len(finals) > 1:
+            raise DataError("bosses: only one final boss allowed")
+        if finals and finals[0].floor != MAX_FLOOR:
+            raise DataError(f"bosses: the final boss must be on floor {MAX_FLOOR}")
+
+        # XP curve
+        curve = self.xp_curve
+        if curve.max_level < 1 or len(curve.thresholds) != curve.max_level:
+            raise DataError("xp_curve: thresholds must have exactly max_level entries")
+        if curve.thresholds[0] != 0:
+            raise DataError("xp_curve: level 1 must start at 0 XP")
+        if any(b <= a for a, b in zip(curve.thresholds, curve.thresholds[1:])):
+            raise DataError("xp_curve: thresholds must be strictly increasing")
+        if curve.spd_every < 1:
+            raise DataError("xp_curve: spd_every must be >= 1")
 
 
 def _build(cls, raw: dict, source: str):
@@ -300,6 +418,7 @@ def _unique_by_id(source: str, entries: list) -> dict:
 __all__ = [
     "QUALITIES",
     "EQUIP_TYPES",
+    "PASSIVE_KEYS",
     "MAX_FLOOR",
     "DataError",
     "ItemDef",
@@ -309,5 +428,7 @@ __all__ = [
     "Formation",
     "TierEncounters",
     "ShopEntry",
+    "XpCurve",
+    "BossDef",
     "GameData",
 ]

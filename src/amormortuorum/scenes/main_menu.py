@@ -68,15 +68,22 @@ class MainMenuScene(BaseScene):
         return GraveyardHub(state.save_manager, state.data, meta=state.meta)
 
     def _rebuild_menu(self) -> None:
-        saved = self._hub().load_run()
+        saved = self._hub().peek_run()
         meta = self.app.state.meta
-        continue_hint = (
-            f"Resume at the Graveyard, floor B{saved.floor}" if saved else "No saved run"
-        )
+        if saved is None:
+            continue_hint = "No saved run"
+        elif saved.in_graveyard:
+            continue_hint = f"Resume at the Graveyard, floor B{saved.floor}"
+        else:
+            continue_hint = f"Resume mid-run at the start of floor B{saved.floor}"
         self.menu.set_items(
             [
                 MenuItem("New Run", self._new_run, hint="Begin a fresh descent from the Graveyard"),
                 MenuItem("Continue", self._continue, enabled=saved is not None, hint=continue_hint),
+                MenuItem(
+                    "Relics", self._relics,
+                    hint=f"{len(meta.relics.collected)}/10 Relics of the Veil collected",
+                ),
                 MenuItem(
                     "Quit", self._quit,
                     hint=f"Relics {len(meta.relics.collected)}/10  Deepest B{meta.deepest_floor}",
@@ -90,7 +97,7 @@ class MainMenuScene(BaseScene):
 
         state = self.app.state
         seed = state.seed if state.seed is not None else random_seed()
-        state.run = new_run(state.data, seed=seed)
+        state.run = new_run(state.data, seed=seed, meta=state.meta)
         logger.info("New run with seed %d", seed)
         self.manager.push(GraveyardScene(self.app))
 
@@ -101,7 +108,18 @@ class MainMenuScene(BaseScene):
         if run is None:
             return
         self.app.state.run = run
-        self.manager.push(GraveyardScene(self.app))
+        if run.in_graveyard:
+            self.manager.push(GraveyardScene(self.app))
+        else:
+            from .dungeon import DungeonScene
+
+            logger.info("Resuming mid-run on floor B%d", run.floor)
+            self.manager.push(DungeonScene(self.app))
+
+    def _relics(self) -> None:
+        from .relics import RelicsScene
+
+        self.manager.push(RelicsScene(self.app))
 
     def _quit(self) -> None:
         logger.info("Quit selected from MainMenu")

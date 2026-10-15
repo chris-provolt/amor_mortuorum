@@ -162,17 +162,22 @@ class Player:
     stats: Stats = field(default_factory=Stats)
     equipment: Equipment = field(default_factory=Equipment)
     inventory: Inventory = field(default_factory=Inventory)
+    # Derived modifiers (relic passives); recomputed from meta, never persisted.
+    bonuses: Dict[str, int] = field(default_factory=dict)
 
     # Derived stats
 
+    def bonus(self, key: str) -> int:
+        return self.bonuses.get(key, 0)
+
     def effective_atk(self, data: GameData) -> int:
-        return self.stats.atk + self.equipment.bonus(data)[0]
+        return self.stats.atk + self.equipment.bonus(data)[0] + self.bonus("atk")
 
     def effective_df(self, data: GameData) -> int:
-        return self.stats.df + self.equipment.bonus(data)[1]
+        return self.stats.df + self.equipment.bonus(data)[1] + self.bonus("df")
 
     def effective_spd(self, data: GameData) -> int:
-        return self.stats.spd + self.equipment.bonus(data)[2]
+        return self.stats.spd + self.equipment.bonus(data)[2] + self.bonus("spd")
 
     def effective_max_hp(self, data: GameData) -> int:
         return self.stats.max_hp + self.equipment.bonus(data)[3]
@@ -238,6 +243,24 @@ class Player:
             self.inventory.add(data.item(previous), 1)
         return previous
 
+    def unequip_to_inventory(self, slot: str, data: GameData) -> Optional[str]:
+        """Move the item in ``slot`` back to the bag. Returns its id, or None if empty."""
+        item_id = self.equipment.slots.get(slot)
+        if item_id is None:
+            return None
+        self.inventory.add(data.item(item_id), 1)  # may raise on a full stack
+        self.equipment.unequip(slot)
+        return item_id
+
+    def use_consumable(self, item: ItemDef) -> int:
+        """Use a healing consumable outside combat. Returns HP restored."""
+        if not self.inventory.has(item.id):
+            raise InvalidOperation(f"{item.name} is not in the inventory")
+        if not item.is_consumable or item.hp_restore <= 0:
+            raise InvalidOperation(f"{item.name} cannot be used here")
+        self.inventory.remove(item, 1)
+        return self.heal(item.hp_restore)
+
     # Serialization
 
     def to_dict(self) -> Dict[str, Any]:
@@ -284,6 +307,8 @@ class Enemy:
     stats: Stats
     xp: int = 0
     gold: int = 0
+    boss: bool = False
+    enrage: int = 0
 
     @staticmethod
     def from_def(d: EnemyDef) -> "Enemy":
@@ -293,7 +318,14 @@ class Enemy:
             stats=Stats(max_hp=d.hp, hp=d.hp, max_mp=d.mp, mp=d.mp, atk=d.atk, df=d.df, spd=d.spd),
             xp=d.xp,
             gold=d.gold,
+            boss=d.boss,
+            enrage=d.enrage,
         )
+
+    @property
+    def is_enraged(self) -> bool:
+        """Below half HP a boss enters its second phase and hits harder."""
+        return self.enrage > 0 and self.stats.hp * 2 <= self.stats.max_hp
 
     @property
     def is_alive(self) -> bool:

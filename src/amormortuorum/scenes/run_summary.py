@@ -22,7 +22,12 @@ class RunSummaryScene(BaseScene):
     def on_enter(self):
         super().on_enter()
         s = self.summary
-        title = "You wake among the graves" if s.revived else "Your descent ends"
+        if s.victory:
+            title = "The Veil parts"
+        elif s.revived:
+            title = "You wake among the graves"
+        else:
+            title = "Your descent ends"
         body = [
             self.message,
             "",

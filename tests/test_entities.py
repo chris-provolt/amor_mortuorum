@@ -88,3 +88,22 @@ def test_enemy_from_def(data):
     assert e.name == "Bone Guard" and e.stats.hp == 20 and e.stats.df == 5
     assert e.take_damage(25) == 20
     assert not e.is_alive
+
+
+def test_unequip_and_use_consumable(data):
+    p = new_player()
+    p.inventory.add(data.item("blade_bone"), 1)
+    p.equip_from_inventory(data.item("blade_bone"), data)
+    assert p.unequip_to_inventory("weapon", data) == "blade_bone"
+    assert p.inventory.count("blade_bone") == 1
+    assert p.equipment.slots["weapon"] is None
+    assert p.unequip_to_inventory("weapon", data) is None
+
+    p.take_damage(20)
+    p.inventory.add(data.item("potion_small"), 1)
+    assert p.use_consumable(data.item("potion_small")) == 15
+    assert p.inventory.count("potion_small") == 0
+    with pytest.raises(InvalidOperation):
+        p.use_consumable(data.item("potion_small"))  # none left
+    with pytest.raises(InvalidOperation):
+        p.use_consumable(data.item("blade_bone"))  # not a consumable

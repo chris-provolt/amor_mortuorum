@@ -9,5 +9,11 @@
   {"id": "shade", "name": "Shade", "hp": 36, "mp": 8, "atk": 16, "df": 5, "spd": 10, "behavior": "ranged", "xp": 34, "gold": 20},
   {"id": "bone_colossus", "name": "Bone Colossus", "hp": 80, "mp": 0, "atk": 18, "df": 10, "spd": 3, "behavior": "tank", "xp": 50, "gold": 30},
   {"id": "grave_titan", "name": "Grave Titan", "hp": 120, "mp": 0, "atk": 24, "df": 12, "spd": 5, "behavior": "tank", "xp": 80, "gold": 45},
-  {"id": "oblivion_spawn", "name": "Oblivion Spawn", "hp": 90, "mp": 20, "atk": 26, "df": 8, "spd": 11, "behavior": "ranged", "xp": 90, "gold": 50}
+  {"id": "oblivion_spawn", "name": "Oblivion Spawn", "hp": 90, "mp": 20, "atk": 26, "df": 8, "spd": 11, "behavior": "ranged", "xp": 90, "gold": 50},
+
+  {"id": "warden_of_ash", "name": "The Warden of Ash", "hp": 90, "mp": 0, "atk": 14, "df": 6, "spd": 5, "behavior": "tank", "xp": 120, "gold": 80, "boss": true, "enrage": 4},
+  {"id": "widow_of_knots", "name": "The Widow of Knots", "hp": 180, "mp": 10, "atk": 22, "df": 9, "spd": 7, "behavior": "ranged", "xp": 260, "gold": 160, "boss": true, "enrage": 6},
+  {"id": "ossuary_king", "name": "The Ossuary King", "hp": 300, "mp": 0, "atk": 30, "df": 13, "spd": 6, "behavior": "tank", "xp": 450, "gold": 260, "boss": true, "enrage": 8},
+  {"id": "lacrimosa", "name": "Lacrimosa, the Unmourned", "hp": 420, "mp": 30, "atk": 38, "df": 15, "spd": 10, "behavior": "ranged", "xp": 700, "gold": 400, "boss": true, "enrage": 10},
+  {"id": "oblivion_heart", "name": "The Oblivion Heart", "hp": 700, "mp": 60, "atk": 48, "df": 18, "spd": 9, "behavior": "ranged", "xp": 1500, "gold": 999, "boss": true, "enrage": 16}
 ]

@@ -289,3 +289,32 @@ def test_battle_replays_identically_with_same_seed(data):
         return battle.outcome, [e.text for e in battle.log], player.stats.hp
 
     assert play(42) == play(42)
+
+
+def test_boss_enrages_below_half_hp():
+    from random import Random
+
+    from amormortuorum.data import GameData
+    from amormortuorum.systems.combat import Battle, Battler
+    from amormortuorum.systems.entities import Enemy, new_player
+
+    data = GameData.load()
+    boss = Enemy.from_def(data.enemy("warden_of_ash"))
+    b = Battler(name=boss.name, is_player=False, index=0, ref=boss)
+    calm = b.atk
+    boss.take_damage(boss.stats.max_hp // 2)
+    assert boss.is_enraged
+    assert b.atk == calm + boss.enrage
+
+    # The log notes the phase change exactly once, on the hit that crosses the threshold
+    hero = new_player()
+    hero.stats.atk = 1000
+    hero.stats.max_hp = hero.stats.hp = 10_000
+    fresh = Enemy.from_def(data.enemy("warden_of_ash"))
+    fresh.stats.hp = fresh.stats.max_hp // 2 + 1
+    battle = Battle([hero], [fresh], Random(1), data)
+    hero.stats.atk = fresh.stats.df + 1  # hit for 1-3 damage
+    from amormortuorum.systems.combat import Action, ActionKind
+
+    events = battle.submit(Action(ActionKind.ATTACK, 0))
+    assert any("rages" in e.text for e in events)

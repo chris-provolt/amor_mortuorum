@@ -18,6 +18,7 @@ DEFAULT_ACTIONS = {
     "cancel",
     "menu",
     "pause",
+    "map",
     "debug",
 }
 
@@ -76,6 +77,7 @@ class InputManager:
             "cancel": ["ESCAPE", "BACKSPACE"],
             "menu": ["TAB"],
             "pause": ["P"],
+            "map": ["M"],
             "debug": ["F3"],
         }
 

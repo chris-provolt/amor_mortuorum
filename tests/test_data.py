@@ -20,6 +20,8 @@ def _raw():
         relics=read("relics.json"),
         encounters=read("encounters.json"),
         shop=read("shop.json"),
+        xp_curve=read("xp_curve.json"),
+        bosses=read("bosses.json"),
     )
 
 
@@ -101,3 +103,21 @@ def test_bad_quality_rejected():
 def test_missing_file_reports_name(tmp_path):
     with pytest.raises(DataError, match="items.json"):
         GameData.load(tmp_path)
+
+
+def test_bosses_load_and_validate():
+    data = GameData.load()
+    assert data.boss_floors == [20, 40, 60, 80, 99]
+    final = data.boss_for_floor(99)
+    assert final is not None and final.final and final.relic_id == "veil_final"
+    assert data.enemy("oblivion_heart").boss and data.enemy("oblivion_heart").enrage > 0
+    assert data.boss_for_floor(21) is None
+
+    raw = _raw()
+    raw["bosses"] = {"20": {"name": "x", "enemies": ["nobody"]}}
+    with pytest.raises(DataError, match="unknown enemy"):
+        GameData.from_raw(**raw)
+    raw = _raw()
+    raw["bosses"] = {"50": {"name": "x", "enemies": ["skel_basic"], "final": True}}
+    with pytest.raises(DataError, match="final boss must be on floor"):
+        GameData.from_raw(**raw)
