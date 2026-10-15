@@ -139,3 +139,31 @@ def test_save_and_load_run_only_from_graveyard(tmp_path, data):
     assert hub2.load_run() is None
     assert hub2.meta.runs_completed == 1 and hub2.meta.deepest_floor == 4
     assert GraveyardHub(hub.save_manager, data).meta.runs_completed == 1
+
+
+def test_save_and_quit_is_one_shot_and_resumes_mid_run(tmp_path, data):
+    hub = make_hub(tmp_path, data)
+    hub.enter()
+    run = new_run(data, seed=5)
+    run.floor = 9
+    run.in_graveyard = False
+    run.leader.take_damage(7)
+
+    # A plain full save outside the Graveyard is refused by policy...
+    from amormortuorum.persistence import SaveGame, SaveNotAllowed
+
+    with pytest.raises(SaveNotAllowed):
+        hub.save_manager.save_full(SaveGame(meta=hub.meta, run=run.to_run_state()))
+    # ...but save_and_quit is allowed and leaves the policy unchanged afterwards
+    hub.save_and_quit(run)
+    assert hub.save_manager.policy.allow_save_and_quit is False
+
+    hub2 = GraveyardHub(hub.save_manager, data)
+    peeked = hub2.peek_run()
+    assert peeked is not None and not peeked.in_graveyard and peeked.floor == 9
+    assert hub2.peek_run() is not None  # peeking does not consume
+
+    loaded = hub2.load_run()
+    assert loaded is not None and loaded.floor == 9 and loaded.leader.hp == run.leader.hp
+    assert hub2.load_run() is None  # consumed
+    assert hub2.meta.runs_completed == 0  # not a finished run

@@ -68,11 +68,14 @@ class MainMenuScene(BaseScene):
         return GraveyardHub(state.save_manager, state.data, meta=state.meta)
 
     def _rebuild_menu(self) -> None:
-        saved = self._hub().load_run()
+        saved = self._hub().peek_run()
         meta = self.app.state.meta
-        continue_hint = (
-            f"Resume at the Graveyard, floor B{saved.floor}" if saved else "No saved run"
-        )
+        if saved is None:
+            continue_hint = "No saved run"
+        elif saved.in_graveyard:
+            continue_hint = f"Resume at the Graveyard, floor B{saved.floor}"
+        else:
+            continue_hint = f"Resume mid-run at the start of floor B{saved.floor}"
         self.menu.set_items(
             [
                 MenuItem("New Run", self._new_run, hint="Begin a fresh descent from the Graveyard"),
@@ -105,7 +108,13 @@ class MainMenuScene(BaseScene):
         if run is None:
             return
         self.app.state.run = run
-        self.manager.push(GraveyardScene(self.app))
+        if run.in_graveyard:
+            self.manager.push(GraveyardScene(self.app))
+        else:
+            from .dungeon import DungeonScene
+
+            logger.info("Resuming mid-run on floor B%d", run.floor)
+            self.manager.push(DungeonScene(self.app))
 
     def _relics(self) -> None:
         from .relics import RelicsScene

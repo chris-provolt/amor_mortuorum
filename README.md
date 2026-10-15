@@ -20,6 +20,7 @@ What works today, end to end:
 - **Relics of the Veil**: the five non-boss relics turn up in chests (2% of chests on T1 up to 8% on T5), the collection screen lives on the title and in the Graveyard, and every relic grants a light passive (ATK/DEF/SPD, sight radius, gold or XP percent) that applies to every future run.
 - **Random encounters** that open **turn-based combat**: Attack / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling.
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
+- **Save & Quit** from the pause menu: a one-shot mid-run save that resumes at the start of the current floor and is consumed on load.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.
 
 Not yet built (see [Roadmap](#roadmap)): party of up to four, scrolls as MP skills, audio, settings screen, controller support.
@@ -238,7 +239,7 @@ Boss enemies carry `"boss": true` and an `"enrage"` ATK bonus that switches on b
 ## Save System
 - **Location:** per-profile folder under the platform data dir (`%APPDATA%\AmorMortuorum\profiles\<profile>` on Windows, `~/Library/Application Support/AmorMortuorum` on macOS, `~/.local/share/amormortuorum` on Linux). Choose a profile with `--profile`.
 - **Files:** `meta.json` (relics, crypt, hub cycle, lifetime stats) and `run.json` (floor, seed, party, inventory). Writes are atomic with a `.bak` copy and corruption recovery.
-- **Rules:** A full save (meta + run) is written only in the **Graveyard**. In the dungeon only meta changes are saved. **Continue** resumes at the Graveyard on the floor you were about to enter. Dying without a token clears the run and keeps meta.
+- **Rules:** A full save (meta + run) is written only in the **Graveyard**. In the dungeon only meta changes are saved, except **Save & Quit** from the pause menu, which writes a one-shot mid-run save. **Continue** resumes at the Graveyard on the floor you were about to enter, or at the start of the saved floor after a Save & Quit (that save is cleared as soon as it loads). Dying without a token clears the run and keeps meta.
 - **Schema:** versioned (`schema_version`) with a migration hook in `persistence/codec.py`.
 
 ---

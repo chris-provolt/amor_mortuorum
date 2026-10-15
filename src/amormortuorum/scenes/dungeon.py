@@ -118,6 +118,10 @@ class DungeonScene(BaseScene):
                 MenuItem("Resume", self._toggle_pause),
                 MenuItem("Bag & Equipment", self._open_inventory, hint="Also: Tab"),
                 MenuItem(
+                    "Save & Quit", self._save_and_quit,
+                    hint="Resume later at the start of this floor (one-shot save)",
+                ),
+                MenuItem(
                     "Abandon run", self._abandon_run,
                     hint="Ends the run. Relics and the Crypt persist.",
                 ),
@@ -419,6 +423,13 @@ class DungeonScene(BaseScene):
 
         self.paused = False
         self.manager.push(InventoryScene(self.app))
+
+    def _save_and_quit(self) -> None:
+        from .main_menu import MainMenuScene
+
+        self._hub().save_and_quit(self.run)
+        self.state.run = None
+        self.manager.pop_until(MainMenuScene)
 
     def _abandon_run(self) -> None:
         from .main_menu import MainMenuScene

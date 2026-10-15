@@ -505,3 +505,39 @@ def test_relics_screen_and_chest_relic_pickup(app):
         from amormortuorum.systems.relics import passive_totals
 
         assert run.leader.bonuses == passive_totals(app.state.meta, data)
+
+
+def test_save_and_quit_then_continue_mid_run(app):
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    d.press("enter")  # Enter the Dungeon
+    run = app.state.run
+    run.floor = 3
+    seed = run.seed
+    d.scene.run.leader.take_damage(5)
+    hp = run.leader.hp
+
+    d.press("esc")  # pause
+    labels = [it.label for it in d.scene.pause_menu.items]
+    target = labels.index("Save & Quit")
+    for _ in range(target - d.scene.pause_menu.selected):
+        d.press("down")
+    d.press("enter")
+    assert d.scene_name() == "MainMenuScene"
+    assert app.state.run is None
+    assert "mid-run" in d.scene.menu.items[1].hint
+
+    d.press("down")  # Continue
+    assert d.scene.menu.current.label == "Continue"
+    d.press("enter")
+    assert d.scene_name() == "DungeonScene"
+    resumed = app.state.run
+    assert resumed.floor == 3 and resumed.seed == seed and resumed.leader.hp == hp
+    assert d.scene.fmap.floor == 3
+
+    # The mid-run save was consumed: quitting again without saving loses it
+    from amormortuorum.systems.hub import GraveyardHub
+
+    hub = GraveyardHub(app.state.save_manager, app.state.data, meta=app.state.meta)
+    assert hub.peek_run() is None

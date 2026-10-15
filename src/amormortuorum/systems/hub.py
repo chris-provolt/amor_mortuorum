@@ -93,17 +93,48 @@ class GraveyardHub:
         logger.info("Run saved at the Graveyard (floor %d)", run.floor)
         return save
 
-    def load_run(self) -> Optional[Run]:
-        """Return the saved run if one exists and was saved in the Graveyard."""
+    def save_and_quit(self, run: Run) -> SaveGame:
+        """Emergency mid-run save (outside the Graveyard).
+
+        The run resumes at the start of its current floor; the save is consumed
+        when it is loaded, so it cannot be replayed after a bad fight.
+        """
+        run.in_graveyard = False
+        save = SaveGame(
+            meta=self.meta, run=run.to_run_state(), profile_id=self.save_manager.profile_id
+        )
+        policy = self.save_manager.policy
+        previous = policy.allow_save_and_quit
+        policy.allow_save_and_quit = True
+        try:
+            self.save_manager.save_full(save)
+        finally:
+            policy.allow_save_and_quit = previous
+        logger.info("Run saved mid-run on floor %d (save & quit)", run.floor)
+        return save
+
+    def peek_run(self) -> Optional[Run]:
+        """The saved run, if any, without consuming it."""
         try:
             save = self.save_manager.load_full()
         except SaveError:
             return None
         state: Optional[RunState] = save.run
-        if state is None or not state.in_graveyard or not state.party:
+        if state is None or not state.party:
             return None
         run = Run.from_run_state(state)
         apply_passives(run, self.meta, self.data)
+        return run
+
+    def load_run(self) -> Optional[Run]:
+        """Load the saved run to resume it.
+
+        Graveyard saves stay on disk (they are rewritten on the next visit);
+        a mid-run save is one-shot and is cleared as soon as it is loaded.
+        """
+        run = self.peek_run()
+        if run is not None and not run.in_graveyard:
+            self.save_manager.clear_run()
         return run
 
     def end_run(self, run: Run) -> None:
