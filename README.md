@@ -111,7 +111,7 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
 - **Measured with** `python tools/balance/simulate.py --runs 80 --party N`, which plays whole runs with an auto-policy. Current targets: solo runs end around B20-40, pairs around B40 with a long tail to B80, full parties reach the nineties and clear B99 a few percent of the time. Re-run it after touching any number.
 
 ## Procedural Generation
-- **Algorithm:** BSP split into leaves, one room per leaf, L-shaped corridors joining sibling subtrees; the whole floor is connected.
+- **Algorithms:** BSP split into leaves, one room per leaf, L-shaped corridors joining sibling subtrees; the whole floor is connected. From B6, 30% of floors are **cellular-automata caverns** instead: one connected open region with the stairs at the far end of the cave (no rooms, so no key doors).
 - **Features:** Start room, stairs in the room farthest from the start, 1-5 chests scaling with depth, a portal on a chance roll, 0-4 hidden traps, and (35% of floors from B2) locked doors on every entrance of the stairs room with a key placed somewhere still reachable.
 - **Determinism:** Floor layout derives from `floor_rng(seed, floor)`; chest contents from `chest_rng(seed, floor)`; encounters and each battle from named streams (see [Testing & Determinism](#testing--determinism)).
 
@@ -315,7 +315,7 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 Design notes for each epic live in `docs/epics/`. Every epic now has a first implementation; what remains is polish:
 1. Hand playtesting against the simulator's numbers (see Balance Model); the auto-policy never flees and never misjudges a potion, so real runs end earlier.
 2. Real art and audio assets (sprites, tiles, SFX, music) replacing the placeholders.
-3. Cellular-cavern floors as a second generator; enemy pathfinding on the map.
+3. Visible wandering enemies with grid pathfinding (today encounters are random per step).
 4. Run statistics, achievements, and a profile picker for multiple save profiles.
 
 ---

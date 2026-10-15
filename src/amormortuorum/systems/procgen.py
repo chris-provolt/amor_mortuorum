@@ -24,6 +24,8 @@ PORTAL_DECAY = 0.99
 PORTAL_MIN_CHANCE = 0.02
 
 BOSS_FLOORS: Tuple[int, ...] = (20, 40, 60, 80, 99)
+CAVERN_CHANCE = 0.3  # share of floors that are cellular caverns instead of rooms
+CAVERN_MIN_FLOOR = 6
 DOOR_CHANCE = 0.35  # chance that a floor locks its stairs room behind a key
 DOOR_MIN_FLOOR = 2  # floor 1 never has locked doors
 KEY_ITEM_ID = "key_catacomb"
@@ -118,6 +120,7 @@ class FloorMap:
     doors: Dict[Pos, bool] = field(default_factory=dict)  # pos -> locked
     keys: Set[Pos] = field(default_factory=set)
     stairs_locked: bool = False  # boss floors: cleared when the boss falls
+    style: str = "rooms"  # "rooms" (BSP) or "cavern" (cellular automata)
 
     @property
     def is_boss_floor(self) -> bool:
@@ -373,20 +376,10 @@ def _manhattan(a: Pos, b: Pos) -> int:
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
-def generate_floor(
-    seed: int,
-    floor: int,
-    width: int = 48,
-    height: int = 32,
-    *,
-    min_room: int = 4,
-    max_room: int = 9,
-    max_depth: int = 5,
-) -> FloorMap:
-    """Generate a deterministic floor layout for ``(seed, floor)``."""
-    if width < 8 or height < 8:
-        raise ValueError("Floor grid must be at least 8x8")
-    rng = floor_rng(seed, floor)
+def _rooms_layout(
+    rng: Random, width: int, height: int, min_room: int, max_room: int, max_depth: int
+) -> Tuple[List[List[int]], List[Room], Pos, Pos, Room]:
+    """BSP rooms joined by corridors. Returns (tiles, rooms, start, stairs, stairs_room)."""
     tiles: List[List[int]] = [[int(Tile.WALL)] * width for _ in range(height)]
 
     # Leave a 1-tile border of wall around the whole grid.
@@ -430,11 +423,153 @@ def generate_floor(
     start_room = rooms[0]
     start = start_room.center
     stairs_room = max(rooms[1:], key=lambda r: (_manhattan(r.center, start), -rooms.index(r)))
-    stairs = stairs_room.center
+    return tiles, rooms, start, stairs_room.center, stairs_room
 
-    # Chests: random interior floor cells excluding start/stairs.
+
+def _neighbour_walls(grid: List[List[int]], x: int, y: int, width: int, height: int) -> int:
+    n = 0
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            nx, ny = x + dx, y + dy
+            if not (0 <= nx < width and 0 <= ny < height) or grid[ny][nx] == Tile.WALL:
+                n += 1
+    return n
+
+
+def _bfs_distances(tiles: List[List[int]], start: Pos) -> Dict[Pos, int]:
+    height = len(tiles)
+    width = len(tiles[0]) if tiles else 0
+    dist = {start: 0}
+    queue = deque([start])
+    while queue:
+        x, y = queue.popleft()
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < width and 0 <= ny < height and (nx, ny) not in dist:
+                if tiles[ny][nx] == Tile.FLOOR:
+                    dist[(nx, ny)] = dist[(x, y)] + 1
+                    queue.append((nx, ny))
+    return dist
+
+
+def _cavern_layout(
+    rng: Random, width: int, height: int
+) -> Tuple[List[List[int]], List[Room], Pos, Pos]:
+    """Cellular-automata cavern: one connected open area, no rooms or doors.
+
+    Returns (tiles, pseudo_rooms, start, stairs). The single pseudo-room marks the
+    start pocket so callers that key off ``rooms[0]`` keep working.
+    """
+    area = (width - 2) * (height - 2)
+    best: Optional[List[List[int]]] = None
+    best_size = 0
+    for _attempt in range(6):
+        grid = [
+            [
+                int(Tile.WALL)
+                if x == 0 or y == 0 or x == width - 1 or y == height - 1 or rng.random() < 0.45
+                else int(Tile.FLOOR)
+                for x in range(width)
+            ]
+            for y in range(height)
+        ]
+        for _ in range(5):
+            nxt = [row[:] for row in grid]
+            for y in range(1, height - 1):
+                for x in range(1, width - 1):
+                    n = _neighbour_walls(grid, x, y, width, height)
+                    if grid[y][x] == Tile.WALL:
+                        nxt[y][x] = int(Tile.WALL) if n >= 4 else int(Tile.FLOOR)
+                    else:
+                        nxt[y][x] = int(Tile.WALL) if n >= 5 else int(Tile.FLOOR)
+            grid = nxt
+        # Keep only the largest open region
+        seen: Set[Pos] = set()
+        largest: Set[Pos] = set()
+        for y in range(1, height - 1):
+            for x in range(1, width - 1):
+                if grid[y][x] != Tile.FLOOR or (x, y) in seen:
+                    continue
+                comp = set()
+                queue = deque([(x, y)])
+                seen.add((x, y))
+                while queue:
+                    cx, cy = queue.popleft()
+                    comp.add((cx, cy))
+                    for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
+                        if (nx, ny) not in seen and grid[ny][nx] == Tile.FLOOR:
+                            seen.add((nx, ny))
+                            queue.append((nx, ny))
+                if len(comp) > len(largest):
+                    largest = comp
+        for y in range(1, height - 1):
+            for x in range(1, width - 1):
+                if (x, y) not in largest:
+                    grid[y][x] = int(Tile.WALL)
+        if len(largest) > best_size:
+            best, best_size = grid, len(largest)
+        if best_size >= area * 0.3:
+            break
+    assert best is not None
+    tiles = best
+    if best_size < 12:
+        # Degenerate grid: fall back to an open hall.
+        for y in range(1, height - 1):
+            for x in range(1, width - 1):
+                tiles[y][x] = int(Tile.FLOOR)
+    floor_cells = [(x, y) for y in range(height) for x in range(width) if tiles[y][x] == Tile.FLOOR]
+    min_x = min(c[0] for c in floor_cells)
+    left_edge = [c for c in floor_cells if c[0] <= min_x + 2]
+    start = rng.choice(sorted(left_edge))
+    dist = _bfs_distances(tiles, start)
+    stairs = max(dist, key=lambda c: (dist[c], c))
+    sx, sy = start
+    pocket = Room(max(1, sx - 1), max(1, sy - 1), 3, 3)
+    return tiles, [pocket], start, stairs
+
+
+def generate_floor(
+    seed: int,
+    floor: int,
+    width: int = 48,
+    height: int = 32,
+    *,
+    min_room: int = 4,
+    max_room: int = 9,
+    max_depth: int = 5,
+) -> FloorMap:
+    """Generate a deterministic floor layout for ``(seed, floor)``.
+
+    Floors are BSP rooms by default; from ``CAVERN_MIN_FLOOR`` a share of them
+    (``CAVERN_CHANCE``) are cellular caverns instead.
+    """
+    if width < 8 or height < 8:
+        raise ValueError("Floor grid must be at least 8x8")
+    rng = floor_rng(seed, floor)
+    style = "cavern" if floor >= CAVERN_MIN_FLOOR and rng.random() < CAVERN_CHANCE else "rooms"
+
+    stairs_room: Optional[Room] = None
+    if style == "cavern":
+        tiles, rooms, start, stairs = _cavern_layout(rng, width, height)
+    else:
+        tiles, rooms, start, stairs, stairs_room = _rooms_layout(
+            rng, width, height, min_room, max_room, max_depth
+        )
+    start_room = rooms[0]
+
+    # Chests: random floor cells excluding start/stairs (room interiors, or the cavern floor).
     reserved = {start, stairs}
-    candidates = [c for r in rooms for c in r.inner_cells() if c not in reserved]
+    if style == "cavern":
+        candidates = [
+            (x, y)
+            for y in range(height)
+            for x in range(width)
+            if tiles[y][x] == Tile.FLOOR and (x, y) not in reserved
+            and _manhattan((x, y), start) > 3
+        ]
+    else:
+        candidates = [c for r in rooms for c in r.inner_cells() if c not in reserved]
     chests: Set[Pos] = set()
     want = chest_count_for_floor(floor, rng)
     for _ in range(want):
@@ -447,18 +582,26 @@ def generate_floor(
     # Portal: depth-decaying chance, never in the start room (nor stairs room if possible).
     portal: Optional[Pos] = None
     if rng.random() < portal_chance(floor):
-        eligible = [r for r in rooms if r is not start_room]
-        if len(rooms) > 2:
-            eligible = [r for r in eligible if r is not stairs_room]
-        if eligible:
-            room = rng.choice(eligible)
-            cells = [c for c in room.inner_cells() if c not in reserved and c not in chests]
+        if style == "cavern":
+            dist = _bfs_distances(tiles, start)
+            cells = sorted(
+                c for c, d in dist.items() if d >= 8 and c not in reserved and c not in chests
+            )
             if cells:
                 portal = rng.choice(cells)
+        else:
+            eligible = [r for r in rooms if r is not start_room]
+            if len(rooms) > 2:
+                eligible = [r for r in eligible if r is not stairs_room]
+            if eligible:
+                room = rng.choice(eligible)
+                cells = [c for c in room.inner_cells() if c not in reserved and c not in chests]
+                if cells:
+                    portal = rng.choice(cells)
 
     # Traps: hidden one-shot hazards on any floor tile away from the start and features.
     occupied = reserved | chests | ({portal} if portal is not None else set())
-    entrances = set(_room_entrances(tiles, stairs_room))
+    entrances = set(_room_entrances(tiles, stairs_room)) if stairs_room is not None else set()
     trap_candidates = [
         (x, y)
         for y in range(height)
@@ -489,12 +632,14 @@ def generate_floor(
         portal=portal,
         traps=traps,
         stairs_locked=floor in BOSS_FLOORS,
+        style=style,
     )
 
-    # Locked stairs room: some floors hide the key elsewhere on the floor.
-    # Boss floors are gated by the boss instead, never by a key.
+    # Locked stairs room: some room floors hide the key elsewhere on the floor.
+    # Boss floors are gated by the boss instead, never by a key; caverns have no doors.
     if (
-        floor >= DOOR_MIN_FLOOR
+        stairs_room is not None
+        and floor >= DOOR_MIN_FLOOR
         and floor not in BOSS_FLOORS
         and len(rooms) > 2
         and rng.random() < DOOR_CHANCE
@@ -510,6 +655,8 @@ __all__ = [
     "PORTAL_DECAY",
     "PORTAL_MIN_CHANCE",
     "BOSS_FLOORS",
+    "CAVERN_CHANCE",
+    "CAVERN_MIN_FLOOR",
     "DOOR_CHANCE",
     "DOOR_MIN_FLOOR",
     "KEY_ITEM_ID",
