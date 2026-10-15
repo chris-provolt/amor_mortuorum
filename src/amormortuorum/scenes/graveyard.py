@@ -9,6 +9,7 @@ import arcade
 from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.hub import GraveyardHub
+from ..systems.party import MAX_PARTY, available_companions, recruit
 from ..systems.progression import xp_to_next_level
 from ..systems.relics import apply_passives
 from ..ui.hud import Hud
@@ -49,7 +50,7 @@ class GraveyardScene(BaseScene):
         )
         self._panel = [
             arcade.Text("", 0, 0, color=PANEL_TEXT, font_size=13, anchor_y="top")
-            for _ in range(12)
+            for _ in range(16)
         ]
         self.hud = Hud(self.app)
         self._view = MenuView(self.menu, 0, 0, font_size=20)
@@ -82,6 +83,7 @@ class GraveyardScene(BaseScene):
                 MenuItem("Rest", self._rest, hint="Recover all HP and MP"),
                 MenuItem("Shop", self._show_shop_menu, hint="Limited stock; restocks each visit"),
                 MenuItem("Crypt", self._show_crypt_menu, hint="Store up to 3 stacks between runs"),
+                MenuItem("Recruit", self._show_recruit_menu, hint="Hire companions (up to 4)"),
                 MenuItem("Bag & Equipment", self._open_inventory, hint="Equip gear, use potions"),
                 MenuItem(
                     "Relics of the Veil", self._open_relics, hint="Your collection and passives"
@@ -115,6 +117,44 @@ class GraveyardScene(BaseScene):
             items.append(MenuItem("Sold out", None, enabled=False))
         items.append(MenuItem("Back", self._show_main_menu))
         self.menu.set_items(items, keep_selection=False)
+
+    def _show_recruit_menu(self) -> None:
+        self.mode = "recruit"
+        run = self.app.state.run
+        data = self.app.state.data
+        items: List[MenuItem] = []
+        full = len(run.party) >= MAX_PARTY
+        for comp in available_companions(run, data):
+            st = comp.stats
+            stats = (
+                f"HP {st['max_hp']} MP {st['max_mp']} ATK {st['atk']} "
+                f"DEF {st['df']} SPD {st['spd']}"
+            )
+            can = not full and run.leader.gold >= comp.cost
+            hint = comp.desc + f"  [{stats}]"
+            if full:
+                hint = "The party is full"
+            elif run.leader.gold < comp.cost:
+                hint = f"Not enough gold ({comp.cost})  {stats}"
+            items.append(
+                MenuItem(
+                    f"{comp.name:<16} {comp.cost:>4}g", lambda cid=comp.id: self._recruit(cid),
+                    enabled=can, hint=hint,
+                )
+            )
+        if not items:
+            items.append(MenuItem("No one else waits by the gate", None, enabled=False))
+        items.append(MenuItem("Back", self._show_main_menu))
+        self.menu.set_items(items, keep_selection=False)
+
+    def _recruit(self, companion_id: str) -> None:
+        try:
+            member = recruit(self.app.state.run, companion_id, self.app.state.data)
+            self.hud.push(f"{member.name} joins you.")
+            self.hub.save_run(self.app.state.run)
+        except AmorError as e:
+            self.hud.push(str(e))
+        self._show_recruit_menu()
 
     def _show_crypt_menu(self) -> None:
         self.mode = "crypt"
@@ -156,7 +196,7 @@ class GraveyardScene(BaseScene):
         self.manager.replace(DungeonScene(self.app))
 
     def _rest(self) -> None:
-        self.hub.rest(self.app.state.run.leader)
+        self.hub.rest_party(self.app.state.run)
         self.hud.push("You rest among the stones. HP and MP restored.")
 
     def _buy(self, item_id: str) -> None:
@@ -215,9 +255,10 @@ class GraveyardScene(BaseScene):
             f"{p.name}   HP {p.hp}/{p.max_hp}   Lv {p.level}   {xp_text}",
             f"ATK {p.effective_atk(data)}  DEF {p.effective_df(data)}  SPD {p.effective_spd(data)}",
             f"Next floor: B{run.floor}      Gold: {p.gold}",
-            "",
-            "Bag:",
         ]
+        for m in run.party[1:]:
+            lines.append(f"  {m.name}   HP {m.hp}/{m.max_hp}   Lv {m.level}")
+        lines += ["", "Bag:"]
         for item_id, qty in sorted(p.inventory.items.items()):
             lines.append(f"  {data.item(item_id).name} x{qty}")
         lines.append("")

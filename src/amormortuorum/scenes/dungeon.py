@@ -153,8 +153,9 @@ class DungeonScene(BaseScene):
         if battle.outcome is Outcome.VICTORY:
             xp, gold = battle.rewards()
             self.hud.push(f"Victory. +{xp} XP, +{gold} gold.")
-            for up in sync_level(self.run.leader, self.data):
-                self.hud.push(up.describe())
+            for member in self.run.party:
+                for up in sync_level(member, self.data):
+                    self.hud.push(f"{member.name}: {up.describe()}")
             if was_boss:
                 self._on_boss_defeated()
         elif battle.outcome is Outcome.FLED:

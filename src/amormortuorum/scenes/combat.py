@@ -10,6 +10,7 @@ import arcade
 from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.combat import Action, ActionKind, Battle, LogEvent, Outcome
+from ..systems.party import most_wounded
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 
 logger = logging.getLogger(__name__)
@@ -129,15 +130,18 @@ class CombatScene(BaseScene):
         self.mode = "skill"
         self.menu.set_items(items, keep_selection=False)
 
+    def _ally_target(self) -> int:
+        wounded = most_wounded(self.battle.party)
+        return self.actor if wounded is None else wounded
+
     def _use_skill(self, skill_id: str) -> None:
         skill = self.data.skill(skill_id)
-        target = self.actor if skill.target == "ally" else self.target
+        target = self._ally_target() if skill.target == "ally" else self.target
         self._submit(Action(ActionKind.SKILL, self.actor, target=target, skill_id=skill_id))
 
     def _show_item_menu(self) -> None:
-        player = self.battle.party[self.actor]
         items: List[MenuItem] = []
-        for item_id, qty in sorted(player.inventory.items.items()):
+        for item_id, qty in sorted(self.battle.bag.items.items()):
             item = self.data.item(item_id)
             if not item.usable_in_combat:
                 continue
@@ -194,7 +198,7 @@ class CombatScene(BaseScene):
 
     def _use_item(self, item_id: str) -> None:
         item = self.data.item(item_id)
-        target = self.target if item.damage > 0 else self.actor
+        target = self.target if item.damage > 0 else self._ally_target()
         self._submit(Action(ActionKind.ITEM, self.actor, target=target, item_id=item_id))
 
     def _refresh_target(self) -> None:

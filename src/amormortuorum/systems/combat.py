@@ -169,6 +169,11 @@ class Battle:
     def all_battlers(self) -> List[Battler]:
         return self.players + self.foes
 
+    @property
+    def bag(self):
+        """The party's shared bag: the leader's inventory."""
+        return self.party[0].inventory
+
     def rewards(self) -> Tuple[int, int]:
         """Total (xp, gold) carried by every enemy in the battle."""
         xp = sum(e.xp for e in self.enemies)
@@ -176,18 +181,19 @@ class Battle:
         return xp, gold
 
     def apply_rewards(self) -> Tuple[int, int]:
-        """Grant rewards to the first living player (or the first player).
+        """Grant XP to every surviving member and gold to the leader.
 
-        Relic passives ``xp_pct`` / ``gold_pct`` on the recipient scale the amounts.
+        Relic passives ``xp_pct`` / ``gold_pct`` (shared by the party) scale the amounts.
         """
         xp, gold = self.rewards()
-        living = self.living_players
-        recipient = living[0].ref if living else self.party[0]
-        bonus = getattr(recipient, "bonus", lambda _k: 0)
+        leader = self.party[0]
+        bonus = getattr(leader, "bonus", lambda _k: 0)
         xp = xp * (100 + bonus("xp_pct")) // 100
         gold = gold * (100 + bonus("gold_pct")) // 100
-        recipient.xp += xp  # type: ignore[union-attr]
-        recipient.add_gold(gold)  # type: ignore[union-attr]
+        survivors = [b.ref for b in self.living_players] or [leader]
+        for member in survivors:
+            member.xp += xp  # type: ignore[union-attr]
+        leader.add_gold(gold)
         return xp, gold
 
     # Action intake
@@ -239,9 +245,8 @@ class Battle:
             item = self.data.item(action.item_id)
             if not item.usable_in_combat:
                 raise InvalidOperation(f"{item.name} cannot be used in combat")
-            player: Player = actor.ref  # type: ignore[assignment]
-            if not player.inventory.has(item.id):
-                raise InvalidOperation(f"{player.name} has no {item.name}")
+            if not self.bag.has(item.id):
+                raise InvalidOperation(f"The bag holds no {item.name}")
             if item.damage > 0:
                 self._validate_enemy_target(action)
             else:
@@ -363,9 +368,9 @@ class Battle:
             self._hit(battler, target, amount, events, kind="item", source=skill.name)
 
     def _use_item(self, battler: Battler, action: Action, events: List[LogEvent]) -> None:
-        player: Player = battler.ref  # type: ignore[assignment]
         item = self.data.item(action.item_id or "")
-        if not player.inventory.has(item.id):
+        bag = self.bag
+        if not bag.has(item.id):
             events.append(LogEvent(f"{battler.name} fumbles for a missing {item.name}.", "info"))
             return
         if item.damage > 0:
@@ -373,7 +378,7 @@ class Battle:
             if target is None:
                 events.append(LogEvent(f"{battler.name} finds no foe for {item.name}.", "info"))
                 return
-            player.inventory.remove(item, 1)
+            bag.remove(item, 1)
             self._hit(battler, target, item.damage, events, kind="item", source=item.name)
             return
         target_idx = battler.index if action.target is None else action.target
@@ -381,7 +386,7 @@ class Battle:
         if not target.is_alive:
             events.append(LogEvent(f"{target.name} is beyond the reach of {item.name}.", "info"))
             return
-        player.inventory.remove(item, 1)
+        bag.remove(item, 1)
         healed = target.ref.heal(item.hp_restore)  # type: ignore[union-attr]
         restored = target.ref.restore_mp(item.mp_restore)  # type: ignore[union-attr]
         parts = []

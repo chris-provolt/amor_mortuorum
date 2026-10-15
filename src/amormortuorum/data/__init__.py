@@ -142,6 +142,18 @@ class BossDef:
     final: bool = False
 
 
+STAT_KEYS: Tuple[str, ...] = ("max_hp", "max_mp", "atk", "df", "spd")
+
+
+@dataclass(frozen=True)
+class CompanionDef:
+    id: str
+    name: str
+    cost: int
+    stats: Dict[str, int] = field(default_factory=dict)
+    desc: str = ""
+
+
 @dataclass(frozen=True)
 class XpCurve:
     """``thresholds[i]`` is the total XP needed to reach level ``i + 1``."""
@@ -188,8 +200,15 @@ class GameData:
     xp_curve: XpCurve = field(default_factory=XpCurve)
     bosses: Dict[int, BossDef] = field(default_factory=dict)
     skills: Dict[str, SkillDef] = field(default_factory=dict)
+    companions: Dict[str, CompanionDef] = field(default_factory=dict)
 
     # Lookups
+
+    def companion(self, companion_id: str) -> CompanionDef:
+        try:
+            return self.companions[companion_id]
+        except KeyError as e:
+            raise DataError(f"Unknown companion id: {companion_id}") from e
 
     def skill(self, skill_id: str) -> SkillDef:
         try:
@@ -278,6 +297,7 @@ class GameData:
             xp_curve=read("xp_curve.json"),
             bosses=read("bosses.json"),
             skills=read("skills.json"),
+            companions=read("companions.json"),
         )
 
     @classmethod
@@ -294,9 +314,13 @@ class GameData:
         xp_curve: Optional[dict] = None,
         bosses: Optional[Dict[str, dict]] = None,
         skills: Optional[List[dict]] = None,
+        companions: Optional[List[dict]] = None,
     ) -> "GameData":
         """Build from already-parsed JSON structures and validate."""
         data = cls()
+        data.companions = _unique_by_id(
+            "companions", [_build(CompanionDef, raw, "companions") for raw in (companions or [])]
+        )
         data.skills = _unique_by_id(
             "skills", [_build(SkillDef, raw, "skills") for raw in (skills or [])]
         )
@@ -437,6 +461,16 @@ class GameData:
             if sk.damage > 0 and sk.target == "ally":
                 raise DataError(f"skills[{sk.id}]: damaging skills target enemies")
 
+        # Companions
+        for comp in self.companions.values():
+            if comp.cost < 0:
+                raise DataError(f"companions[{comp.id}]: cost must be >= 0")
+            for key in STAT_KEYS:
+                if key not in comp.stats or not isinstance(comp.stats[key], int):
+                    raise DataError(f"companions[{comp.id}]: stats need integer {key!r}")
+            if comp.stats["max_hp"] < 1:
+                raise DataError(f"companions[{comp.id}]: max_hp must be >= 1")
+
         # XP curve
         curve = self.xp_curve
         if curve.max_level < 1 or len(curve.thresholds) != curve.max_level:
@@ -482,5 +516,6 @@ __all__ = [
     "BossDef",
     "SkillDef",
     "SKILL_TARGETS",
+    "CompanionDef",
     "GameData",
 ]

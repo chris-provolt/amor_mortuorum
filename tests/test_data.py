@@ -23,6 +23,7 @@ def _raw():
         xp_curve=read("xp_curve.json"),
         bosses=read("bosses.json"),
         skills=read("skills.json"),
+        companions=read("companions.json"),
     )
 
 
