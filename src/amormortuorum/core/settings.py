@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 from typing import Dict, Iterable, Optional
-
-import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +38,9 @@ class Settings:
     input: InputSettings = field(default_factory=InputSettings)
 
     @staticmethod
-    def _load_yaml(path: Path) -> dict:
+    def _load_json(path: Path) -> dict:
         with path.open("r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
+            return json.load(f) or {}
 
     @classmethod
     def _deep_merge(cls, base: dict, overlay: dict) -> dict:
@@ -66,13 +65,13 @@ class Settings:
 
         If user_path is provided and exists, overlay values onto defaults.
         """
-        # Load default YAML from package resources
+        # Load default JSON from package resources
         try:
             default_settings_path = resources.files("amormortuorum.config").joinpath(
-                "default_settings.yaml"
+                "default_settings.json"
             )
             with default_settings_path.open("r", encoding="utf-8") as f:
-                default_data = yaml.safe_load(f) or {}
+                default_data = json.load(f) or {}
         except FileNotFoundError:
             logger.warning("Default settings not found; falling back to dataclass defaults.")
             default_data = dataclasses.asdict(Settings())
@@ -80,7 +79,7 @@ class Settings:
         user_data = {}
         if user_path is not None:
             if user_path.exists():
-                user_data = cls._load_yaml(user_path)
+                user_data = cls._load_json(user_path)
                 logger.info("Loaded user settings from %s", user_path)
             else:
                 logger.warning("User settings file not found: %s", user_path)
@@ -98,5 +97,6 @@ class Settings:
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as f:
-            yaml.safe_dump(data, f, sort_keys=False)
+            json.dump(data, f, indent=2)
+            f.write("\n")
         logger.info("Saved settings to %s", path)

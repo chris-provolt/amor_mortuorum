@@ -1,0 +1,232 @@
+"""Scripted playthrough in a real window. Skipped unless AMOR_GL_TESTS=1.
+
+Drives the scene stack with synthetic key presses and draws every step so
+rendering errors surface. Run with:  AMOR_GL_TESTS=1 pytest -m gl
+"""
+from __future__ import annotations
+
+import os
+from collections import deque
+
+import pytest
+
+pytestmark = [
+    pytest.mark.gl,
+    pytest.mark.skipif(os.environ.get("AMOR_GL_TESTS") != "1", reason="needs a display"),
+]
+
+
+@pytest.fixture
+def app(tmp_path):
+    from amormortuorum.app import GameApp
+    from amormortuorum.core.settings import Settings
+    from amormortuorum.persistence import SaveManager
+
+    settings = Settings.load()
+    settings.video.width, settings.video.height = 960, 540
+    game = GameApp(
+        settings, save_manager=SaveManager(root_dir=tmp_path, profile_id="play"), seed=1
+    )
+    yield game
+    game.close()
+
+
+class Driver:
+    def __init__(self, app):
+        import arcade
+
+        self.app = app
+        self.keys = {
+            "up": arcade.key.UP,
+            "down": arcade.key.DOWN,
+            "left": arcade.key.LEFT,
+            "right": arcade.key.RIGHT,
+            "enter": arcade.key.ENTER,
+            "esc": arcade.key.ESCAPE,
+        }
+
+    def frame(self, dt: float = 1 / 60):
+        self.app.on_update(dt)
+        self.app.on_draw()
+
+    def press(self, name: str):
+        key = self.keys[name]
+        self.app.on_key_press(key, 0)
+        self.app.on_key_release(key, 0)
+        self.frame()
+
+    @property
+    def scene(self):
+        return self.app.scene_manager.current
+
+    def scene_name(self) -> str:
+        return type(self.scene).__name__
+
+    def boot_to_menu(self):
+        self.frame(1.2)
+        assert self.scene_name() == "MainMenuScene"
+
+    def fight_until_done(self, max_rounds: int = 60):
+        """Attack every round until the combat scene pops."""
+        for _ in range(max_rounds):
+            if self.scene_name() != "CombatScene":
+                return
+            self.press("enter")  # Attack (first menu item), or confirm on the result
+        raise AssertionError("combat did not finish")
+
+
+def _path(fmap, start, goal):
+    prev = {start: None}
+    queue = deque([start])
+    while queue:
+        cur = queue.popleft()
+        if cur == goal:
+            break
+        x, y = cur
+        for nxt in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if nxt not in prev and fmap.is_walkable(*nxt):
+                prev[nxt] = cur
+                queue.append(nxt)
+    steps = []
+    cur = goal
+    while prev[cur] is not None:
+        steps.append(cur)
+        cur = prev[cur]
+    return steps[::-1]
+
+
+def _walk_to(driver: Driver, goal):
+    scene = driver.scene
+    path = _path(scene.fmap, scene.pos, goal)
+    for nxt in path:
+        if driver.scene_name() == "CombatScene":
+            driver.fight_until_done()
+        if driver.scene_name() != "DungeonScene":
+            return  # died (summary) or left the floor
+        scene = driver.scene
+        dx, dy = nxt[0] - scene.pos[0], nxt[1] - scene.pos[1]
+        driver.press({(1, 0): "right", (-1, 0): "left", (0, 1): "up", (0, -1): "down"}[(dx, dy)])
+
+
+def test_full_loop_menu_graveyard_dungeon_combat_stairs(app):
+    d = Driver(app)
+    d.boot_to_menu()
+
+    d.press("enter")  # New Run
+    assert d.scene_name() == "GraveyardScene"
+    run = app.state.run
+    assert run.floor == 1 and run.in_graveyard
+
+    # Rest, open and close the crypt, then enter the dungeon
+    d.press("down")
+    d.press("enter")  # Rest
+    d.press("down")
+    d.press("enter")  # Crypt submenu
+    d.press("esc")  # back (cursor resets to the first item)
+    assert d.scene.mode == "main"
+    d.press("enter")  # Enter the Dungeon
+    assert d.scene_name() == "DungeonScene"
+    assert run.in_graveyard is False
+
+    dungeon = d.scene
+    # Walls block movement: try every direction from the start and confirm we stay on floor tiles
+    for key in ("up", "down", "left", "right"):
+        d.press(key)
+        assert dungeon.fmap.is_walkable(*d.scene.pos)
+
+    # Walk the reachable chests, then the stairs; fight whatever shows up
+    for chest in sorted(dungeon.fmap.chests):
+        if d.scene_name() != "DungeonScene":
+            break
+        _walk_to(d, chest)
+    if d.scene_name() == "DungeonScene":
+        _walk_to(d, dungeon.fmap.stairs)
+    if d.scene_name() == "CombatScene":
+        d.fight_until_done()
+
+    if d.scene_name() == "DungeonScene":
+        assert d.scene.pos == dungeon.fmap.stairs
+        d.press("enter")  # descend
+        assert d.scene_name() == "DungeonScene"
+        assert run.floor == 2
+        assert d.scene.fmap.floor == 2
+    else:
+        # Party wiped on floor 1 with the token: we are at the summary, then the Graveyard
+        assert d.scene_name() == "RunSummaryScene"
+        d.press("enter")
+        assert d.scene_name() == "GraveyardScene"
+
+    # Pause menu opens and closes on the dungeon
+    if d.scene_name() == "DungeonScene":
+        d.press("esc")
+        assert d.scene.paused
+        d.press("esc")
+        assert not d.scene.paused
+
+
+def test_death_with_token_returns_to_graveyard_and_consumes_it(app):
+    from amormortuorum.systems.combat import Battle, Outcome
+    from amormortuorum.systems.entities import Enemy
+    from amormortuorum.scenes.combat import CombatScene
+    from amormortuorum.systems.rng import stream_rng
+
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    d.press("enter")  # Enter the Dungeon
+    assert d.scene_name() == "DungeonScene"
+    run = app.state.run
+    data = app.state.data
+    assert run.has_token()
+
+    # Force a hopeless fight: 1 HP against a titan
+    run.leader.stats.hp = 1
+    titan = Enemy.from_def(data.enemy("grave_titan"))
+    battle = Battle(run.party, [titan], stream_rng(1, 1, "test"), data)
+    d.scene.active_battle = battle
+    app.scene_manager.push(CombatScene(app, battle))
+    d.frame()
+    d.fight_until_done()
+    assert battle.outcome is Outcome.DEFEAT
+
+    assert d.scene_name() == "RunSummaryScene"
+    assert run.has_token() is False
+    assert run.leader.hp == 1
+    d.press("enter")
+    assert d.scene_name() == "GraveyardScene"
+    assert run.in_graveyard is True
+
+
+def test_death_without_token_ends_run_and_clears_save(app):
+    from amormortuorum.systems.combat import Battle
+    from amormortuorum.systems.entities import Enemy
+    from amormortuorum.systems.hub import GraveyardHub
+    from amormortuorum.scenes.combat import CombatScene
+    from amormortuorum.systems.rng import stream_rng
+    from amormortuorum.systems.run import RESURRECTION_TOKEN_ID
+
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    d.press("enter")  # Enter the Dungeon
+    run = app.state.run
+    data = app.state.data
+    run.leader.inventory.remove(data.item(RESURRECTION_TOKEN_ID), 1)
+    run.leader.stats.hp = 1
+
+    titan = Enemy.from_def(data.enemy("grave_titan"))
+    battle = Battle(run.party, [titan], stream_rng(2, 1, "t"), data)
+    d.scene.active_battle = battle
+    app.scene_manager.push(CombatScene(app, battle))
+    d.frame()
+    d.fight_until_done()
+
+    assert d.scene_name() == "RunSummaryScene"
+    d.press("enter")
+    assert d.scene_name() == "MainMenuScene"
+    assert app.state.run is None
+    hub = GraveyardHub(app.state.save_manager, data, meta=app.state.meta)
+    assert hub.load_run() is None
+    assert app.state.meta.runs_completed == 1
+    # Continue is disabled; New Run still works
+    assert d.scene.menu.items[1].enabled is False

@@ -1,0 +1,57 @@
+from amormortuorum.ui.menu import MenuItem, VerticalMenu
+
+
+def test_move_wraps_and_skips_disabled():
+    fired = []
+    menu = VerticalMenu(
+        [
+            MenuItem("A", lambda: fired.append("A")),
+            MenuItem("B", enabled=False),
+            MenuItem("C", lambda: fired.append("C")),
+        ]
+    )
+    assert menu.current.label == "A"
+    menu.move(+1)
+    assert menu.current.label == "C"  # skipped B
+    menu.move(+1)
+    assert menu.current.label == "A"  # wrapped
+    menu.move(-1)
+    assert menu.current.label == "C"
+    assert menu.activate() is True
+    assert fired == ["C"]
+
+
+def test_no_wrap_stops_at_edges():
+    menu = VerticalMenu([MenuItem("A"), MenuItem("B")], wrap=False)
+    menu.move(-1)
+    assert menu.selected == 0
+    menu.move(+5)
+    assert menu.selected == 1
+
+
+def test_initial_cursor_snaps_past_disabled_first_item():
+    menu = VerticalMenu([MenuItem("A", enabled=False), MenuItem("B")])
+    assert menu.current.label == "B"
+    assert VerticalMenu([]).current is None
+    assert VerticalMenu([]).activate() is False
+
+
+def test_handle_actions_maps_inputs():
+    hits = []
+    menu = VerticalMenu(
+        [MenuItem("A", lambda: hits.append(1)), MenuItem("B", lambda: hits.append(2))]
+    )
+    assert menu.handle_actions(["move_down"]) is True
+    assert menu.current.label == "B"
+    assert menu.handle_actions(["confirm"]) is True
+    assert hits == [2]
+    assert menu.handle_actions(["cancel"]) is False
+
+
+def test_set_items_keeps_selection_in_range():
+    menu = VerticalMenu([MenuItem("A"), MenuItem("B"), MenuItem("C")])
+    menu.move(+2)
+    menu.set_items([MenuItem("X"), MenuItem("Y")])
+    assert menu.selected == 1
+    menu.set_items([MenuItem("Only", enabled=False)])
+    assert menu.activate() is False

@@ -1,0 +1,7 @@
+[
+  {"name": "T1", "start": 1, "end": 20},
+  {"name": "T2", "start": 21, "end": 40},
+  {"name": "T3", "start": 41, "end": 60},
+  {"name": "T4", "start": 61, "end": 80},
+  {"name": "T5", "start": 81, "end": 99}
+]

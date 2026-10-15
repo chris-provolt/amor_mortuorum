@@ -1,6 +1,5 @@
+import json
 from pathlib import Path
-
-import yaml
 
 from amormortuorum.core.settings import Settings
 
@@ -15,9 +14,9 @@ def test_default_settings_load():
 
 
 def test_user_override_merge(tmp_path: Path):
-    user = tmp_path / "settings.yaml"
+    user = tmp_path / "settings.json"
     user.write_text(
-        yaml.safe_dump(
+        json.dumps(
             {
                 "video": {"width": 1024, "fullscreen": True},
                 "audio": {"music_volume": 0.25},

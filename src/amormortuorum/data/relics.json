@@ -1,0 +1,12 @@
+[
+  {"id": "veil_1", "name": "Lamplight of the Veil", "desc": "Faintly parts the darkness."},
+  {"id": "veil_2", "name": "Thorn of Epitaph", "desc": "Wounds that never heal."},
+  {"id": "veil_3", "name": "Obol of Passage", "desc": "A coin for the ferryman."},
+  {"id": "veil_4", "name": "Votive Ashes", "desc": "What remains of a prayer."},
+  {"id": "veil_5", "name": "Mortis Dial", "desc": "It counts down, never up."},
+  {"id": "veil_6", "name": "Widow's Knot", "desc": "Tied once, never undone."},
+  {"id": "veil_7", "name": "Catacomb Key", "desc": "Opens doors best left shut."},
+  {"id": "veil_8", "name": "Lacrimosa Phial", "desc": "Tears of the unmourned."},
+  {"id": "veil_9", "name": "Ossuary Crown", "desc": "Ruler of the silent."},
+  {"id": "veil_final", "name": "Heart of Oblivion", "desc": "The final relic, beyond the deepest door."}
+]

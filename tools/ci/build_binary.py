@@ -145,15 +145,22 @@ def find_src_main(root: Path) -> Optional[Path]:
 
 
 def detect_entrypoint(root: Path) -> Optional[Path]:
-    # Try pyproject scripts first
+    """Pick the script PyInstaller should analyse.
+
+    A package ``__main__.py`` is preferred because it uses absolute imports and
+    works as a standalone script; a ``[project.scripts]`` module that relies on
+    relative imports would fail at startup inside the bundle.
+    """
+    main_file = find_src_main(root)
+    if main_file is not None:
+        return main_file
     pp = root / "pyproject.toml"
     ep = parse_pyproject_entrypoint(pp)
     if ep:
         mod_file = resolve_module_file(ep)
         if mod_file and mod_file.exists():
             return mod_file
-    # Fallback to src/**/__main__.py
-    return find_src_main(root)
+    return None
 
 
 def run_pyinstaller_with_spec(spec_file: Path) -> None:
@@ -162,17 +169,29 @@ def run_pyinstaller_with_spec(spec_file: Path) -> None:
     subprocess.run(cmd, check=True)
 
 
+# Package data directories that must ship inside the bundle (relative to src/).
+PACKAGE_DATA_DIRS = ("amormortuorum/config", "amormortuorum/data")
+
+
+def pyinstaller_args(entry_file: Path, name: str, root: Optional[Path] = None) -> List[str]:
+    """Build the PyInstaller argument list for a one-file build of ``entry_file``."""
+    root = root or Path.cwd()
+    src = root / "src"
+    args = ["--clean", "--onefile", "--name", name, "--paths", str(src)]
+    for rel in PACKAGE_DATA_DIRS:
+        data_dir = src / rel
+        if data_dir.is_dir():
+            args += ["--add-data", f"{data_dir}{os.pathsep}{rel}"]
+    # Arcade and pyglet ship fonts/shaders/resources that are loaded at runtime.
+    args += ["--collect-data", "arcade", "--collect-data", "pyglet"]
+    if sys.platform in ("win32", "darwin"):
+        args.append("--windowed")
+    args.append(str(entry_file))
+    return args
+
+
 def run_pyinstaller_on_entry(entry_file: Path, name: str) -> None:
-    cmd = [
-        sys.executable,
-        "-m",
-        "PyInstaller",
-        "--clean",
-        "--onefile",
-        "--name",
-        name,
-        str(entry_file),
-    ]
+    cmd = [sys.executable, "-m", "PyInstaller", *pyinstaller_args(entry_file, name)]
     debug(f"Running PyInstaller on entry: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 

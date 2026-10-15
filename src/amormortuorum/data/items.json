@@ -1,0 +1,24 @@
+[
+  {"id": "potion_small", "name": "Grave-Touched Draught", "quality": "Common", "type": "potion", "hp_restore": 15, "max_stack": 99},
+  {"id": "antidote", "name": "Antidote", "quality": "Common", "type": "consumable", "hp_restore": 5, "max_stack": 50},
+  {"id": "scroll_embers", "name": "Scroll of Embers", "quality": "Common", "type": "scroll", "damage": 10, "max_stack": 20},
+  {"id": "dagger_rust", "name": "Rusted Dagger", "quality": "Common", "type": "weapon", "atk": 1, "stackable": false},
+  {"id": "cloth_shroud", "name": "Burial Shroud", "quality": "Common", "type": "armor", "df": 1, "stackable": false},
+  {"id": "cap_bone", "name": "Bone Cap", "quality": "Common", "type": "helm", "df": 1, "stackable": false},
+
+  {"id": "potion_medium", "name": "Mourner's Tonic", "quality": "Uncommon", "type": "potion", "hp_restore": 35, "max_stack": 99},
+  {"id": "scroll_frost", "name": "Scroll of Grave Frost", "quality": "Uncommon", "type": "scroll", "damage": 18, "max_stack": 20},
+  {"id": "blade_bone", "name": "Bone Shard Blade", "quality": "Uncommon", "type": "weapon", "atk": 3, "stackable": false},
+  {"id": "buckler_grave", "name": "Gravewood Buckler", "quality": "Uncommon", "type": "shield", "df": 2, "stackable": false},
+  {"id": "hood_wraith", "name": "Wraith Hood", "quality": "Uncommon", "type": "helm", "df": 2, "stackable": false},
+
+  {"id": "potion_large", "name": "Lacrimal Elixir", "quality": "Rare", "type": "potion", "hp_restore": 70, "max_stack": 99},
+  {"id": "armor_shroud", "name": "Shroudmail", "quality": "Rare", "type": "armor", "df": 4, "stackable": false},
+  {"id": "blade_mourning", "name": "Mourning Blade", "quality": "Rare", "type": "weapon", "atk": 5, "stackable": false},
+  {"id": "boots_silent", "name": "Boots of the Silent", "quality": "Rare", "type": "accessory", "spd": 1, "stackable": false},
+
+  {"id": "res_token", "name": "Resurrection Token", "quality": "Epic", "type": "token", "revive": true, "max_stack": 3},
+  {"id": "ring_mourning", "name": "Ring of Mourning", "quality": "Epic", "type": "accessory", "spd": 2, "stackable": false},
+  {"id": "blade_oblivion", "name": "Oblivion Edge", "quality": "Epic", "type": "weapon", "atk": 8, "stackable": false},
+  {"id": "plate_ossuary", "name": "Ossuary Plate", "quality": "Epic", "type": "armor", "df": 7, "stackable": false}
+]
