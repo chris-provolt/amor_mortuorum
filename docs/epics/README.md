@@ -1,12 +1,13 @@
-Epic Management Utilities
+# Design notes by epic
 
-This folder contains documentation and configuration for managing GitHub Epics and their child issues programmatically.
+These documents describe the intended scope of each major feature area. They are
+design references, not task trackers; the GitHub issue tracker is the source of
+truth for work in progress.
 
-- fog_of_war_minimap.md: Narrative description and operator guide for the Fog of War & Minimap epic.
-- ../.. /tools/epics/configs/fog_of_war_minimap.yml: The source of truth for the epic and child issues.
-- Use tools/epics/epic_manager.py to create/update the Epic and child issues.
+- `dungeon_generation.md`: procedural floors (BSP rooms, caverns, stairs, rendering, pathfinding).
+- `fog_of_war_minimap.md`: field of view, explored-tile memory, and the minimap overlay.
+- `graveyard.md`: the hub (rest, limited-stock shop, three-slot crypt).
+- `player_party_progression.md`: player stats, equipment slots, party of up to four, XP.
+- `save_system.md`: meta/run persistence, atomic writes, graveyard-only saves.
 
-Quickstart
-- Ensure Python 3.9+ and install dependencies: PyYAML and PyGithub (if not using dry-run).
-- export GITHUB_TOKEN=yourtoken
-- python tools/epics/epic_manager.py --repo OWNER/REPO --config tools/epics/configs/fog_of_war_minimap.yml
+See `docs/roadmap/` for the original project-setup epic.

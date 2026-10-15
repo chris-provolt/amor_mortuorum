@@ -1,9 +1,6 @@
 - name: epic
   color: '6f42c1'
   description: High-level initiative tracking multiple issues
-- name: epic-child
-  color: '1d76db'
-  description: Issue created as part of an EPIC
 - name: feature
   color: '0e8a16'
   description: New feature

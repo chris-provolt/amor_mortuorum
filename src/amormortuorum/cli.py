@@ -18,7 +18,7 @@ def parse_args(argv=None):
         dest="settings_path",
         type=Path,
         default=None,
-        help="Path to a user settings YAML file to load/override defaults.",
+        help="Path to a user settings JSON file to load/override defaults.",
     )
     parser.add_argument(
         "--debug",

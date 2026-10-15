@@ -38,7 +38,7 @@ class Shop:
         rng = random.Random((seed << 16) ^ cycle)
         new_stock: Dict[str, StockEntry] = {}
         for item_id, spec in pool.items():
-            if item_id not in self.catalog._items:
+            if not self.catalog.has(item_id):
                 logger.warning("Shop pool contains unknown item '%s'", item_id)
                 continue
             low, high = spec["qty_range"]

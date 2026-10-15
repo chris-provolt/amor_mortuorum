@@ -1,6 +1,7 @@
+import json
 from pathlib import Path
 
-import json
+import pytest
 
 from amormortuorum.errors import InvalidOperation, InsufficientGold, NotFound, OutOfStock
 from amormortuorum.hub import GraveyardHub
@@ -39,11 +40,8 @@ def test_shop_limited_stock_and_purchase(tmp_path: Path):
     player = Player(gold=10_000)
 
     # Buying beyond stock should fail
-    try:
+    with pytest.raises(OutOfStock):
         ctx.shop.buy(player, item_id, quantity=entry.quantity + 1)
-        assert False, "Expected OutOfStock"
-    except OutOfStock:
-        pass
 
     # Buy full remaining stock
     ctx.shop.buy(player, item_id, quantity=entry.quantity)
@@ -55,11 +53,8 @@ def test_shop_limited_stock_and_purchase(tmp_path: Path):
     # Choose a possibly expensive item and drain gold
     poor_player = Player(gold=0)
     item_id, entry = next(iter(ctx.shop.stock().items()))
-    try:
+    with pytest.raises(InsufficientGold):
         ctx.shop.buy(poor_player, item_id, quantity=1)
-        assert False, "Expected InsufficientGold"
-    except InsufficientGold:
-        pass
 
 
 def test_shop_restock_is_deterministic(tmp_path: Path):
@@ -102,21 +97,8 @@ def test_crypt_capacity_and_withdraw(tmp_path: Path):
 
     # Try depositing a fourth distinct item -> full
     player.inventory.add(cat.get("potion_small"), 1)
-    try:
-
-        # A distinct item needs an id not already in the crypt; reusing potion_small just stacks.
-        # Force a failure by attempting to deposit another unique id.
-        # The nonexistent entry should trigger NotFound.
-
-        # Re-using potion_small would stack; pick a new id to force the crypt to reject it.
-        # Expect a NotFound because the item is not present in the catalog or crypt slots.
-        # New distinct only if we pick an id not in crypt; we reuse potion_small but it stacks instead.
-        # To force a failure, attempt to deposit another distinct item (not present) -> expect NotFound.
-
+    with pytest.raises(NotFound):
         hub.crypt_deposit(player, "nonexistent", 1)
-        assert False, "Expected NotFound"
-    except NotFound:
-        pass
 
     # Withdraw from slot 1 fully, should free a slot
     hub.crypt_withdraw(player, 1)
@@ -127,18 +109,12 @@ def test_crypt_capacity_and_withdraw(tmp_path: Path):
     assert len(ctx.crypt.list_slots()) == 2
 
     # Bad withdraw index
-    try:
+    with pytest.raises(NotFound):
         hub.crypt_withdraw(player, 100)
-        assert False, "Expected NotFound for invalid slot"
-    except NotFound:
-        pass
 
     # Bad quantities
-    try:
+    with pytest.raises(InvalidOperation):
         hub.crypt_deposit(player, "potion_small", 0)
-        assert False, "Expected InvalidOperation for zero quantity"
-    except InvalidOperation:
-        pass
 
 
 def test_save_persistence_across_instances(tmp_path: Path):

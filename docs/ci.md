@@ -1,38 +1,40 @@
-CI / CD and Release Pipeline
+# CI / CD and release pipeline
 
-Overview
-- Linting: flake8 enforces style and static checks.
-- Tests: pytest runs the unit test suite headlessly.
-- Build: On tags (v*), PyInstaller builds standalone binaries for Linux, Windows, and macOS. Artifacts are uploaded to the GitHub Release and stored as workflow artifacts.
+## Lint and test (every push to `main` and every pull request)
 
-How it works
-1. Triggers
-   - push to main and pull requests: run lint and tests
-   - push tags matching v*: run lint/tests first, then build and upload artifacts for three platforms
+- Runs on Ubuntu with Python 3.11 and 3.13.
+- Installs the project with `pip install -e ".[dev]"` (arcade, pytest, flake8, flake8-bugbear).
+- `flake8 .` then `pytest`. Unit tests never open a window; everything under
+  `systems/`, `data/` and `persistence/` is pure Python, and the scene stack is
+  tested with a dummy window object.
+- A separate advisory step runs `python -m amormortuorum --smoke 60 --seed 1`
+  with `ARCADE_HEADLESS=True` on the 3.13 job. Arcade's headless mode needs EGL,
+  which only exists on Linux, so the step installs Mesa and is marked
+  `continue-on-error` until it has proven stable on the runner.
 
-2. Lint & Test
-   - Uses Python 3.11 on Ubuntu
-   - Installs the project and dev tools (flake8, pytest)
-   - Headless-friendly environment variables are set for graphics libs
+## Build (tags matching `v*`)
 
-3. Build
-   - Matrix across ubuntu-latest, windows-latest, macos-latest
-   - Installs PyInstaller and the project
-   - Auto-detection for the entry point:
-     - If a PyInstaller spec exists in pyinstaller/*.spec, it is used
-     - Otherwise, [project.scripts] from pyproject.toml is parsed, and the corresponding module is used
-     - Otherwise, src/**/__main__.py is used
-   - Produces a single-file binary and zips it with README and LICENSE
-   - Artifact name: AmorMortuorum-<version>-<platform>.zip
+- Matrix across ubuntu-latest, windows-latest, macos-latest.
+- Installs the project with the `build` extra (PyInstaller) and runs
+  `tools/ci/build_binary.py --name AmorMortuorum --out dist/release`.
+- Entry point detection, in order: a `pyinstaller/*.spec` file, then
+  `src/amormortuorum/__main__.py` (preferred because it uses absolute imports),
+  then the first `[project.scripts]` module.
+- The one-file build adds `--paths src`, bundles `amormortuorum/config` and
+  `amormortuorum/data` with `--add-data`, collects arcade and pyglet resource
+  files, and uses `--windowed` on Windows and macOS.
+- The binary is zipped with the README and LICENSE (when present) as
+  `AmorMortuorum-<version>-<platform>.zip`, uploaded as a workflow artifact and
+  attached to the GitHub Release for the tag.
 
-4. Release Upload
-   - Tag pushes (refs/tags/v*) upload all artifacts to the corresponding GitHub Release
-   - Artifacts are also uploaded as workflow artifacts for later inspection
+## Local equivalents
 
-Customization
-- Change the application/binary name by editing the --name argument in the build step or invoking tools/ci/build_binary.py directly.
-- Provide a custom PyInstaller spec in pyinstaller/*.spec to fully control packaging.
+```powershell
+python -m pip install -e ".[dev]"
+flake8 .
+pytest
+python -m amormortuorum --smoke 120 --seed 1   # opens a real window briefly
+python -m pip install ".[build]"; python tools/ci/build_binary.py
+```
 
-Notes
-- If your project requires platform-specific build dependencies (SDL, OpenGL, etc.), install them before running PyInstaller by adding steps to the build job.
-- Codesigning and notarization (macOS) are out of scope for the default pipeline but can be added as follow-up work.
+Codesigning and macOS notarization are out of scope for the default pipeline.

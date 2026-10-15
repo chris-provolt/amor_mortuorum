@@ -101,8 +101,8 @@ class GameApp(arcade.Window):
         arcade.run()
 
     # Integrations & helpers
-    def set_fullscreen(self, fullscreen: Optional[bool] = None) -> None:
+    def toggle_fullscreen(self, fullscreen: Optional[bool] = None) -> None:
         if fullscreen is None:
             fullscreen = not self.fullscreen
-        self.set_fullscreen(fullscreen)
+        super().set_fullscreen(fullscreen)
         logger.info("Fullscreen toggled: %s", fullscreen)

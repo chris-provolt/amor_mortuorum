@@ -159,7 +159,7 @@ class SaveManager:
                 # If cannot unlink, replace will overwrite below
                 pass
             try:
-                shutil.move(str(path), str(bak))
+                os.replace(str(path), str(bak))
             except Exception:
                 # If moving fails (e.g., permission), try copying then unlink
                 try:
@@ -167,11 +167,15 @@ class SaveManager:
                 except Exception:
                     # Last resort, ignore backup failure
                     pass
-        # Replace with tmp
-        shutil.move(str(tmp), str(path))
-        # Ensure data is on disk
-        with path.open("r", encoding="utf-8") as f:
-            os.fsync(f.fileno())
+        # Replace with tmp (atomic on POSIX and Windows)
+        os.replace(str(tmp), str(path))
+        # On POSIX, fsync the directory so the rename itself is durable.
+        if os.name == "posix":
+            dfd = os.open(str(path.parent), os.O_RDONLY)
+            try:
+                os.fsync(dfd)
+            finally:
+                os.close(dfd)
         if not bak.exists():
             try:
                 shutil.copy2(str(path), str(bak))
