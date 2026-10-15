@@ -44,6 +44,7 @@ class Driver:
             "enter": arcade.key.ENTER,
             "esc": arcade.key.ESCAPE,
             "tab": arcade.key.TAB,
+            "m": arcade.key.M,
         }
 
     def frame(self, dt: float = 1 / 60):
@@ -366,3 +367,33 @@ def test_locked_floor_key_door_and_trap(app):
     assert d.scene_name() == "DungeonScene" and d.scene.pos == fmap.stairs
     d.press("enter")
     assert run.floor == 6
+
+
+def test_fog_of_war_and_minimap(app):
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    d.press("enter")  # Enter the Dungeon
+    scene = d.scene
+    assert scene.pos in scene.vis.visible
+    explored_before = set(scene.vis.explored)
+    assert explored_before, "the start area is explored on entry"
+    # Tiles outside sight are invisible; the start tile is fully lit
+    assert scene._tile_sprites[scene.pos].alpha == 255
+    unseen = next(p for p in scene._tile_sprites if p not in scene.vis.explored)
+    assert scene._tile_sprites[unseen].alpha == 0
+
+    # Walk towards the stairs for a few steps; explored area grows
+    _walk_to(d, scene.fmap.stairs)
+    if d.scene_name() == "DungeonScene":
+        assert d.scene.vis.explored > explored_before
+        start_state = d.scene.vis.state(scene.fmap.start)
+        assert start_state in ("visible", "explored")
+
+    # Minimap toggles with M and draws without error in both states
+    if d.scene_name() == "DungeonScene":
+        assert d.scene.minimap.enabled
+        d.press("m")
+        assert not d.scene.minimap.enabled
+        d.press("m")
+        assert d.scene.minimap.enabled

@@ -15,11 +15,12 @@ What works today, end to end:
 - **XP and levelling** from a data-driven curve (`xp_curve.json`): stats grow per level, speed every third level.
 - **Dungeon floors**: BSP rooms and corridors generated from `(seed, floor)`, tile movement, chests with depth-scaled loot or gold, stairs to the next floor, and the depth-decaying **portal** back to the Graveyard.
 - **Hazards**: hidden one-shot **spike and dart traps** that scale with depth, and from floor 2 some floors **lock the stairs room** behind doors whose **Catacomb Key** is hidden elsewhere on the floor.
+- **Fog of war and minimap**: shadowcast line of sight (walls and locked doors block), remembered tiles drawn dimmed, and a toggleable minimap (M) with icons for stairs, chests, portals, keys and sprung traps you have seen.
 - **Random encounters** that open **turn-based combat**: Attack / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling.
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.
 
-Not yet built (see [Roadmap](#roadmap)): party of up to four, fog of war and minimap, mini-bosses and the final boss, relic drops and the collection screen, audio, settings screen, controller support.
+Not yet built (see [Roadmap](#roadmap)): party of up to four, mini-bosses and the final boss, relic drops and the collection screen, audio, settings screen, controller support.
 
 ---
 
@@ -118,8 +119,9 @@ Not yet built (see [Roadmap](#roadmap)): party of up to four, fog of war and min
   - **Confirm / interact (stairs, portal):** Enter / Space
   - **Back / pause:** Esc
   - **Bag & Equipment:** Tab
+  - **Minimap toggle:** M
   - **Combat target:** Left / Right
-- **Planned:** screen-shake and colourblind toggles, font scaling, controller support, minimap toggle (`M`).
+- **Planned:** screen-shake and colourblind toggles (minimap icons are colour-only today), font scaling, controller support.
 
 ## Tech Stack
 - **Language:** Python **3.10+** (tested on 3.11 and 3.13)
@@ -154,9 +156,10 @@ src/amormortuorum/
 │   ├── encounters.py      # step rolls and formations
 │   ├── run.py             # Run state, death/resurrection, persistence bridge
 │   ├── progression.py     # XP curve, level-ups
+│   ├── fov.py             # shadowcasting field of view, explored memory
 │   ├── hub.py  shop.py  crypt.py
 ├── persistence/           # SaveManager, SaveGame/MetaState/RunState, atomic writes
-├── ui/                    # VerticalMenu model + MenuView, Hud
+├── ui/                    # VerticalMenu model + MenuView, Hud, Minimap
 └── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, run_summary
 tests/                     # pytest; GL-marked tests open a window (opt-in)
 tools/ci/build_binary.py   # PyInstaller one-file build
@@ -270,11 +273,10 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 
 ## Roadmap
 Design notes for each epic live in `docs/epics/`. Rough order from here:
-1. Fog of war and minimap.
-2. Mini-bosses at 20/40/60/80 with locked stairs; final boss at B99.
-3. Relic drops, collection screen, final relic award, relic passives.
-4. Party of up to four (combat already iterates a party list; needs recruitment and UI).
-5. Scrolls as skills, audio, settings screen, controller support, save-and-quit mid-run.
+1. Mini-bosses at 20/40/60/80 with locked stairs; final boss at B99.
+2. Relic drops, collection screen, final relic award, relic passives.
+3. Party of up to four (combat already iterates a party list; needs recruitment and UI).
+4. Scrolls as skills, audio, settings screen, controller support, save-and-quit mid-run.
 
 ---
 

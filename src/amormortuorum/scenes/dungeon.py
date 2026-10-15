@@ -10,6 +10,7 @@ from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.combat import Battle, Outcome
 from ..systems.encounters import combat_rng, encounter_rng, roll_formation, step_encounter
+from ..systems.fov import Visibility
 from ..systems.hub import GraveyardHub
 from ..systems.loot import roll_chest, roll_chest_gold
 from ..systems.procgen import (
@@ -25,8 +26,12 @@ from ..systems.progression import sync_level
 from ..systems.rng import chest_rng
 from ..ui.hud import Hud
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
+from ..ui.minimap import Minimap
 
 logger = logging.getLogger(__name__)
+
+ALPHA_VISIBLE = 255
+ALPHA_EXPLORED = 90
 
 COLOR_WALL = (38, 38, 50)
 COLOR_FLOOR = (92, 92, 108)
@@ -65,7 +70,10 @@ class DungeonScene(BaseScene):
         self.player = arcade.SpriteList()
         self._feature_sprites: Dict[Pos, arcade.Sprite] = {}
         self._door_sprites: Dict[Pos, arcade.Sprite] = {}
+        self._tile_sprites: Dict[Pos, arcade.Sprite] = {}
         self._player_sprite: Optional[arcade.Sprite] = None
+        self.vis = Visibility()
+        self.minimap: Optional[Minimap] = None
         self.camera: Optional[arcade.Camera2D] = None
         self.hud: Optional[Hud] = None
         self.active_battle: Optional[Battle] = None
@@ -84,6 +92,8 @@ class DungeonScene(BaseScene):
         self._chest_rng = chest_rng(run.seed, run.floor)
         self._enc_rng = encounter_rng(run.seed, run.floor)
         self._build_sprites()
+        self.minimap = Minimap(self.fmap, self.vis, self.app)
+        self._refresh_visibility(initial=True)
         self.camera = arcade.Camera2D()
         self.hud = Hud(self.app)
         self.hud.push(f"Floor B{run.floor}. Find the stairs.")
@@ -114,6 +124,8 @@ class DungeonScene(BaseScene):
             self.camera.match_window()
         if self.hud is not None:
             self.hud.on_resize(width, height)
+        if self.minimap is not None:
+            self.minimap.on_resize(width, height)
         if self._pause_title is not None:
             self._pause_title.position = (width / 2, height / 2 + 60)
         if self._pause_view is not None:
@@ -149,7 +161,9 @@ class DungeonScene(BaseScene):
                     color = COLOR_FLOOR if tile == Tile.FLOOR else COLOR_WALL
                 cx, cy = tile_center((x, y))
                 sprite = arcade.SpriteSolidColor(TILE_SIZE, TILE_SIZE, cx, cy, color)
+                sprite.alpha = 0
                 self.tiles.append(sprite)
+                self._tile_sprites[(x, y)] = sprite
                 if tile == Tile.DOOR:
                     self._door_sprites[(x, y)] = sprite
         self.features = arcade.SpriteList()
@@ -172,8 +186,33 @@ class DungeonScene(BaseScene):
     def _add_feature(self, pos: Pos, color, size: int) -> None:
         cx, cy = tile_center(pos)
         sprite = arcade.SpriteSolidColor(size, size, cx, cy, color)
+        sprite.alpha = self._alpha_for(pos)
         self.features.append(sprite)
         self._feature_sprites[pos] = sprite
+
+    # Fog of war
+
+    def _alpha_for(self, pos: Pos) -> int:
+        state = self.vis.state(pos)
+        if state == "visible":
+            return ALPHA_VISIBLE
+        if state == "explored":
+            return ALPHA_EXPLORED
+        return 0
+
+    def _refresh_visibility(self, initial: bool = False) -> None:
+        changed = self.vis.update(self.fmap, self.pos)
+        cells = self._tile_sprites.keys() if initial else changed
+        for pos in cells:
+            alpha = self._alpha_for(pos)
+            tile = self._tile_sprites.get(pos)
+            if tile is not None:
+                tile.alpha = alpha
+            feature = self._feature_sprites.get(pos)
+            if feature is not None:
+                feature.alpha = alpha
+        if self.minimap is not None:
+            self.minimap.refresh(cells)
 
     # Movement and interaction
 
@@ -186,6 +225,7 @@ class DungeonScene(BaseScene):
             return
         self.pos = (nx, ny)
         self._player_sprite.position = tile_center(self.pos)
+        self._refresh_visibility()
         self.run.steps_since_encounter += 1
         self._on_step()
 
@@ -200,6 +240,9 @@ class DungeonScene(BaseScene):
         sprite = self._door_sprites.get(pos)
         if sprite is not None:
             sprite.color = COLOR_DOOR_OPEN
+        self._refresh_visibility()  # an open door no longer blocks sight
+        if self.minimap is not None:
+            self.minimap.refresh([pos])
         self.hud.push("The key turns. The door swings open.")
 
     def _on_step(self) -> None:
@@ -319,7 +362,9 @@ class DungeonScene(BaseScene):
         self.player.draw()
         self.app.default_camera.use()
         if self.hud is not None:
-            self.hud.draw(self.run, extra=f"Steps {self.run.steps_since_encounter}")
+            self.hud.draw(self.run, extra=f"Steps {self.run.steps_since_encounter}   [M] map")
+        if self.minimap is not None:
+            self.minimap.draw(self.pos)
         if self.paused:
             arcade.draw_lbwh_rectangle_filled(0, 0, self.app.width, self.app.height, (0, 0, 0, 170))
             self._pause_title.draw()
@@ -344,6 +389,10 @@ class DungeonScene(BaseScene):
             return True
         if "menu" in actions:
             self._open_inventory()
+            return True
+        if "map" in actions:
+            if self.minimap is not None:
+                self.minimap.toggle()
             return True
         if "cancel" in actions or "pause" in actions:
             self._toggle_pause()
