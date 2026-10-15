@@ -35,4 +35,4 @@ where = ["src"]
 include = ["amormortuorum*"]
 
 [tool.setuptools.package-data]
-amormortuorum = ["config/*.json", "data/*.json"]
+amormortuorum = ["config/*.json", "data/*.json", "resources/audio/*.wav", "resources/audio/*.md"]

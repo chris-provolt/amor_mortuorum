@@ -22,10 +22,13 @@ What works today, end to end:
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
 - **Skills**: six spells learned by level (`skills.json`) and cast for MP from the combat Skill menu: single-target, all-enemy, and healing. Resting and the Tonic of Clear Mind restore MP.
 - **Party of up to four**: recruit companions at the Graveyard for gold; they level with you, share the leader's bag and gold, carry their own equipment, act in SPD order, and every survivor earns full XP. Heals target the most wounded ally.
+- **Audio**: named sound hooks (menus, steps, chests, combat, level-ups, relics, bosses) and ambient loops for the Graveyard, dungeon and combat. Placeholder tones are synthesized with the standard library on first run; drop real `.wav` files into `resources/audio/` to replace them.
+- **Settings screen** (title menu and pause menu): fullscreen, music and SFX volume, VSync, a view of the key bindings, and Save to a per-user `settings.json` that the game loads automatically.
+- **Controller support**: any pyglet-recognised gamepad, hot-pluggable. D-pad or left stick moves, A confirms, B cancels, Y opens the bag, X toggles the map, Start pauses.
 - **Save & Quit** from the pause menu: a one-shot mid-run save that resumes at the start of the current floor and is consumed on load.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.
 
-Not yet built (see [Roadmap](#roadmap)): audio, settings screen, controller support.
+Every epic from the original design has a first implementation. See [Roadmap](#roadmap) for what would make it a finished game.
 
 ---
 
@@ -127,13 +130,14 @@ Not yet built (see [Roadmap](#roadmap)): audio, settings screen, controller supp
   - **Back / pause:** Esc
   - **Bag & Equipment:** Tab (Left / Right switches party member)
   - **Minimap toggle:** M
+  - **Controller:** D-pad / left stick move, A confirm, B back, Y bag, X map, Start pause
   - **Combat target:** Left / Right
-- **Planned:** screen-shake and colourblind toggles (minimap icons are colour-only today), font scaling, controller support.
+- **Planned:** screen-shake and colourblind toggles (minimap icons are colour-only today), font scaling, in-game key rebinding (today: edit the saved `settings.json`).
 
 ## Tech Stack
 - **Language:** Python **3.10+** (tested on 3.11 and 3.13)
 - **Renderer/UI:** [Arcade 3.3+](https://api.arcade.academy/)
-- **Assets:** Placeholder solid-colour sprites; art and audio are not yet part of the project
+- **Assets:** Placeholder solid-colour sprites and synthesized placeholder audio; real art and sound can be dropped in under `resources/`
 - **Packaging:** PyInstaller via `tools/ci/build_binary.py` (tagged releases)
 
 ---
@@ -148,6 +152,8 @@ src/amormortuorum/
 ├── config/default_settings.json
 ├── core/
 │   ├── context.py         # GameContext: settings, save manager, data, meta, run, seed
+│   ├── audio.py           # AudioManager: sfx/music hooks, synthesized placeholders
+│   ├── controller.py      # gamepad -> actions (pyglet ControllerManager)
 │   ├── input.py           # action-based key mapping
 │   ├── settings.py        # JSON settings with user overrides
 │   └── scenes/            # BaseScene + stack-based SceneManager (arcade-free)
@@ -170,7 +176,8 @@ src/amormortuorum/
 │   ├── hub.py  shop.py  crypt.py
 ├── persistence/           # SaveManager, SaveGame/MetaState/RunState, atomic writes
 ├── ui/                    # VerticalMenu model + MenuView, Hud, Minimap
-└── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, relics, run_summary
+├── resources/audio/       # optional real .wav assets (override placeholders)
+└── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, relics, settings, run_summary
 tests/                     # pytest; GL-marked tests open a window (opt-in)
 tools/ci/build_binary.py   # PyInstaller one-file build
 docs/                      # design notes per epic, CI, save system
@@ -273,7 +280,7 @@ python -m amormortuorum --seed 1234 --profile alt --debug
 python -m amormortuorum --settings my_settings.json
 ```
 
-Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--settings PATH` (JSON overrides), `--debug`, `--smoke FRAMES` (boot, start a run, render the first floor, exit; used by CI). `AMOR_HEADLESS=1` enables Arcade's headless mode, which needs EGL and only works on Linux.
+Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--settings PATH` (JSON overrides; defaults to the file the Settings screen saves), `--debug`, `--smoke FRAMES` (boot, start a run, render the first floor, exit; used by CI). `AMOR_HEADLESS=1` enables Arcade's headless mode, which needs EGL and only works on Linux.
 
 **Requirements:** `arcade>=3.3,<4`, Python 3.10+. Windows, macOS and Linux.
 
@@ -299,10 +306,12 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 ---
 
 ## Roadmap
-Design notes for each epic live in `docs/epics/`. Rough order from here:
-1. Audio hooks and placeholder sound effects wired to the volume settings.
-2. Settings screen (fullscreen, volumes, key bindings).
-3. Controller support.
+Design notes for each epic live in `docs/epics/`. Every epic now has a first implementation; what remains is polish:
+1. A balance pass across all five tiers (enemy stats, boss HP, loot and XP curves are first guesses).
+2. Real art and audio assets (sprites, tiles, SFX, music) replacing the placeholders.
+3. Accessibility: colourblind-safe minimap icons, screen-shake and font-scale toggles, in-game key rebinding.
+4. Cellular-cavern floors as a second generator; enemy pathfinding on the map.
+5. Run statistics, achievements, and a profile picker for multiple save profiles.
 
 ---
 

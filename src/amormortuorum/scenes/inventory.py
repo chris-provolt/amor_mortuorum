@@ -43,6 +43,7 @@ class InventoryScene(BaseScene):
         ]
         self._msg = arcade.Text("", 0, 0, color=MSG, font_size=14, anchor_x="center")
         self._view = MenuView(self.menu, 0, 0, font_size=17)
+        self.menu.sfx = self.app.audio.play
         self._build_menu()
         self.on_resize(self.app.width, self.app.height)
 

@@ -117,6 +117,7 @@ class DungeonScene(BaseScene):
             [
                 MenuItem("Resume", self._toggle_pause),
                 MenuItem("Bag & Equipment", self._open_inventory, hint="Also: Tab"),
+                MenuItem("Settings", self._open_settings, hint="Fullscreen, volumes"),
                 MenuItem(
                     "Save & Quit", self._save_and_quit,
                     hint="Resume later at the start of this floor (one-shot save)",
@@ -129,6 +130,8 @@ class DungeonScene(BaseScene):
             keep_selection=False,
         )
         self._pause_view = MenuView(self.pause_menu, 0, 0, font_size=20, anchor_x="center")
+        self.pause_menu.sfx = self.app.audio.play
+        self.app.audio.play_music("dungeon")
         self.on_resize(self.app.width, self.app.height)
 
     def on_resize(self, width: int, height: int):
@@ -148,6 +151,7 @@ class DungeonScene(BaseScene):
         battle = self.active_battle
         self.active_battle = None
         was_boss, self._boss_battle = self._boss_battle, False
+        self.app.audio.play_music("dungeon")
         if battle is None:
             return
         if battle.outcome is Outcome.VICTORY:
@@ -155,6 +159,7 @@ class DungeonScene(BaseScene):
             self.hud.push(f"Victory. +{xp} XP, +{gold} gold.")
             for member in self.run.party:
                 for up in sync_level(member, self.data):
+                    self.app.audio.play("level_up")
                     self.hud.push(f"{member.name}: {up.describe()}")
             if was_boss:
                 self._on_boss_defeated()
@@ -242,6 +247,7 @@ class DungeonScene(BaseScene):
             return
         self.pos = (nx, ny)
         self._player_sprite.position = tile_center(self.pos)
+        self.app.audio.play("step")
         self._refresh_visibility()
         self.run.steps_since_encounter += 1
         self._on_step()
@@ -250,9 +256,11 @@ class DungeonScene(BaseScene):
         leader = self.run.leader
         key = self.data.item(KEY_ITEM_ID)
         if not leader.inventory.has(key.id):
+            self.app.audio.play("menu_back")
             self.hud.push("A locked door. It needs a Catacomb Key.")
             return
         leader.inventory.remove(key, 1)
+        self.app.audio.play("door")
         self.fmap.unlock_door(pos)
         sprite = self._door_sprites.get(pos)
         if sprite is not None:
@@ -269,6 +277,7 @@ class DungeonScene(BaseScene):
                 sprite.remove_from_sprite_lists()
             try:
                 self.run.leader.inventory.add(self.data.item(KEY_ITEM_ID), 1)
+                self.app.audio.play("chest")
                 self.hud.push("Found a Catacomb Key.")
             except AmorError:
                 self.fmap.keys.add(self.pos)
@@ -276,6 +285,7 @@ class DungeonScene(BaseScene):
                 self.hud.push("A key, but you cannot carry more.")
         trap = self.fmap.trigger_trap(self.pos)
         if trap is not None:
+            self.app.audio.play("trap")
             self._add_feature(self.pos, COLOR_TRAP, 12)
             dmg = self.run.leader.take_damage(trap_damage(trap.kind, self.run.floor))
             noun = "Spikes shoot up" if trap.kind == "spikes" else "Darts hiss from the wall"
@@ -310,11 +320,13 @@ class DungeonScene(BaseScene):
         gold = roll_chest_gold(self._chest_rng, self.run.floor)
         if gold is not None:
             leader.add_gold(gold)
+            self.app.audio.play("gold")
             self.hud.push(f"The chest holds {gold} gold.")
             return
         item = roll_chest(self._chest_rng, self.run.floor, self.data)
         try:
             leader.inventory.add(item, 1)
+            self.app.audio.play("chest")
             self.hud.push(f"Found {item.name} ({item.quality}).")
         except AmorError:
             self.hud.push(f"Found {item.name}, but your bag cannot hold it.")
@@ -338,6 +350,7 @@ class DungeonScene(BaseScene):
             return
         meta.relics.add(relic_id)
         relic = self.data.relic(relic_id)
+        self.app.audio.play("relic")
         self.hud.push(f"A Relic of the Veil: {relic.name}.")
         apply_passives(self.run, meta, self.data)
         self.state.save_manager.save_meta(meta)
@@ -357,6 +370,7 @@ class DungeonScene(BaseScene):
         self.run.steps_since_encounter = 0
         self.active_battle = Battle(self.run.party, enemies, rng, self.data)
         self._boss_battle = True
+        self.app.audio.play("boss")
         logger.info("Boss fight on B%d: %s", self.run.floor, boss.name)
         self.hud.push(f"{boss.name} rises to meet you.")
         self.manager.push(CombatScene(self.app, self.active_battle))
@@ -390,11 +404,13 @@ class DungeonScene(BaseScene):
         if feature == "stairs" and self.fmap.stairs_locked:
             self._start_boss()
         elif feature == "stairs":
+            self.app.audio.play("stairs")
             self.run.descend()
             self.manager.replace(DungeonScene(self.app))
         elif feature == "portal":
             from .graveyard import GraveyardScene
 
+            self.app.audio.play("portal")
             self.run.in_graveyard = True
             self.manager.replace(GraveyardScene(self.app))
 
@@ -424,6 +440,12 @@ class DungeonScene(BaseScene):
 
         self.paused = False
         self.manager.push(InventoryScene(self.app))
+
+    def _open_settings(self) -> None:
+        from .settings import SettingsScene
+
+        self.paused = False
+        self.manager.push(SettingsScene(self.app))
 
     def _save_and_quit(self) -> None:
         from .main_menu import MainMenuScene

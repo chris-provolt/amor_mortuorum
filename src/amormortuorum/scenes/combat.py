@@ -70,6 +70,8 @@ class CombatScene(BaseScene):
             for _ in self.battle.party
         ]
         self._view = MenuView(self.menu, 0, 0, font_size=20)
+        self.menu.sfx = self.app.audio.play
+        self.app.audio.play_music("combat")
         self._log.append(LogEvent("The dead stir.", "info"))
         self._pick_next_actor()
         self._show_command_menu()
@@ -178,6 +180,7 @@ class CombatScene(BaseScene):
             self._log.append(LogEvent(str(e), "info"))
             return
         self._log.extend(events)
+        self._sound_for(events)
         if self.battle.outcome is not Outcome.ONGOING:
             self.mode = "done"
             self.menu.set_items([], keep_selection=False)
@@ -185,6 +188,20 @@ class CombatScene(BaseScene):
         self._pick_next_actor()
         self._refresh_target()
         self._show_command_menu()
+
+    def _sound_for(self, events) -> None:
+        audio = self.app.audio
+        kinds = {e.kind for e in events}
+        if self.battle.outcome is Outcome.VICTORY:
+            audio.play("victory")
+        elif self.battle.outcome is Outcome.DEFEAT:
+            audio.play("defeat")
+        elif self.battle.outcome is Outcome.FLED:
+            audio.play("flee")
+        elif "attack" in kinds or "item" in kinds:
+            audio.play("hit")
+        if "heal" in kinds:
+            audio.play("heal")
 
     def _attack(self) -> None:
         self._refresh_target()

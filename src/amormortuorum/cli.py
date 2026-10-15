@@ -3,7 +3,7 @@ import logging
 import os
 from pathlib import Path
 
-from .core.settings import Settings
+from .core.settings import Settings, user_settings_path
 from .utils.logging import configure_logging
 
 
@@ -17,7 +17,7 @@ def parse_args(argv=None):
         dest="settings_path",
         type=Path,
         default=None,
-        help="Path to a user settings JSON file to load/override defaults.",
+        help="User settings JSON file (default: the one the Settings screen saves).",
     )
     parser.add_argument(
         "--debug",
@@ -58,7 +58,10 @@ def main(argv=None) -> int:
     from .app import GameApp
     from .persistence import SaveManager
 
-    settings = Settings.load(user_path=args.settings_path)
+    settings_path = args.settings_path
+    if settings_path is None and user_settings_path().exists():
+        settings_path = user_settings_path()
+    settings = Settings.load(user_path=settings_path)
     save_manager = SaveManager(profile_id=args.profile)
 
     app = GameApp(

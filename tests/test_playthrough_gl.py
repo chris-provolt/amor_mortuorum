@@ -17,7 +17,8 @@ pytestmark = [
 
 
 @pytest.fixture
-def app(tmp_path):
+def app(tmp_path, monkeypatch):
+    monkeypatch.setenv("AMOR_MUTE", "1")
     from amormortuorum.app import GameApp
     from amormortuorum.core.settings import Settings
     from amormortuorum.persistence import SaveManager
@@ -639,3 +640,38 @@ def test_recruit_companion_and_switch_members_in_bag(app):
     d.press("down")
     d.press("enter")  # Continue
     assert [m.name for m in app.state.run.party] == ["Wanderer", "Ossian"]
+
+
+def test_settings_screen_adjusts_volume_and_saves(app, tmp_path, monkeypatch):
+    from amormortuorum.core import settings as settings_mod
+    from amormortuorum.scenes import settings as settings_scene
+
+    target = tmp_path / "settings.json"
+    monkeypatch.setattr(settings_mod, "user_settings_path", lambda: target)
+    monkeypatch.setattr(settings_scene, "user_settings_path", lambda: target)
+
+    d = Driver(app)
+    d.boot_to_menu()
+    while d.scene.menu.current.label != "Settings":
+        d.press("down")
+    d.press("enter")
+    assert d.scene_name() == "SettingsScene"
+
+    d.press("down")  # Music volume
+    assert d.scene.menu.current.payload == "music"
+    before = app.settings.audio.music_volume
+    d.press("left")
+    assert app.settings.audio.music_volume == round(before - 0.1, 2)
+    d.press("right")
+    d.press("right")
+    assert app.settings.audio.music_volume == round(before + 0.1, 2)
+
+    while d.scene.menu.current.label != "Save":
+        d.press("down")
+    d.press("enter")
+    assert target.exists()
+    import json
+
+    assert json.loads(target.read_text())["audio"]["music_volume"] == round(before + 0.1, 2)
+    d.press("esc")
+    assert d.scene_name() == "MainMenuScene"

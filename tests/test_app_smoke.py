@@ -10,7 +10,8 @@ pytestmark = pytest.mark.gl
 
 
 @pytest.mark.skipif(os.environ.get("AMOR_GL_TESTS") != "1", reason="needs a display / GL context")
-def test_app_boots_and_exits_after_smoke_frames(tmp_path):
+def test_app_boots_and_exits_after_smoke_frames(tmp_path, monkeypatch):
+    monkeypatch.setenv("AMOR_MUTE", "1")
     from amormortuorum.app import GameApp
     from amormortuorum.core.settings import Settings
     from amormortuorum.persistence import SaveManager

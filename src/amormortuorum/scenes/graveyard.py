@@ -54,6 +54,8 @@ class GraveyardScene(BaseScene):
         ]
         self.hud = Hud(self.app)
         self._view = MenuView(self.menu, 0, 0, font_size=20)
+        self.menu.sfx = self.app.audio.play
+        self.app.audio.play_music("graveyard")
         self._show_main_menu()
         self.on_resize(self.app.width, self.app.height)
         self.hud.push("Saved. The Graveyard is quiet tonight.")
@@ -197,12 +199,14 @@ class GraveyardScene(BaseScene):
 
     def _rest(self) -> None:
         self.hub.rest_party(self.app.state.run)
+        self.app.audio.play("heal")
         self.hud.push("You rest among the stones. HP and MP restored.")
 
     def _buy(self, item_id: str) -> None:
         leader = self.app.state.run.leader
         try:
             spent = self.ctx.shop.buy(leader, item_id, 1)
+            self.app.audio.play("gold")
             self.hud.push(f"Bought {self.app.state.data.item(item_id).name} for {spent} gold.")
         except AmorError as e:
             self.hud.push(str(e))
@@ -289,6 +293,7 @@ class GraveyardScene(BaseScene):
             return True
         if "cancel" in actions:
             if self.mode != "main":
+                self.app.audio.play("menu_back")
                 self._show_main_menu()
             return True
         if "menu" in actions:
