@@ -11,6 +11,7 @@ from ..errors import AmorError
 from ..systems.entities import EQUIP_SLOTS
 from ..systems.progression import xp_to_next_level
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
+from ..ui.theme import fs
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +36,15 @@ class InventoryScene(BaseScene):
     def on_enter(self):
         super().on_enter()
         self._title = arcade.Text(
-            "Bag & Equipment", 0, 0, color=arcade.color.GHOST_WHITE, font_size=28,
+            "Bag & Equipment", 0, 0, color=arcade.color.GHOST_WHITE, font_size=fs(28),
             anchor_x="center", anchor_y="center",
         )
         self._panel = [
-            arcade.Text("", 0, 0, color=PANEL_TEXT, font_size=14, anchor_y="top") for _ in range(8)
+            arcade.Text("", 0, 0, color=PANEL_TEXT, font_size=fs(14), anchor_y="top")
+            for _ in range(8)
         ]
-        self._msg = arcade.Text("", 0, 0, color=MSG, font_size=14, anchor_x="center")
-        self._view = MenuView(self.menu, 0, 0, font_size=17)
+        self._msg = arcade.Text("", 0, 0, color=MSG, font_size=fs(14), anchor_x="center")
+        self._view = MenuView(self.menu, 0, 0, font_size=fs(17))
         self.menu.sfx = self.app.audio.play
         self._build_menu()
         self.on_resize(self.app.width, self.app.height)
@@ -53,7 +55,7 @@ class InventoryScene(BaseScene):
         if self._view is not None:
             self._view.set_position(width * 0.08, height * 0.78)
         for i, line in enumerate(self._panel):
-            line.position = (width * 0.58, height * 0.80 - i * 24)
+            line.position = (width * 0.58, height * 0.80 - i * fs(24))
         if self._msg is not None:
             self._msg.position = (width / 2, 40)
 

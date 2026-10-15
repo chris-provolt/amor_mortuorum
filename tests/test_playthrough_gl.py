@@ -109,6 +109,8 @@ def _walk_to(driver: Driver, goal):
         scene = driver.scene
         dx, dy = nxt[0] - scene.pos[0], nxt[1] - scene.pos[1]
         driver.press({(1, 0): "right", (-1, 0): "left", (0, 1): "up", (0, -1): "down"}[(dx, dy)])
+    if driver.scene_name() == "CombatScene":  # an encounter on the final step
+        driver.fight_until_done()
 
 
 def test_full_loop_menu_graveyard_dungeon_combat_stairs(app):
@@ -673,5 +675,35 @@ def test_settings_screen_adjusts_volume_and_saves(app, tmp_path, monkeypatch):
     import json
 
     assert json.loads(target.read_text())["audio"]["music_volume"] == round(before + 0.1, 2)
+    d.press("esc")
+    assert d.scene_name() == "MainMenuScene"
+
+
+def test_rebind_key_from_settings(app):
+    import arcade
+
+    d = Driver(app)
+    d.boot_to_menu()
+    while d.scene.menu.current.label != "Settings":
+        d.press("down")
+    d.press("enter")
+    assert d.scene_name() == "SettingsScene"
+    while d.scene.menu.current.label != "Rebind keys":
+        d.press("down")
+    d.press("enter")
+    assert d.scene.mode == "keys"
+    while not d.scene.menu.current.label.startswith("map"):
+        d.press("down")
+    d.press("enter")
+    assert d.scene.mode == "listen"
+    app.on_key_press(arcade.key.N, 0)
+    app.on_key_release(arcade.key.N, 0)
+    d.frame()
+    assert d.scene.mode == "keys"
+    assert app.input.actions_for_key(arcade.key.N) == ["map"]
+    assert app.input.actions_for_key(arcade.key.M) == []
+    assert app.settings.input.mapping["map"] == ["N"]
+    d.press("esc")  # back to main settings
+    assert d.scene.mode == "main"
     d.press("esc")
     assert d.scene_name() == "MainMenuScene"

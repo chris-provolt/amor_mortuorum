@@ -13,6 +13,7 @@ from .core.input import InputManager
 from .core.scenes.manager import SceneManager
 from .core.settings import Settings
 from .persistence import SaveError, SaveManager
+from .ui.theme import set_ui_scale
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ class GameApp(arcade.Window):
             center_window=True,
         )
         self.background_color = arcade.color.BLACK
+        set_ui_scale(settings.video.ui_scale)
 
         # Shared state
         save_manager = save_manager or SaveManager()

@@ -6,6 +6,7 @@ import arcade
 
 from ..core.scenes.base_scene import BaseScene
 from .main_menu import MainMenuScene
+from ..ui.theme import fs
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class BootScene(BaseScene):
             0,
             0,
             color=arcade.color.GHOST_WHITE,
-            font_size=36,
+            font_size=fs(36),
             anchor_x="center",
             anchor_y="center",
         )
@@ -39,7 +40,7 @@ class BootScene(BaseScene):
             0,
             0,
             color=arcade.color.GRAY,
-            font_size=18,
+            font_size=fs(18),
             anchor_x="center",
             anchor_y="center",
         )

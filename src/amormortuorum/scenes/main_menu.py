@@ -9,6 +9,7 @@ from ..systems.hub import GraveyardHub
 from ..systems.rng import random_seed
 from ..systems.run import new_run
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
+from ..ui.theme import fs
 
 logger = logging.getLogger(__name__)
 
@@ -29,18 +30,18 @@ class MainMenuScene(BaseScene):
     def on_enter(self):
         super().on_enter()
         self._title = arcade.Text(
-            "Amor Mortuorum", 0, 0, color=arcade.color.GHOST_WHITE, font_size=40,
+            "Amor Mortuorum", 0, 0, color=arcade.color.GHOST_WHITE, font_size=fs(40),
             anchor_x="center", anchor_y="center",
         )
         self._subtitle = arcade.Text(
-            "A descent beneath the Veil", 0, 0, color=arcade.color.GRAY, font_size=16,
+            "A descent beneath the Veil", 0, 0, color=arcade.color.GRAY, font_size=fs(16),
             anchor_x="center", anchor_y="center",
         )
         self._footer = arcade.Text(
             "Arrows/WASD move - Enter confirm - Esc back", 0, 0, color=(110, 110, 120),
-            font_size=12, anchor_x="center", anchor_y="center",
+            font_size=fs(12), anchor_x="center", anchor_y="center",
         )
-        self._view = MenuView(self.menu, 0, 0, font_size=22, anchor_x="center")
+        self._view = MenuView(self.menu, 0, 0, font_size=fs(22), anchor_x="center")
         self.menu.sfx = self.app.audio.play
         self.app.audio.play_music("graveyard")
         self._rebuild_menu()

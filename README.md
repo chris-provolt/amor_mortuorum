@@ -138,7 +138,7 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
   - **Minimap toggle:** M
   - **Controller:** D-pad / left stick move, A confirm, B back, Y bag, X map, Start pause
   - **Combat target:** Left / Right
-- **Planned:** screen-shake and colourblind toggles (minimap icons are colour-only today), font scaling, in-game key rebinding (today: edit the saved `settings.json`).
+- **Accessibility:** minimap icons are shape-coded as well as coloured (hollow square stairs, filled square chest, ring portal, diamond key, cross trap, dot player); a **UI scale** setting (80-160%) resizes every menu and panel; keys can be **rebound in-game** from Settings. Planned: a screen-shake toggle once effects exist.
 
 ## Tech Stack
 - **Language:** Python **3.10+** (tested on 3.11 and 3.13)
@@ -315,9 +315,8 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 Design notes for each epic live in `docs/epics/`. Every epic now has a first implementation; what remains is polish:
 1. Hand playtesting against the simulator's numbers (see Balance Model); the auto-policy never flees and never misjudges a potion, so real runs end earlier.
 2. Real art and audio assets (sprites, tiles, SFX, music) replacing the placeholders.
-3. Accessibility: colourblind-safe minimap icons, screen-shake and font-scale toggles, in-game key rebinding.
-4. Cellular-cavern floors as a second generator; enemy pathfinding on the map.
-5. Run statistics, achievements, and a profile picker for multiple save profiles.
+3. Cellular-cavern floors as a second generator; enemy pathfinding on the map.
+4. Run statistics, achievements, and a profile picker for multiple save profiles.
 
 ---
 

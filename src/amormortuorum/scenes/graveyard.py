@@ -14,6 +14,7 @@ from ..systems.progression import xp_to_next_level
 from ..systems.relics import apply_passives
 from ..ui.hud import Hud
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
+from ..ui.theme import fs
 
 logger = logging.getLogger(__name__)
 
@@ -45,15 +46,15 @@ class GraveyardScene(BaseScene):
         self.hub.save_run(run)
 
         self._title = arcade.Text(
-            "The Graveyard", 0, 0, color=arcade.color.GHOST_WHITE, font_size=30,
+            "The Graveyard", 0, 0, color=arcade.color.GHOST_WHITE, font_size=fs(30),
             anchor_x="center", anchor_y="center",
         )
         self._panel = [
-            arcade.Text("", 0, 0, color=PANEL_TEXT, font_size=13, anchor_y="top")
+            arcade.Text("", 0, 0, color=PANEL_TEXT, font_size=fs(13), anchor_y="top")
             for _ in range(16)
         ]
         self.hud = Hud(self.app)
-        self._view = MenuView(self.menu, 0, 0, font_size=20)
+        self._view = MenuView(self.menu, 0, 0, font_size=fs(20))
         self.menu.sfx = self.app.audio.play
         self.app.audio.play_music("graveyard")
         self._show_main_menu()
@@ -69,7 +70,7 @@ class GraveyardScene(BaseScene):
         if self._view is not None:
             self._view.set_position(width * 0.12, height * 0.62)
         for i, line in enumerate(self._panel):
-            line.position = (width * 0.52, height * 0.66 - i * 20)
+            line.position = (width * 0.52, height * 0.66 - i * fs(20))
         if self.hud is not None:
             self.hud.on_resize(width, height)
 

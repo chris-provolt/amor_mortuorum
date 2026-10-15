@@ -110,15 +110,35 @@ class InputManager:
             del self._mapping[action]
             logger.info("Unbound action '%s'", action)
 
-    def mapping_names(self) -> Dict[str, List[str]]:
-        """Human-readable bindings per action (key constant names)."""
+    @staticmethod
+    def key_name(code: int) -> str:
+        """The ``arcade.key`` constant name for ``code`` (falls back to the number)."""
         import arcade
 
-        names = {v: k for k, v in vars(arcade.key).items() if isinstance(v, int)}
+        for name, value in vars(arcade.key).items():
+            if value == code and name.isupper() and not name.startswith("MOD_"):
+                return name
+        return str(code)
+
+    def mapping_names(self) -> Dict[str, List[str]]:
+        """Human-readable bindings per action (key constant names)."""
         return {
-            action: sorted(names.get(code, str(code)) for code in keys)
+            action: sorted(self.key_name(code) for code in keys)
             for action, keys in self._mapping.items()
         }
+
+    def rebind_key(self, action: str, code: int) -> str:
+        """Bind ``action`` to the single key ``code`` (removing it from other actions).
+
+        Returns the key's name so settings can be updated and saved.
+        """
+        name = self.key_name(code)
+        for other, keys in self._mapping.items():
+            if other != action:
+                keys.discard(code)
+        self._mapping[action] = {code}
+        logger.info("Rebound '%s' to %s", action, name)
+        return name
 
     def is_pressed(self, action: str) -> bool:
         keys = self._mapping.get(action, set())

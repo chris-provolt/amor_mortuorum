@@ -7,6 +7,7 @@ from typing import Deque, Optional
 import arcade
 
 from ..systems.run import Run
+from .theme import fs
 
 TEXT = (230, 230, 240)
 DIM = (150, 150, 165)
@@ -16,9 +17,9 @@ PANEL = (0, 0, 0, 160)
 class Hud:
     def __init__(self, app, max_messages: int = 3) -> None:
         self.app = app
-        self._status = arcade.Text("", 12, 0, color=TEXT, font_size=14, anchor_y="top")
+        self._status = arcade.Text("", 12, 0, color=TEXT, font_size=fs(14), anchor_y="top")
         self._lines = [
-            arcade.Text("", 12, 0, color=DIM, font_size=12, anchor_y="top")
+            arcade.Text("", 12, 0, color=DIM, font_size=fs(12), anchor_y="top")
             for _ in range(max_messages)
         ]
         self.messages: Deque[str] = deque(maxlen=max_messages)
@@ -27,7 +28,7 @@ class Hud:
     def on_resize(self, width: int, height: int) -> None:
         self._status.position = (12, height - 10)
         for i, line in enumerate(self._lines):
-            line.position = (12, height - 34 - i * 17)
+            line.position = (12, height - fs(34) - i * fs(17))
 
     def push(self, text: str) -> None:
         self.messages.append(text)
@@ -37,7 +38,8 @@ class Hud:
 
     def draw(self, run: Optional[Run], extra: str = "") -> None:
         height = self.app.height
-        arcade.draw_lbwh_rectangle_filled(0, height - 92, self.app.width, 92, PANEL)
+        panel_h = fs(92)
+        arcade.draw_lbwh_rectangle_filled(0, height - panel_h, self.app.width, panel_h, PANEL)
         if run is not None:
             p = run.leader
             members = "   ".join(

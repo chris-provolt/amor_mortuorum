@@ -7,6 +7,7 @@ import arcade
 
 from ..core.scenes.base_scene import BaseScene
 from ..systems.relics import collection_rows, describe_passive, passive_totals
+from ..ui.theme import fs
 
 TEXT = (215, 215, 230)
 DIM = (120, 120, 135)
@@ -28,7 +29,7 @@ class RelicsScene(BaseScene):
         have = sum(1 for _, got in rows if got)
         self._title = arcade.Text(
             f"Relics of the Veil   {have}/{len(rows)}", 0, 0, color=arcade.color.GHOST_WHITE,
-            font_size=26, anchor_x="center", anchor_y="center",
+            font_size=fs(26), anchor_x="center", anchor_y="center",
         )
         self._rows = []
         for relic, got in rows:
@@ -39,16 +40,16 @@ class RelicsScene(BaseScene):
             desc_color = TEXT if got else DIM
             self._rows.append(
                 [
-                    arcade.Text(name, 0, 0, color=name_color, font_size=16, anchor_y="top"),
-                    arcade.Text(desc, 0, 0, color=desc_color, font_size=12, anchor_y="top"),
+                    arcade.Text(name, 0, 0, color=name_color, font_size=fs(16), anchor_y="top"),
+                    arcade.Text(desc, 0, 0, color=desc_color, font_size=fs(12), anchor_y="top"),
                     arcade.Text(
-                        bonus, 0, 0, color=TEXT, font_size=12, anchor_x="right", anchor_y="top"
+                        bonus, 0, 0, color=TEXT, font_size=fs(12), anchor_x="right", anchor_y="top"
                     ),
                 ]
             )
         totals = describe_passive(passive_totals(meta, data)) or "none yet"
         self._footer = arcade.Text(
-            f"Passives in effect: {totals}     Esc to return", 0, 0, color=TEXT, font_size=13,
+            f"Passives in effect: {totals}     Esc to return", 0, 0, color=TEXT, font_size=fs(13),
             anchor_x="center",
         )
         self.on_resize(self.app.width, self.app.height)
@@ -59,11 +60,11 @@ class RelicsScene(BaseScene):
         left = width * 0.12
         right = width * 0.88
         top = height - 90
-        step = max(44, (height - 150) / max(1, len(self._rows)))
+        step = max(fs(44), (height - 150) / max(1, len(self._rows)))
         for i, (name, desc, bonus) in enumerate(self._rows):
             y = top - i * step
             name.position = (left, y)
-            desc.position = (left + 16, y - 20)
+            desc.position = (left + 16, y - fs(20))
             bonus.position = (right, y)
         if self._footer is not None:
             self._footer.position = (width / 2, 24)

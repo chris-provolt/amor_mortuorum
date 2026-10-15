@@ -34,6 +34,7 @@ from ..systems.rng import chest_rng
 from ..ui.hud import Hud
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 from ..ui.minimap import Minimap
+from ..ui.theme import fs
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +116,7 @@ class DungeonScene(BaseScene):
         if self.fmap.portal is not None:
             self.hud.push("A pale light flickers somewhere on this floor...")
         self._pause_title = arcade.Text(
-            "Paused", 0, 0, color=arcade.color.GHOST_WHITE, font_size=28,
+            "Paused", 0, 0, color=arcade.color.GHOST_WHITE, font_size=fs(28),
             anchor_x="center", anchor_y="center",
         )
         self.pause_menu.set_items(
@@ -134,7 +135,7 @@ class DungeonScene(BaseScene):
             ],
             keep_selection=False,
         )
-        self._pause_view = MenuView(self.pause_menu, 0, 0, font_size=20, anchor_x="center")
+        self._pause_view = MenuView(self.pause_menu, 0, 0, font_size=fs(20), anchor_x="center")
         self.pause_menu.sfx = self.app.audio.play
         self.app.audio.play_music("dungeon")
         self.on_resize(self.app.width, self.app.height)
