@@ -16,4 +16,4 @@ Testing & Determinism
 
 Integration
 - UI layers (Arcade or CLI) can compose these services without modification.
-- Save files stored under ~/.amor_mortuorum/saves/meta.json by default; tests pass a temp root.
+- Save files live in the per-profile folder managed by `persistence.SaveManager`; tests pass a temp root.

@@ -28,3 +28,10 @@ def stream_rng(seed: int, floor: int, stream: str) -> Random:
     Keyed by string so adding a new stream never shifts an existing one.
     """
     return Random(f"{seed}:{floor}:{stream}")
+
+
+def random_seed() -> int:
+    """A fresh, non-deterministic seed for a new run (31-bit for easy typing)."""
+    from random import SystemRandom
+
+    return SystemRandom().randrange(1, 2**31)

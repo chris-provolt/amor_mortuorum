@@ -58,8 +58,10 @@ class GameApp(arcade.Window):
         self.scene_manager = SceneManager(self)
         self.input = InputManager(self, settings.input.mapping)
 
-        # Smoke mode: run N frames then close (used by CI and --smoke)
+        # Smoke mode: run N frames then close (used by CI and --smoke). Scenes
+        # consult ``app.smoke`` to auto-advance (start a run, enter the dungeon).
         self._smoke_frames_left = smoke_frames
+        self.smoke = smoke_frames is not None
 
         # Boot into the first scene (late import keeps scene modules optional at import time)
         from .scenes.boot import BootScene
@@ -120,7 +122,10 @@ class GameApp(arcade.Window):
     def on_resize(self, width: int, height: int):  # noqa: N802 (arcade API)
         logger.debug("Window resized: %dx%d", width, height)
         super().on_resize(width, height)
-        self.scene_manager.resize(width, height)
+        # pyglet can dispatch a resize while the window is still being constructed
+        manager = getattr(self, "scene_manager", None)
+        if manager is not None:
+            manager.resize(width, height)
 
     def run(self) -> None:
         """Start the main loop."""
