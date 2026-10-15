@@ -297,3 +297,72 @@ def test_shop_and_inventory_screens(app):
     assert d.scene_name() == "DungeonScene"
     assert leader.level == 2
     assert any("Level 2!" in m for m in d.scene.hud.messages)
+
+
+def test_locked_floor_key_door_and_trap(app):
+    from amormortuorum.systems.procgen import KEY_ITEM_ID, generate_floor
+
+    # Pick a floor-5 seed whose stairs room is locked and that carries a trap
+    seed = next(
+        s for s in range(1, 200) if generate_floor(s, 5).doors and generate_floor(s, 5).traps
+    )
+    app.state.seed = seed
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    run = app.state.run
+    run.floor = 5
+    run.leader.stats.max_hp = run.leader.stats.hp = 500  # survive whatever floor 5 throws
+    run.leader.stats.atk = 60
+    d.press("enter")  # Enter the Dungeon
+    assert d.scene_name() == "DungeonScene"
+    scene = d.scene
+    fmap = scene.fmap
+    assert fmap.doors and fmap.keys and fmap.traps
+    assert fmap.floor == 5 and fmap.seed == seed
+
+    # The door blocks until we hold a key
+    door = next(iter(fmap.doors))
+    assert not run.leader.inventory.has(KEY_ITEM_ID)
+
+    # Walk to a trap first: it reveals, deals damage, and is spent
+    trap_pos = next(iter(fmap.traps))
+    hp_before = run.leader.hp
+    _walk_to(d, trap_pos)
+    if d.scene_name() == "DungeonScene" and d.scene.pos == trap_pos:
+        assert fmap.traps[trap_pos].revealed and not fmap.traps[trap_pos].armed
+        assert run.leader.hp < hp_before or run.leader.hp == run.leader.max_hp
+        assert fmap.feature_at(*trap_pos) == "trap"
+
+    # Pick up the key
+    key_pos = next(iter(fmap.keys))
+    _walk_to(d, key_pos)
+    assert d.scene_name() == "DungeonScene"
+    assert run.leader.inventory.has(KEY_ITEM_ID)
+    assert not fmap.keys
+
+    # Step into a door from a reachable neighbour: it unlocks and consumes the key
+    from amormortuorum.systems.procgen import bfs_reachable
+
+    outside = bfs_reachable(fmap, d.scene.pos)
+    door, approach = next(
+        (dr, n)
+        for dr in fmap.doors
+        for n in ((dr[0] + 1, dr[1]), (dr[0] - 1, dr[1]), (dr[0], dr[1] + 1), (dr[0], dr[1] - 1))
+        if n in outside
+    )
+    _walk_to(d, approach)
+    assert d.scene.pos == approach
+    step = {(1, 0): "right", (-1, 0): "left", (0, 1): "up", (0, -1): "down"}[
+        (door[0] - approach[0], door[1] - approach[1])
+    ]
+    d.press(step)
+    assert fmap.is_walkable(*door)
+    assert not run.leader.inventory.has(KEY_ITEM_ID)
+    assert any("key turns" in m for m in d.scene.hud.messages)
+
+    # Now the stairs are reachable; descend
+    _walk_to(d, fmap.stairs)
+    assert d.scene_name() == "DungeonScene" and d.scene.pos == fmap.stairs
+    d.press("enter")
+    assert run.floor == 6

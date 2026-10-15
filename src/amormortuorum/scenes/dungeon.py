@@ -12,7 +12,15 @@ from ..systems.combat import Battle, Outcome
 from ..systems.encounters import combat_rng, encounter_rng, roll_formation, step_encounter
 from ..systems.hub import GraveyardHub
 from ..systems.loot import roll_chest, roll_chest_gold
-from ..systems.procgen import TILE_SIZE, FloorMap, Pos, Tile, generate_floor
+from ..systems.procgen import (
+    KEY_ITEM_ID,
+    TILE_SIZE,
+    FloorMap,
+    Pos,
+    Tile,
+    generate_floor,
+    trap_damage,
+)
 from ..systems.progression import sync_level
 from ..systems.rng import chest_rng
 from ..ui.hud import Hud
@@ -26,6 +34,10 @@ COLOR_STAIRS = (240, 240, 250)
 COLOR_CHEST = (214, 170, 60)
 COLOR_PORTAL = (0, 150, 150)
 COLOR_PLAYER = (248, 248, 255)
+COLOR_DOOR_LOCKED = (140, 90, 40)
+COLOR_DOOR_OPEN = (70, 62, 52)
+COLOR_KEY = (180, 120, 230)
+COLOR_TRAP = (200, 60, 60)
 
 MOVES: Dict[str, Pos] = {
     "move_up": (0, 1),
@@ -52,6 +64,7 @@ class DungeonScene(BaseScene):
         self.features = arcade.SpriteList()
         self.player = arcade.SpriteList()
         self._feature_sprites: Dict[Pos, arcade.Sprite] = {}
+        self._door_sprites: Dict[Pos, arcade.Sprite] = {}
         self._player_sprite: Optional[arcade.Sprite] = None
         self.camera: Optional[arcade.Camera2D] = None
         self.hud: Optional[Hud] = None
@@ -74,6 +87,8 @@ class DungeonScene(BaseScene):
         self.camera = arcade.Camera2D()
         self.hud = Hud(self.app)
         self.hud.push(f"Floor B{run.floor}. Find the stairs.")
+        if self.fmap.doors:
+            self.hud.push("Heavy doors seal the way down. A key must be hidden here.")
         if self.fmap.portal is not None:
             self.hud.push("A pale light flickers somewhere on this floor...")
         self._pause_title = arcade.Text(
@@ -125,16 +140,28 @@ class DungeonScene(BaseScene):
     def _build_sprites(self) -> None:
         fmap = self.fmap
         self.tiles = arcade.SpriteList(capacity=fmap.width * fmap.height)
+        self._door_sprites = {}
         for y, row in enumerate(fmap.tiles):
             for x, tile in enumerate(row):
-                color = COLOR_FLOOR if tile == Tile.FLOOR else COLOR_WALL
+                if tile == Tile.DOOR:
+                    color = COLOR_DOOR_LOCKED if fmap.doors.get((x, y)) else COLOR_DOOR_OPEN
+                else:
+                    color = COLOR_FLOOR if tile == Tile.FLOOR else COLOR_WALL
                 cx, cy = tile_center((x, y))
-                self.tiles.append(arcade.SpriteSolidColor(TILE_SIZE, TILE_SIZE, cx, cy, color))
+                sprite = arcade.SpriteSolidColor(TILE_SIZE, TILE_SIZE, cx, cy, color)
+                self.tiles.append(sprite)
+                if tile == Tile.DOOR:
+                    self._door_sprites[(x, y)] = sprite
         self.features = arcade.SpriteList()
         self._feature_sprites = {}
         self._add_feature(fmap.stairs, COLOR_STAIRS, 22)
         for pos in fmap.chests:
             self._add_feature(pos, COLOR_CHEST, 18)
+        for pos in fmap.keys:
+            self._add_feature(pos, COLOR_KEY, 14)
+        for pos, trap in fmap.traps.items():
+            if trap.revealed:
+                self._add_feature(pos, COLOR_TRAP, 12)
         if fmap.portal is not None:
             self._add_feature(fmap.portal, COLOR_PORTAL, 26)
         self.player = arcade.SpriteList()
@@ -152,6 +179,9 @@ class DungeonScene(BaseScene):
 
     def _try_move(self, dx: int, dy: int) -> None:
         nx, ny = self.pos[0] + dx, self.pos[1] + dy
+        if self.fmap.is_locked_door(nx, ny):
+            self._try_unlock((nx, ny))
+            return
         if not self.fmap.is_walkable(nx, ny):
             return
         self.pos = (nx, ny)
@@ -159,7 +189,40 @@ class DungeonScene(BaseScene):
         self.run.steps_since_encounter += 1
         self._on_step()
 
+    def _try_unlock(self, pos: Pos) -> None:
+        leader = self.run.leader
+        key = self.data.item(KEY_ITEM_ID)
+        if not leader.inventory.has(key.id):
+            self.hud.push("A locked door. It needs a Catacomb Key.")
+            return
+        leader.inventory.remove(key, 1)
+        self.fmap.unlock_door(pos)
+        sprite = self._door_sprites.get(pos)
+        if sprite is not None:
+            sprite.color = COLOR_DOOR_OPEN
+        self.hud.push("The key turns. The door swings open.")
+
     def _on_step(self) -> None:
+        if self.fmap.pickup_key(self.pos):
+            sprite = self._feature_sprites.pop(self.pos, None)
+            if sprite is not None:
+                sprite.remove_from_sprite_lists()
+            try:
+                self.run.leader.inventory.add(self.data.item(KEY_ITEM_ID), 1)
+                self.hud.push("Found a Catacomb Key.")
+            except AmorError:
+                self.fmap.keys.add(self.pos)
+                self._add_feature(self.pos, COLOR_KEY, 14)
+                self.hud.push("A key, but you cannot carry more.")
+        trap = self.fmap.trigger_trap(self.pos)
+        if trap is not None:
+            self._add_feature(self.pos, COLOR_TRAP, 12)
+            dmg = self.run.leader.take_damage(trap_damage(trap.kind, self.run.floor))
+            noun = "Spikes shoot up" if trap.kind == "spikes" else "Darts hiss from the wall"
+            self.hud.push(f"{noun}! You take {dmg} damage.")
+            if not self.run.alive:
+                self._on_party_defeated(cause=f"a {trap.kind} trap")
+                return
         feature = self.fmap.feature_at(*self.pos)
         if feature == "chest":
             self._open_chest()
@@ -216,16 +279,16 @@ class DungeonScene(BaseScene):
     def _hub(self) -> GraveyardHub:
         return GraveyardHub(self.state.save_manager, self.data, meta=self.state.meta)
 
-    def _on_party_defeated(self) -> None:
+    def _on_party_defeated(self, cause: str = "fell in battle") -> None:
         from .run_summary import RunSummaryScene
 
         hub = self._hub()
         result = self.run.on_death(self.state.meta, self.data)
         if result.revived:
             self.state.save_manager.save_meta(self.state.meta)
-            summary = self.run.summary(cause="fell in battle", revived=True)
+            summary = self.run.summary(cause=cause, revived=True)
         else:
-            summary = self.run.summary(cause="fell in battle", revived=False)
+            summary = self.run.summary(cause=cause, revived=False)
             hub.end_run(self.run)
         self.manager.replace(RunSummaryScene(self.app, summary, result.message))
 

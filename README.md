@@ -14,11 +14,12 @@ What works today, end to end:
 - **Bag & Equipment** screen (Tab anywhere): equip and unequip the five slots, use potions outside combat, see effective stats and XP to the next level.
 - **XP and levelling** from a data-driven curve (`xp_curve.json`): stats grow per level, speed every third level.
 - **Dungeon floors**: BSP rooms and corridors generated from `(seed, floor)`, tile movement, chests with depth-scaled loot or gold, stairs to the next floor, and the depth-decaying **portal** back to the Graveyard.
+- **Hazards**: hidden one-shot **spike and dart traps** that scale with depth, and from floor 2 some floors **lock the stairs room** behind doors whose **Catacomb Key** is hidden elsewhere on the floor.
 - **Random encounters** that open **turn-based combat**: Attack / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling.
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.
 
-Not yet built (see [Roadmap](#roadmap)): party of up to four, traps/doors/keys, fog of war and minimap, mini-bosses and the final boss, relic drops and the collection screen, audio, settings screen, controller support.
+Not yet built (see [Roadmap](#roadmap)): party of up to four, fog of war and minimap, mini-bosses and the final boss, relic drops and the collection screen, audio, settings screen, controller support.
 
 ---
 
@@ -94,7 +95,7 @@ Not yet built (see [Roadmap](#roadmap)): party of up to four, traps/doors/keys, 
 
 ## Procedural Generation
 - **Algorithm:** BSP split into leaves, one room per leaf, L-shaped corridors joining sibling subtrees; the whole floor is connected.
-- **Features:** Start room, stairs in the room farthest from the start, 1-5 chests scaling with depth, and a portal on a chance roll.
+- **Features:** Start room, stairs in the room farthest from the start, 1-5 chests scaling with depth, a portal on a chance roll, 0-4 hidden traps, and (35% of floors from B2) locked doors on every entrance of the stairs room with a key placed somewhere still reachable.
 - **Determinism:** Floor layout derives from `floor_rng(seed, floor)`; chest contents from `chest_rng(seed, floor)`; encounters and each battle from named streams (see [Testing & Determinism](#testing--determinism)).
 
 ## Portals to Graveyard (Depth-Scaling)
@@ -269,12 +270,11 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 
 ## Roadmap
 Design notes for each epic live in `docs/epics/`. Rough order from here:
-1. Traps, locked doors and keys in procgen.
-2. Fog of war and minimap.
-3. Mini-bosses at 20/40/60/80 with locked stairs; final boss at B99.
-4. Relic drops, collection screen, final relic award, relic passives.
-5. Party of up to four (combat already iterates a party list; needs recruitment and UI).
-6. Scrolls as skills, audio, settings screen, controller support, save-and-quit mid-run.
+1. Fog of war and minimap.
+2. Mini-bosses at 20/40/60/80 with locked stairs; final boss at B99.
+3. Relic drops, collection screen, final relic award, relic passives.
+4. Party of up to four (combat already iterates a party list; needs recruitment and UI).
+5. Scrolls as skills, audio, settings screen, controller support, save-and-quit mid-run.
 
 ---
 

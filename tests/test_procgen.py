@@ -1,13 +1,16 @@
 import pytest
 
 from amormortuorum.systems.procgen import (
+    DOOR_MIN_FLOOR,
     PORTAL_MIN_CHANCE,
+    TRAP_KINDS,
     FloorMap,
     Room,
     Tile,
     bfs_reachable,
     generate_floor,
     portal_chance,
+    trap_damage,
 )
 
 PAIRS = [
@@ -17,7 +20,10 @@ PAIRS = [
 
 
 def _snapshot(m: FloorMap):
-    return (m.tiles, m.rooms, m.start, m.stairs, sorted(m.chests), m.portal)
+    return (
+        m.tiles, m.rooms, m.start, m.stairs, sorted(m.chests), m.portal,
+        sorted((p, t.kind) for p, t in m.traps.items()), sorted(m.doors), sorted(m.keys),
+    )
 
 
 @pytest.mark.parametrize("seed", [1, 42, 9001])
@@ -41,7 +47,7 @@ def test_start_and_stairs_walkable_distinct_connected(seed, floor):
     assert m.is_walkable(*m.start)
     assert m.is_walkable(*m.stairs)
     assert m.start != m.stairs
-    reachable = bfs_reachable(m, m.start)
+    reachable = bfs_reachable(m, m.start, through_locked_doors=True)
     assert m.stairs in reachable
     # Every room is reachable, so the whole floor is connected.
     for room in m.rooms:
@@ -115,3 +121,57 @@ def test_room_helpers():
     assert a.contains((5, 4)) and not a.contains((6, 2))
     assert not a.intersects(b, margin=0)
     assert a.intersects(b, margin=2)
+
+
+@pytest.mark.parametrize("seed,floor", PAIRS)
+def test_traps_are_hidden_one_shot_hazards_off_features(seed, floor):
+    m = generate_floor(seed, floor)
+    for pos, trap in m.traps.items():
+        assert m.tile(*pos) == Tile.FLOOR
+        assert pos not in m.chests and pos != m.start and pos != m.stairs and pos != m.portal
+        assert pos not in m.keys and pos not in m.doors
+        assert trap.kind in TRAP_KINDS and trap.armed and not trap.revealed
+        assert m.feature_at(*pos) is None  # hidden until triggered
+    if m.traps:
+        pos, trap = next(iter(m.traps.items()))
+        assert m.trigger_trap(pos) is trap
+        assert trap.revealed and not trap.armed
+        assert m.feature_at(*pos) == "trap"
+        assert m.trigger_trap(pos) is None
+
+
+def test_trap_damage_scales_with_depth():
+    assert trap_damage("spikes", 1) == 4
+    assert trap_damage("darts", 1) == 2
+    assert trap_damage("spikes", 60) > trap_damage("spikes", 1)
+    assert trap_damage("spikes", 30) > trap_damage("darts", 30)
+
+
+def test_floor_one_never_locks_the_stairs():
+    for seed in range(1, 60):
+        assert not generate_floor(seed, 1).doors
+
+
+def test_locked_stairs_rooms_have_a_reachable_key():
+    locked = [generate_floor(seed, 5) for seed in range(1, 121)]
+    locked = [m for m in locked if m.doors]
+    assert len(locked) >= 15, "about a third of floors should lock the stairs room"
+    for m in locked:
+        assert 5 >= DOOR_MIN_FLOOR
+        assert all(m.tile(*pos) == Tile.DOOR and locked_ for pos, locked_ in m.doors.items())
+        assert len(m.keys) == 1
+        key = next(iter(m.keys))
+        without = bfs_reachable(m, m.start)
+        assert key in without, "key must be reachable without passing a door"
+        assert m.stairs not in without, "stairs must be sealed behind the doors"
+        assert m.feature_at(*key) == "key"
+        door = next(iter(m.doors))
+        assert m.feature_at(*door) == "door"
+        assert not m.is_walkable(*door)
+        # Unlocking every door opens the way to the stairs
+        for pos in list(m.doors):
+            assert m.unlock_door(pos) is True
+            assert m.unlock_door(pos) is False
+        assert m.is_walkable(*door)
+        assert m.stairs in bfs_reachable(m, m.start)
+        assert m.pickup_key(key) is True and m.pickup_key(key) is False

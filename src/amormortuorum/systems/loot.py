@@ -32,7 +32,9 @@ def roll_chest(rng: Random, floor: int, data: GameData) -> ItemDef:
     tier = tier_for_floor(floor, data)
     quality = roll_quality(rng, data.loot_tables[tier])
     for q in _fallback_qualities(quality):
-        pool = sorted(data.items_of_quality(q), key=lambda it: it.id)
+        pool = sorted(
+            (it for it in data.items_of_quality(q) if it.type != "key"), key=lambda it: it.id
+        )
         if pool:
             return rng.choice(pool)
     raise ValueError("no items defined in data")
