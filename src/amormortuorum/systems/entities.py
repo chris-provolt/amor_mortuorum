@@ -238,6 +238,24 @@ class Player:
             self.inventory.add(data.item(previous), 1)
         return previous
 
+    def unequip_to_inventory(self, slot: str, data: GameData) -> Optional[str]:
+        """Move the item in ``slot`` back to the bag. Returns its id, or None if empty."""
+        item_id = self.equipment.slots.get(slot)
+        if item_id is None:
+            return None
+        self.inventory.add(data.item(item_id), 1)  # may raise on a full stack
+        self.equipment.unequip(slot)
+        return item_id
+
+    def use_consumable(self, item: ItemDef) -> int:
+        """Use a healing consumable outside combat. Returns HP restored."""
+        if not self.inventory.has(item.id):
+            raise InvalidOperation(f"{item.name} is not in the inventory")
+        if not item.is_consumable or item.hp_restore <= 0:
+            raise InvalidOperation(f"{item.name} cannot be used here")
+        self.inventory.remove(item, 1)
+        return self.heal(item.hp_restore)
+
     # Serialization
 
     def to_dict(self) -> Dict[str, Any]:

@@ -13,6 +13,7 @@ from ..systems.encounters import combat_rng, encounter_rng, roll_formation, step
 from ..systems.hub import GraveyardHub
 from ..systems.loot import roll_chest, roll_chest_gold
 from ..systems.procgen import TILE_SIZE, FloorMap, Pos, Tile, generate_floor
+from ..systems.progression import sync_level
 from ..systems.rng import chest_rng
 from ..ui.hud import Hud
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
@@ -82,6 +83,7 @@ class DungeonScene(BaseScene):
         self.pause_menu.set_items(
             [
                 MenuItem("Resume", self._toggle_pause),
+                MenuItem("Bag & Equipment", self._open_inventory, hint="Also: Tab"),
                 MenuItem(
                     "Abandon run", self._abandon_run,
                     hint="Ends the run. Relics and the Crypt persist.",
@@ -111,6 +113,8 @@ class DungeonScene(BaseScene):
         if battle.outcome is Outcome.VICTORY:
             xp, gold = battle.rewards()
             self.hud.push(f"Victory. +{xp} XP, +{gold} gold.")
+            for up in sync_level(self.run.leader, self.data):
+                self.hud.push(up.describe())
         elif battle.outcome is Outcome.FLED:
             self.hud.push("You escaped.")
         elif battle.outcome is Outcome.DEFEAT:
@@ -228,6 +232,12 @@ class DungeonScene(BaseScene):
     def _toggle_pause(self) -> None:
         self.paused = not self.paused
 
+    def _open_inventory(self) -> None:
+        from .inventory import InventoryScene
+
+        self.paused = False
+        self.manager.push(InventoryScene(self.app))
+
     def _abandon_run(self) -> None:
         from .main_menu import MainMenuScene
 
@@ -268,6 +278,9 @@ class DungeonScene(BaseScene):
                 return True
         if "confirm" in actions:
             self._interact()
+            return True
+        if "menu" in actions:
+            self._open_inventory()
             return True
         if "cancel" in actions or "pause" in actions:
             self._toggle_pause()

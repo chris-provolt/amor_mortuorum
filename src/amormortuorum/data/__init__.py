@@ -103,6 +103,40 @@ class ShopEntry:
     qty_range: Tuple[int, int]
 
 
+@dataclass(frozen=True)
+class XpCurve:
+    """``thresholds[i]`` is the total XP needed to reach level ``i + 1``."""
+
+    max_level: int = 30
+    thresholds: Tuple[int, ...] = tuple(int(20 * (n ** 1.6)) for n in range(30))
+    per_level: Dict[str, int] = field(
+        default_factory=lambda: {"max_hp": 6, "max_mp": 1, "atk": 1, "df": 1}
+    )
+    spd_every: int = 3
+
+    def xp_for_level(self, level: int) -> int:
+        level = max(1, min(level, self.max_level))
+        return self.thresholds[level - 1]
+
+    def level_for_xp(self, xp: int) -> int:
+        level = 1
+        for i, needed in enumerate(self.thresholds):
+            if xp >= needed:
+                level = i + 1
+            else:
+                break
+        return min(level, self.max_level)
+
+    @staticmethod
+    def from_raw(raw: dict) -> "XpCurve":
+        return XpCurve(
+            max_level=int(raw.get("max_level", 30)),
+            thresholds=tuple(int(t) for t in raw.get("thresholds", ())),
+            per_level={k: int(v) for k, v in raw.get("per_level", {}).items()},
+            spd_every=int(raw.get("spd_every", 3)),
+        )
+
+
 @dataclass
 class GameData:
     items: Dict[str, ItemDef] = field(default_factory=dict)
@@ -112,6 +146,7 @@ class GameData:
     relics: List[RelicDef] = field(default_factory=list)
     encounters: Dict[str, TierEncounters] = field(default_factory=dict)
     shop_pool: Dict[str, ShopEntry] = field(default_factory=dict)
+    xp_curve: XpCurve = field(default_factory=XpCurve)
 
     # Lookups
 
@@ -175,6 +210,7 @@ class GameData:
             relics=read("relics.json"),
             encounters=read("encounters.json"),
             shop=read("shop.json"),
+            xp_curve=read("xp_curve.json"),
         )
 
     @classmethod
@@ -188,9 +224,12 @@ class GameData:
         relics: List[dict],
         encounters: Dict[str, dict],
         shop: Dict[str, dict],
+        xp_curve: Optional[dict] = None,
     ) -> "GameData":
         """Build from already-parsed JSON structures and validate."""
         data = cls()
+        if xp_curve is not None:
+            data.xp_curve = XpCurve.from_raw(xp_curve)
         data.items = _unique_by_id("items", [_build(ItemDef, raw, "items") for raw in items])
         data.enemies = _unique_by_id(
             "enemies", [_build(EnemyDef, raw, "enemies") for raw in enemies]
@@ -280,6 +319,17 @@ class GameData:
         if len(set(relic_ids)) != len(relic_ids):
             raise DataError("relics ids must be unique")
 
+        # XP curve
+        curve = self.xp_curve
+        if curve.max_level < 1 or len(curve.thresholds) != curve.max_level:
+            raise DataError("xp_curve: thresholds must have exactly max_level entries")
+        if curve.thresholds[0] != 0:
+            raise DataError("xp_curve: level 1 must start at 0 XP")
+        if any(b <= a for a, b in zip(curve.thresholds, curve.thresholds[1:])):
+            raise DataError("xp_curve: thresholds must be strictly increasing")
+        if curve.spd_every < 1:
+            raise DataError("xp_curve: spd_every must be >= 1")
+
 
 def _build(cls, raw: dict, source: str):
     try:
@@ -309,5 +359,6 @@ __all__ = [
     "Formation",
     "TierEncounters",
     "ShopEntry",
+    "XpCurve",
     "GameData",
 ]

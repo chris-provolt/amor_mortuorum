@@ -20,6 +20,7 @@ def _raw():
         relics=read("relics.json"),
         encounters=read("encounters.json"),
         shop=read("shop.json"),
+        xp_curve=read("xp_curve.json"),
     )
 
 

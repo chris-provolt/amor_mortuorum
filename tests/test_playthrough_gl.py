@@ -43,6 +43,7 @@ class Driver:
             "right": arcade.key.RIGHT,
             "enter": arcade.key.ENTER,
             "esc": arcade.key.ESCAPE,
+            "tab": arcade.key.TAB,
         }
 
     def frame(self, dt: float = 1 / 60):
@@ -230,3 +231,69 @@ def test_death_without_token_ends_run_and_clears_save(app):
     assert app.state.meta.runs_completed == 1
     # Continue is disabled; New Run still works
     assert d.scene.menu.items[1].enabled is False
+
+
+def test_shop_and_inventory_screens(app):
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    assert d.scene_name() == "GraveyardScene"
+    run = app.state.run
+    data = app.state.data
+    leader = run.leader
+    gold_before = leader.gold
+
+    # Shop: buy the first affordable item once
+    d.press("down")
+    d.press("down")
+    d.press("enter")  # Shop (Enter, Rest, Shop, ...)
+    assert d.scene.mode == "shop"
+    stock = d.scene.ctx.shop.stock()
+    first_id = sorted(stock)[0]
+    assert leader.gold >= stock[first_id].price, "seeded stock should be affordable"
+    bag_before = leader.inventory.count(first_id)
+    d.press("enter")  # buy one
+    assert leader.gold == gold_before - stock[first_id].price
+    assert leader.inventory.count(first_id) == bag_before + 1
+    d.press("esc")
+    assert d.scene.mode == "main"
+
+    # Inventory: equip a blade from the bag via Tab, then unequip it
+    leader.inventory.add(data.item("blade_bone"), 1)
+    base_atk = leader.effective_atk(data)
+    d.press("tab")
+    assert d.scene_name() == "InventoryScene"
+    labels = [it.label for it in d.scene.menu.items]
+    idx = next(i for i, label in enumerate(labels) if "Bone Shard Blade" in label)
+    for _ in range(idx - d.scene.menu.selected):
+        d.press("down")
+    d.press("enter")  # equip
+    assert leader.equipment.slots["weapon"] == "blade_bone"
+    assert leader.effective_atk(data) == base_atk + 3
+    while d.scene.menu.selected != 0:
+        d.press("up")
+    d.press("enter")  # unequip weapon slot
+    assert leader.equipment.slots["weapon"] is None
+    assert leader.inventory.count("blade_bone") == 1
+    d.press("esc")
+    assert d.scene_name() == "GraveyardScene"
+
+    # Level-up after a victory in the dungeon is reflected in the HUD and stats
+    d.press("enter")  # Enter the Dungeon (cursor reset to first item)
+    assert d.scene_name() == "DungeonScene"
+    from amormortuorum.systems.combat import Battle
+    from amormortuorum.systems.entities import Enemy
+    from amormortuorum.scenes.combat import CombatScene
+    from amormortuorum.systems.rng import stream_rng
+
+    leader.xp = data.xp_curve.xp_for_level(2) - 1
+    weak = Enemy.from_def(data.enemy("skel_basic"))
+    weak.stats.hp = 1
+    battle = Battle(run.party, [weak], stream_rng(3, 1, "t"), data)
+    d.scene.active_battle = battle
+    app.scene_manager.push(CombatScene(app, battle))
+    d.frame()
+    d.fight_until_done()
+    assert d.scene_name() == "DungeonScene"
+    assert leader.level == 2
+    assert any("Level 2!" in m for m in d.scene.hud.messages)

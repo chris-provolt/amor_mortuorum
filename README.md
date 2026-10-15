@@ -10,13 +10,15 @@ _A re-imagining of Lufia II's Ancient Cave as a modern, dark roguelite built wit
 What works today, end to end:
 
 - Title screen with **New Run** / **Continue** / **Quit**.
-- **Graveyard hub**: rest, 3-slot **Crypt** (deposit/withdraw, persists across runs), and the stairs down. Entering the Graveyard writes the save.
+- **Graveyard hub**: rest, a limited-stock **Shop** that restocks each visit, a 3-slot **Crypt** (deposit/withdraw, persists across runs), and the stairs down. Entering the Graveyard writes the save.
+- **Bag & Equipment** screen (Tab anywhere): equip and unequip the five slots, use potions outside combat, see effective stats and XP to the next level.
+- **XP and levelling** from a data-driven curve (`xp_curve.json`): stats grow per level, speed every third level.
 - **Dungeon floors**: BSP rooms and corridors generated from `(seed, floor)`, tile movement, chests with depth-scaled loot or gold, stairs to the next floor, and the depth-decaying **portal** back to the Graveyard.
 - **Random encounters** that open **turn-based combat**: Attack / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling.
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.
 
-Not yet built (see [Roadmap](#roadmap)): shop UI, equipment screen, traps/doors/keys, fog of war and minimap, mini-bosses and the final boss, relic drops and the collection screen, XP curve and levelling, audio, settings screen, controller support.
+Not yet built (see [Roadmap](#roadmap)): party of up to four, traps/doors/keys, fog of war and minimap, mini-bosses and the final boss, relic drops and the collection screen, audio, settings screen, controller support.
 
 ---
 
@@ -114,6 +116,7 @@ Not yet built (see [Roadmap](#roadmap)): shop UI, equipment screen, traps/doors/
   - **Movement / menu cursor:** Arrow Keys / WASD
   - **Confirm / interact (stairs, portal):** Enter / Space
   - **Back / pause:** Esc
+  - **Bag & Equipment:** Tab
   - **Combat target:** Left / Right
 - **Planned:** screen-shake and colourblind toggles, font scaling, controller support, minimap toggle (`M`).
 
@@ -149,10 +152,11 @@ src/amormortuorum/
 │   ├── combat.py          # Battle: actions, turn order, damage, outcome
 │   ├── encounters.py      # step rolls and formations
 │   ├── run.py             # Run state, death/resurrection, persistence bridge
+│   ├── progression.py     # XP curve, level-ups
 │   ├── hub.py  shop.py  crypt.py
 ├── persistence/           # SaveManager, SaveGame/MetaState/RunState, atomic writes
 ├── ui/                    # VerticalMenu model + MenuView, Hud
-└── scenes/                # boot, main_menu, graveyard, dungeon, combat, run_summary
+└── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, run_summary
 tests/                     # pytest; GL-marked tests open a window (opt-in)
 tools/ci/build_binary.py   # PyInstaller one-file build
 docs/                      # design notes per epic, CI, save system
@@ -264,15 +268,13 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 ---
 
 ## Roadmap
-Design notes for each epic live in `docs/epics/`. Rough order after the slice:
-1. Shop UI in the Graveyard (service and data already exist).
-2. Equipment and inventory screen (`Equipment.equip` already aggregates stats).
-3. XP curve and levelling; party of up to four.
-4. Traps, locked doors and keys in procgen.
-5. Fog of war and minimap.
-6. Mini-bosses at 20/40/60/80 with locked stairs; final boss at B99.
-7. Relic drops, collection screen, final relic award, relic passives.
-8. Scrolls as skills, audio, settings screen, controller support, save-and-quit mid-run.
+Design notes for each epic live in `docs/epics/`. Rough order from here:
+1. Traps, locked doors and keys in procgen.
+2. Fog of war and minimap.
+3. Mini-bosses at 20/40/60/80 with locked stairs; final boss at B99.
+4. Relic drops, collection screen, final relic award, relic passives.
+5. Party of up to four (combat already iterates a party list; needs recruitment and UI).
+6. Scrolls as skills, audio, settings screen, controller support, save-and-quit mid-run.
 
 ---
 
