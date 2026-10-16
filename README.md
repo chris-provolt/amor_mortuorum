@@ -22,7 +22,7 @@ What works today, end to end:
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
 - **Skills**: six spells learned by level (`skills.json`) and cast for MP from the combat Skill menu: single-target, all-enemy, and healing. Resting and the Tonic of Clear Mind restore MP.
 - **Party of up to four**: recruit companions at the Graveyard for gold; they level with you, share the leader's bag and gold, carry their own equipment, act in SPD order, and every survivor earns full XP. Heals target the most wounded ally.
-- **Audio**: named sound hooks (menus, steps, chests, combat, level-ups, relics, bosses) and ambient loops for the Graveyard, dungeon and combat. Placeholder tones are synthesized with the standard library on first run; drop real `.wav` files into `resources/audio/` to replace them.
+- **Audio**: a chiptune soundtrack and effects rendered by the game's own console-style synthesizer (`core/chiptune.py`: pulse, triangle, saw and noise voices with envelopes and vibrato). Six looping tracks (title, Graveyard, dungeon, deep floors, combat, boss) are written as chord progressions plus melody lines; thirty effects cover menus, footsteps, chests, doors, traps, stairs, the portal, every kind of blow and spell, guards, deaths, flight, victory, defeat, level-ups, relics and bosses. Everything renders into a cache in a background thread at start-up; drop real `.wav` files into `resources/audio/` to override any of it.
 - **Settings screen** (title menu and pause menu): fullscreen, music and SFX volume, VSync, a view of the key bindings, and Save to a per-user `settings.json` that the game loads automatically.
 - **Controller support**: any pyglet-recognised gamepad, hot-pluggable. D-pad or left stick moves, A confirms, B cancels, Y opens the bag, X toggles the map, Start pauses.
 - **16-bit presentation**: every party member, monster and boss is a hand-drawn 32x32 sprite (text grids in `ui/pixelart.py`, palette-swapped where characters share a body plan) with an automatic shading pass and a two-frame idle; features and decor are 16x16 grids upscaled with EPX. The dungeon is autotiled from procedurally generated 32px tiles (`ui/tiles.py`: flagstones with decals, brick wall faces, lit rims, shadow bands, caverns, doors, stairs, a turning portal) and lit by torchlight that falls off with distance, shown at 2x zoom. The leader turns to face each step, walks between tiles with a stride cycle (hold a direction to keep walking), and monsters stride and face their way too. Each floor tier recolours the tiles: blue-grey catacombs, mossy green, rust and ochre ossuary, violet crypt, then ash with ember-red seams. Combat is staged on a dungeon backdrop with large battlers in side view and plays each round out as animation: attackers dash to their target, raise the weapon they actually have equipped (dagger, bone blade, mourning blade, oblivion edge, drawn procedurally into the hand) and strike with a swung crescent and sparks; each spell has its own effect (grave-fire, ice shards, the Dirge's song rings, Oblivion Bolt's jagged shard, Mend's sparkles, Lament's tears) with a rune ring around the caster; heals, guard glyphs, floating numbers, a hit shudder and flash and death fades round it out, with the log and gauges following the action. Items carry 16x16 icons in every menu. Bevelled RPG windows (`ui/frame.py`) frame it all along with the HUD, menus and the Graveyard.
@@ -146,7 +146,7 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
 ## Tech Stack
 - **Language:** Python **3.10+** (tested on 3.11 and 3.13)
 - **Renderer/UI:** [Arcade 3.3+](https://api.arcade.academy/)
-- **Assets:** All art is generated at startup from text grids and hash-noise tile generators (`ui/pixelart.py`, `ui/tiles.py`), so the game ships no binary art; audio is synthesized on first run and real `.wav` files can be dropped in under `resources/audio/`
+- **Assets:** All art is generated at startup from text grids and hash-noise tile generators (`ui/pixelart.py`, `ui/tiles.py`), so the game ships no binary art; audio is rendered by the built-in synthesizer on first run and real `.wav` files can be dropped in under `resources/audio/`
 - **Packaging:** PyInstaller via `tools/ci/build_binary.py` (tagged releases)
 
 ---
@@ -161,7 +161,8 @@ src/amormortuorum/
 ├── config/default_settings.json
 ├── core/
 │   ├── context.py         # GameContext: settings, save manager, data, meta, run, seed
-│   ├── audio.py           # AudioManager: sfx/music hooks, synthesized placeholders
+│   ├── audio.py           # AudioManager: sfx/music hooks, cache, background rendering
+│   ├── chiptune.py        # the synthesizer: voices, tracks, effects
 │   ├── controller.py      # gamepad -> actions (pyglet ControllerManager)
 │   ├── input.py           # action-based key mapping
 │   ├── settings.py        # JSON settings with user overrides
@@ -191,7 +192,7 @@ src/amormortuorum/
 │   ├── pixelart.py        # sprite grids (32x32 battlers, 16x16 props) + EPX/shading pipeline
 │   ├── tiles.py           # procedural 32px dungeon tiles with autotiling
 │   └── frame.py           # bevelled RPG windows, gauges, cursor
-├── resources/audio/       # optional real .wav assets (override placeholders)
+├── resources/audio/       # optional real .wav assets (override the synthesizer)
 └── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, relics,
                            #   records, profiles, settings, run_summary
 tests/                     # pytest; GL-marked tests open a window (opt-in)
@@ -324,7 +325,7 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 ## Roadmap
 Design notes for each epic live in `docs/epics/`. Every epic now has a first implementation; what remains is polish:
 1. Hand playtesting against the simulator's numbers (see Balance Model); the auto-policy only flees when the maths says a fight is lost and never misjudges a potion, so real runs still end a little earlier.
-2. Real audio (SFX, music) replacing the synthesised placeholders; more art: drawn attack poses for the monsters (they lunge for now), animated tiles (torches, water), character portraits, a world map between floors.
+2. More art: drawn attack poses for the monsters (they lunge for now), animated tiles (torches, water), character portraits, a world map between floors. Recorded audio, if wanted, drops into `resources/audio/` over the chiptune renders.
 3. Deeper monster ecology on top of the current kinds, calls and noise: flanking packs, monsters that use doors, and ranged harassment on the map.
 
 ---
