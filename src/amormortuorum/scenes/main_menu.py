@@ -9,6 +9,7 @@ from ..systems.hub import GraveyardHub
 from ..systems.rng import random_seed
 from ..systems.run import new_run
 from ..systems.stats import bump, check_achievements
+from ..ui import pixelart
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 from ..ui.theme import fs
 
@@ -21,6 +22,7 @@ class MainMenuScene(BaseScene):
     def __init__(self, app):
         super().__init__(app)
         self._title: arcade.Text | None = None
+        self._emblem: arcade.SpriteList | None = None
         self._subtitle: arcade.Text | None = None
         self._footer: arcade.Text | None = None
         self.menu = VerticalMenu()
@@ -57,6 +59,8 @@ class MainMenuScene(BaseScene):
         self._rebuild_menu()
 
     def on_resize(self, width: int, height: int):
+        self._emblem = arcade.SpriteList()
+        self._emblem.append(pixelart.sprite("skull", (width / 2, height * 0.72 + 110), 6))
         if self._title is not None:
             self._title.position = (width / 2, height * 0.72)
         if self._subtitle is not None:
@@ -157,6 +161,8 @@ class MainMenuScene(BaseScene):
     # Rendering and input
 
     def draw(self):
+        if self._emblem is not None:
+            self._emblem.draw(pixelated=True)
         for text in (self._title, self._subtitle, self._footer):
             if text is not None:
                 text.draw()
