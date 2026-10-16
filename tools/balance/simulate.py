@@ -44,6 +44,7 @@ from amormortuorum.systems.loot import roll_chest, roll_chest_gold  # noqa: E402
 from amormortuorum.systems.monsters import (  # noqa: E402
     Monster,
     daze,
+    make_noise,
     maybe_respawn,
     monster_at,
     monster_rng,
@@ -323,6 +324,8 @@ def simulate_run(
                     remove_monster(monsters, monster)
                 else:
                     daze(monster)
+            if battle.outcome is not Outcome.DEFEAT:
+                make_noise(monsters, fmap, pos)
             return battle.outcome is Outcome.DEFEAT
 
         def enemies_of(m: Monster) -> List[Enemy]:
