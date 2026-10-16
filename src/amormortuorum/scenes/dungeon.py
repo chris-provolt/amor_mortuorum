@@ -6,6 +6,7 @@ from typing import Dict, Optional
 
 import arcade
 
+from ..core.chiptune import music_for_tier
 from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.combat import Battle, Outcome
@@ -194,7 +195,9 @@ class DungeonScene(BaseScene):
         run = self.run
         self.fmap = generate_floor(run.seed, run.floor)
         # Tile palette: the floor's layout style recoloured for its tier
-        self._style = tiles.style_for(self.fmap.style, self.data.tier_for_floor(run.floor).name)
+        tier = self.data.tier_for_floor(run.floor).name
+        self._style = tiles.style_for(self.fmap.style, tier)
+        self._music = music_for_tier(tier)
         self.pos = self.fmap.start
         self._chest_rng = chest_rng(run.seed, run.floor)
         self._enc_rng = encounter_rng(run.seed, run.floor)
@@ -245,7 +248,7 @@ class DungeonScene(BaseScene):
         )
         self._pause_view = MenuView(self.pause_menu, 0, 0, font_size=fs(20), anchor_x="center")
         self.pause_menu.sfx = self.app.audio.play
-        self.app.audio.play_music("dungeon")
+        self.app.audio.play_music(self._music)
         self.on_resize(self.app.width, self.app.height)
 
     def on_resize(self, width: int, height: int):
@@ -268,7 +271,7 @@ class DungeonScene(BaseScene):
         self.active_battle = None
         was_boss, self._boss_battle = self._boss_battle, False
         engaged, self._engaged = self._engaged, None
-        self.app.audio.play_music("dungeon")
+        self.app.audio.play_music(self._music)
         if battle is None:
             return
         if battle.outcome is Outcome.VICTORY:
@@ -521,7 +524,7 @@ class DungeonScene(BaseScene):
         self._move_from = tuple(self._player_sprite.position)
         self._move_t = 0.0
         self.pos = (nx, ny)
-        self.app.audio.play("step")
+        self.app.audio.play("step", speed=1.0 + 0.08 * ((self.pos[0] + self.pos[1]) % 3 - 1))
         self._refresh_visibility()
         self._stat("steps")
         self.run.steps_since_encounter += 1
@@ -668,7 +671,7 @@ class DungeonScene(BaseScene):
         self.hud.push(f"{boss.name} rises to meet you.")
         self.manager.push(
             CombatScene(self.app, self.active_battle, title=f"{boss.name} rises to meet you",
-                        style=self._style)
+                        style=self._style, music="boss")
         )
 
     def _on_boss_defeated(self) -> None:

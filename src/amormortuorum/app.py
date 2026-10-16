@@ -67,6 +67,7 @@ class GameApp(arcade.Window):
             save_manager.root_dir / "cache" / "audio",
             enabled=False if os.environ.get("AMOR_MUTE") == "1" else None,
         )
+        self.audio.prewarm()
         self.controller = ControllerInput(self.dispatch_actions)
         if not self.smoke_mode_env():
             self.controller.start()
