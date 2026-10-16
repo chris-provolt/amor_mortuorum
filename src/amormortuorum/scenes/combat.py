@@ -106,10 +106,13 @@ LOG_COLORS = {
 
 
 class CombatScene(BaseScene):
-    def __init__(self, app, battle: Battle, title: Optional[str] = None):
+    def __init__(
+        self, app, battle: Battle, title: Optional[str] = None, style: str = "rooms"
+    ):
         super().__init__(app)
         self.battle = battle
         self.title = title
+        self.style = style  # tile style of the floor the fight is on
         self.data = app.state.data
         self.mode = "command"  # command | item | done
         self.actor = 0
@@ -543,8 +546,8 @@ class CombatScene(BaseScene):
         """A dungeon backdrop: wall top, brick face, then floor receding into shadow."""
         sl, sb, sw, sh = self._layout["stage"]
         top = sb + sh
-        wall_top = tiles.wall_texture("rooms", False, (False, False, False, False))
-        wall_face = tiles.wall_texture("rooms", True, (False, False, False, False), 1)
+        wall_top = tiles.wall_texture(self.style, False, (False, False, False, False))
+        wall_face = tiles.wall_texture(self.style, True, (False, False, False, False), 1)
         cols = int(sw // STAGE_TILE) + 2
         y = top - STAGE_TILE * 0.6
         for c in range(cols):
@@ -561,7 +564,7 @@ class CombatScene(BaseScene):
             depth = 1 - r / max(1, rows)  # back rows (r = 0) are darkest
             tone = int(90 + 150 * (1 - depth))
             for c in range(cols):
-                tex = tiles.floor_texture("rooms", c, r, r == 0, False, decals=False)
+                tex = tiles.floor_texture(self.style, c, r, r == 0, False, decals=False)
                 rect = arcade.LBWH(sl + c * STAGE_TILE, yy, STAGE_TILE, STAGE_TILE)
                 arcade.draw_texture_rect(
                     tex, rect, pixelated=True, color=Color(tone, tone, min(255, tone + 12), 255)

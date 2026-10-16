@@ -40,6 +40,16 @@ STYLES: Dict[str, Dict[str, RGB]] = {
 
 DECAL_CHANCE = 0.08  # share of floor tiles that carry a decal
 
+# Floor tiers recolour the base palettes: (target hue, how far to pull the hue
+# towards it, saturation change, value change, optional HSV for grout/mortar).
+# T1 keeps the base stone of the upper catacombs.
+TIER_TINTS: Dict[str, Tuple[float, float, float, float, Optional[Tuple[float, float, float]]]] = {
+    "T2": (0.26, 1.0, 0.10, -0.02, None),            # mossy, damp green
+    "T3": (0.06, 1.0, 0.22, -0.02, None),            # rust and ochre ossuary
+    "T4": (0.75, 1.0, 0.20, -0.06, None),            # cold violet crypt
+    "T5": (0.02, 0.5, -0.15, -0.12, (0.0, 0.6, 0.22)),  # ash, ember-red seams
+}
+
 
 def hash32(*values: int) -> int:
     """A small integer hash, stable across runs and platforms."""
@@ -63,6 +73,42 @@ def shift(c: RGB, dv: float, ds: float = 0.0) -> RGB:
     s = max(0.0, min(1.0, s + ds))
     r, g, b = colorsys.hsv_to_rgb(h, s, v)
     return (int(r * 255), int(g * 255), int(b * 255))
+
+
+def tint(c: RGB, hue: float, blend: float, ds: float = 0.0, dv: float = 0.0) -> RGB:
+    """Pull a colour's hue ``blend`` of the way towards ``hue`` (0..1 on the wheel)
+    and nudge its saturation and value."""
+    h, s, v = colorsys.rgb_to_hsv(c[0] / 255, c[1] / 255, c[2] / 255)
+    delta = ((hue - h + 0.5) % 1.0) - 0.5  # shortest way round the wheel
+    h = (h + delta * blend) % 1.0
+    s = max(0.0, min(1.0, s + ds))
+    v = max(0.0, min(1.0, v + dv))
+    r, g, b = colorsys.hsv_to_rgb(h, s, v)
+    return (int(r * 255), int(g * 255), int(b * 255))
+
+
+def style_for(base: str, tier: str) -> str:
+    """The style key for ``base`` ("rooms"/"cavern") recoloured for a floor tier;
+    the palette is built on first use. Unknown tiers keep the base style."""
+    if base not in STYLES:
+        base = "rooms"
+    if tier not in TIER_TINTS:
+        return base
+    key = f"{base}/{tier}"
+    if key not in STYLES:
+        hue, blend, ds, dv, accent = TIER_TINTS[tier]
+        palette = {k: tint(c, hue, blend, ds, dv) for k, c in STYLES[base].items()}
+        if accent is not None:
+            ah, as_, av = accent
+            for k in ("grout", "mortar"):
+                r, g, b = colorsys.hsv_to_rgb(ah, as_, av)
+                palette[k] = (int(r * 255), int(g * 255), int(b * 255))
+        STYLES[key] = palette
+    return key
+
+
+def _is_cavern(style_name: str) -> bool:
+    return style_name.split("/")[0] == "cavern"
 
 
 def _rgba(c: RGB, a: int = 255) -> RGBA:
@@ -172,7 +218,7 @@ def floor_image(
     decal: Optional[int] = None,
 ) -> Image.Image:
     style = STYLES[style_name]
-    img = _cavern_floor(style, variant) if style_name == "cavern" else _flagstones(style, variant)
+    img = _cavern_floor(style, variant) if _is_cavern(style_name) else _flagstones(style, variant)
     if decal is not None:
         _decal(img, decal, style)
     _shadow_bands(img, shadow_top, shadow_left)
@@ -258,7 +304,7 @@ def wall_image(
 ) -> Image.Image:
     style = STYLES[style_name]
     if face:
-        return _wall_face(style, seed, cavern=style_name == "cavern")
+        return _wall_face(style, seed, cavern=_is_cavern(style_name))
     return _wall_top(style, rims, seed)
 
 
@@ -386,6 +432,9 @@ def portal_frames(frames: int = 4) -> List[arcade.Texture]:
 __all__ = [
     "PX",
     "STYLES",
+    "TIER_TINTS",
+    "tint",
+    "style_for",
     "hash32",
     "noise",
     "shift",

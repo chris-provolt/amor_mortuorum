@@ -126,3 +126,26 @@ def test_battle_poses_and_weapons():
     stand, strike = px.render("ghoul", 0), px.render("ghoul", 5)
     assert strike.tobytes() != stand.tobytes()
     assert px.render("ghoul", 4).tobytes() != stand.tobytes()
+
+
+def test_tile_palettes_change_with_the_floor_tier():
+    from amormortuorum.ui import tiles
+
+    assert tiles.style_for("rooms", "T1") == "rooms"
+    assert tiles.style_for("nonsense", "T1") == "rooms"
+    keys = [tiles.style_for("rooms", t) for t in ("T2", "T3", "T4", "T5")]
+    assert keys == ["rooms/T2", "rooms/T3", "rooms/T4", "rooms/T5"]
+    assert tiles.style_for("rooms", "T3") == "rooms/T3"  # built once, reused
+    palettes = [tiles.STYLES[k] for k in ["rooms"] + keys]
+    assert len({p["floor"] for p in palettes}) == 5
+    # the deepest tier is darkest, the ossuary warm, the crypt cold
+    assert sum(palettes[4]["floor"]) < sum(palettes[0]["floor"])
+    rust, crypt = palettes[2]["floor"], palettes[3]["floor"]
+    assert rust[0] > rust[2] and crypt[2] > crypt[1]
+    floors = [tiles.floor_image(k, 0).getpixel((5, 5)) for k in ["rooms"] + keys]
+    assert len(set(floors)) == 5
+    cavern = tiles.style_for("cavern", "T4")
+    assert tiles.wall_image(cavern, True, (False,) * 4).size == (tiles.PX, tiles.PX)
+    tinted, plain = tiles.floor_image(cavern, 1), tiles.floor_image("cavern", 1)
+    assert tinted.getpixel((3, 3)) != plain.getpixel((3, 3))
+    assert tiles.tint((100, 100, 100), 0.0, 1.0, 0.5, 0.0) != (100, 100, 100)

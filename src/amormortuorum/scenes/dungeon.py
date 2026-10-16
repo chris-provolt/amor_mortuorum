@@ -193,6 +193,8 @@ class DungeonScene(BaseScene):
         super().on_enter()
         run = self.run
         self.fmap = generate_floor(run.seed, run.floor)
+        # Tile palette: the floor's layout style recoloured for its tier
+        self._style = tiles.style_for(self.fmap.style, self.data.tier_for_floor(run.floor).name)
         self.pos = self.fmap.start
         self._chest_rng = chest_rng(run.seed, run.floor)
         self._enc_rng = encounter_rng(run.seed, run.floor)
@@ -311,7 +313,7 @@ class DungeonScene(BaseScene):
         """Autotile a map cell: floors get shadow bands under walls, walls get a
         brick face where floor lies below them and a lit rim on sides facing floor."""
         fmap = self.fmap
-        style = fmap.style if fmap.style in tiles.STYLES else "rooms"
+        style = self._style
         if tile == Tile.DOOR:
             return tiles.texture("door_locked" if fmap.doors.get((x, y)) else "door_open", style)
         if tile != Tile.WALL:
@@ -340,8 +342,7 @@ class DungeonScene(BaseScene):
                     self._door_sprites[(x, y)] = sprite
         self.features = arcade.SpriteList()
         self._feature_sprites = {}
-        style = fmap.style if fmap.style in tiles.STYLES else "rooms"
-        stairs = self._add_feature(fmap.stairs, tiles.texture("stairs", style))
+        stairs = self._add_feature(fmap.stairs, tiles.texture("stairs", self._style))
         if fmap.stairs_locked:
             stairs.color = COLOR_BOSS_STAIRS
         for pos in fmap.chests:
@@ -541,8 +542,7 @@ class DungeonScene(BaseScene):
         self.fmap.unlock_door(pos)
         sprite = self._door_sprites.get(pos)
         if sprite is not None:
-            style = self.fmap.style if self.fmap.style in tiles.STYLES else "rooms"
-            sprite.texture = tiles.texture("door_open", style)
+            sprite.texture = tiles.texture("door_open", self._style)
         self._refresh_visibility()  # an open door no longer blocks sight
         if self.minimap is not None:
             self.minimap.refresh([pos])
@@ -632,7 +632,9 @@ class DungeonScene(BaseScene):
         names = ", ".join(e.name for e in enemies)
         logger.info("Encounter on B%d: %s", self.run.floor, names)
         title = f"Battle! {names}" if monster is not None else None
-        self.manager.push(CombatScene(self.app, self.active_battle, title=title))
+        self.manager.push(
+            CombatScene(self.app, self.active_battle, title=title, style=self._style)
+        )
 
     def _gain_relic(self, relic_id: str) -> None:
         """Add a relic to the meta collection, persist it, and refresh passives."""
@@ -665,7 +667,8 @@ class DungeonScene(BaseScene):
         logger.info("Boss fight on B%d: %s", self.run.floor, boss.name)
         self.hud.push(f"{boss.name} rises to meet you.")
         self.manager.push(
-            CombatScene(self.app, self.active_battle, title=f"{boss.name} rises to meet you")
+            CombatScene(self.app, self.active_battle, title=f"{boss.name} rises to meet you",
+                        style=self._style)
         )
 
     def _on_boss_defeated(self) -> None:
