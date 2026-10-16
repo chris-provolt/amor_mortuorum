@@ -20,9 +20,12 @@
 - Entry point detection, in order: a `pyinstaller/*.spec` file, then
   `src/amormortuorum/__main__.py` (preferred because it uses absolute imports),
   then the first `[project.scripts]` module.
-- The one-file build adds `--paths src`, bundles `amormortuorum/config` and
-  `amormortuorum/data` with `--add-data`, collects arcade and pyglet resource
-  files, and uses `--windowed` on Windows and macOS.
+- The one-file build adds `--paths src`, bundles `amormortuorum/config`,
+  `amormortuorum/data` and `amormortuorum/resources` with `--add-data`, collects
+  arcade and pyglet resource files, and uses `--windowed` on Windows and macOS.
+- A windowed build has no console, so the game logs to `amor.log` in the save
+  root (`%APPDATA%\AmorMortuorum` on Windows) and writes any fatal traceback
+  there instead of dying silently.
 - The binary is zipped with the README and LICENSE (when present) as
   `AmorMortuorum-<version>-<platform>.zip`, uploaded as a workflow artifact and
   attached to the GitHub Release for the tag.

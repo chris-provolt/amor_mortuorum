@@ -8,7 +8,9 @@ then goes back to wandering. Walking into a monster, or being caught by one,
 starts a battle with the monster's formation.
 
 Slow monsters (lower SPD than the party leader) only move every other step
-while chasing, so a quick party can outrun them.
+while chasing, so a quick party can outrun them. Some groups start asleep:
+they never move until the party comes within ``WAKE_DIST`` tiles in plain
+sight, so a careful party can slip past them.
 """
 from __future__ import annotations
 
@@ -27,6 +29,8 @@ WANDER_PAUSE = 0.4        # chance a wandering monster stands still on a given s
 SPAWN_MIN_DIST = 10       # BFS distance from the party's start for initial spawns
 RESPAWN_MIN_DIST = 12     # BFS distance from the party for later spawns
 FLEE_COOLDOWN = 5         # steps a monster stands dazed after the party flees it
+SLEEP_CHANCE = 0.3        # share of spawned groups that start asleep
+WAKE_DIST = 2             # Manhattan distance at which a visible sleeper wakes
 NEIGHBOURS: Tuple[Pos, ...] = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
 
@@ -39,7 +43,7 @@ class Monster:
     enemies: Tuple[str, ...]
     name: str
     spd: int
-    state: str = "wander"  # "wander" | "chase"
+    state: str = "wander"  # "sleep" | "wander" | "chase"
     memory: int = 0
     cooldown: int = 0
     noticed: bool = False  # the HUD has announced this monster
@@ -47,6 +51,10 @@ class Monster:
     @property
     def chasing(self) -> bool:
         return self.state == "chase"
+
+    @property
+    def asleep(self) -> bool:
+        return self.state == "sleep"
 
 
 def monster_rng(seed: int, floor: int) -> Random:
@@ -85,7 +93,9 @@ def distance_field(
     return dist
 
 
-def _make_monster(mid: int, pos: Pos, floor: int, data: GameData, rng: Random) -> Monster:
+def _make_monster(
+    mid: int, pos: Pos, floor: int, data: GameData, rng: Random, *, may_sleep: bool = True
+) -> Monster:
     tier = data.tier_for_floor(floor)
     formations = data.encounters[tier.name].formations
     weights = [max(0, f.weight) for f in formations]
@@ -99,6 +109,7 @@ def _make_monster(mid: int, pos: Pos, floor: int, data: GameData, rng: Random) -
         enemies=tuple(chosen.enemies),
         name=name,
         spd=max(e.stats.spd for e in scaled),
+        state="sleep" if may_sleep and rng.random() < SLEEP_CHANCE else "wander",
     )
 
 
@@ -149,7 +160,7 @@ def maybe_respawn(
     if not cells:
         return None
     next_id = 1 + max((m.id for m in monsters), default=-1)
-    monster = _make_monster(next_id, rng.choice(cells), floor, data, rng)
+    monster = _make_monster(next_id, rng.choice(cells), floor, data, rng, may_sleep=False)
     monsters.append(monster)
     return monster
 
@@ -177,7 +188,10 @@ def step_monsters(
     sees the party too. ``step`` is the running step count on this floor and
     ``player_spd`` the leader's effective speed; both drive the slow-monster rule.
     """
-    chasers = [m for m in monsters if m.cooldown == 0 and (m.pos in visible or m.chasing)]
+    chasers = [
+        m for m in monsters
+        if m.cooldown == 0 and not m.asleep and (m.pos in visible or m.chasing)
+    ]
     field: Dict[Pos, int] = {}
     if chasers:
         field = distance_field(fmap, player, MONSTER_MEMORY + 14)
@@ -187,6 +201,14 @@ def step_monsters(
         if m.cooldown > 0:
             m.cooldown -= 1
             continue
+        if m.asleep:
+            near = abs(m.pos[0] - player[0]) + abs(m.pos[1] - player[1]) <= WAKE_DIST
+            if not (near and m.pos in visible):
+                continue
+            m.state = "chase"
+            m.memory = MONSTER_MEMORY
+            if not field:
+                field = distance_field(fmap, player, MONSTER_MEMORY + 14)
         if m.pos in visible:
             m.state = "chase"
             m.memory = MONSTER_MEMORY
@@ -242,6 +264,8 @@ __all__ = [
     "WANDER_PAUSE",
     "SPAWN_MIN_DIST",
     "FLEE_COOLDOWN",
+    "SLEEP_CHANCE",
+    "WAKE_DIST",
     "Monster",
     "monster_rng",
     "monster_count",

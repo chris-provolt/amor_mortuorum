@@ -18,7 +18,7 @@ What works today, end to end:
 - **Fog of war and minimap**: shadowcast line of sight (walls and locked doors block), remembered tiles drawn dimmed, and a toggleable minimap (M) with icons for stairs, chests, portals, keys and sprung traps you have seen.
 - **Bosses**: mini-bosses guard the stairs on B20/40/60/80 (each drops a Relic of the Veil), and **The Oblivion Heart** waits on B99; beating it awards the final relic and ends the run in victory. Bosses enrage below half HP.
 - **Relics of the Veil**: the five non-boss relics turn up in chests (2% of chests on T1 up to 8% on T5), the collection screen lives on the title and in the Graveyard, and every relic grants a light passive (ATK/DEF/SPD, sight radius, gold or XP percent) that applies to every future run.
-- **Wandering monsters** roam each floor in plain sight: they wander until they spot the party, then hunt them down corridors with grid pathfinding (slow ones only move every other step, so a quick party can outrun them). Bumping into one, or being caught, opens **turn-based combat**: Attack / Skill / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling. Fleeing dazes the monster for a few steps. Rare ambushes still lunge from the dark.
+- **Wandering monsters** roam each floor in plain sight: they wander until they spot the party, then hunt them down corridors with grid pathfinding (slow ones only move every other step, so a quick party can outrun them). Some groups start asleep and only wake when the party comes within two tiles in plain sight, so they can be slipped past or struck first. Bumping into one, or being caught, opens **turn-based combat**: Attack / Skill / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling. Fleeing dazes the monster for a few steps. Rare ambushes still lunge from the dark.
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
 - **Skills**: six spells learned by level (`skills.json`) and cast for MP from the combat Skill menu: single-target, all-enemy, and healing. Resting and the Tonic of Clear Mind restore MP.
 - **Party of up to four**: recruit companions at the Graveyard for gold; they level with you, share the leader's bag and gold, carry their own equipment, act in SPD order, and every survivor earns full XP. Heals target the most wounded ally.
@@ -137,7 +137,7 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
   - **Confirm / interact (stairs, portal):** Enter / Space
   - **Back / pause:** Esc
   - **Bag & Equipment:** Tab (Left / Right switches party member)
-  - **Minimap toggle:** M (red triangles mark monsters currently in sight)
+  - **Minimap toggle:** M (red triangles mark monsters currently in sight; on the floor, dull markers sleep, red ones wander, bright red ones are hunting you)
   - **Controller:** D-pad / left stick move, A confirm, B back, Y bag, X map, Start pause
   - **Combat target:** Left / Right
 - **Accessibility:** minimap icons are shape-coded as well as coloured (hollow square stairs, filled square chest, ring portal, diamond key, cross trap, dot player); a **UI scale** setting (80-160%) resizes every menu and panel; keys can be **rebound in-game** from Settings. Planned: a screen-shake toggle once effects exist.

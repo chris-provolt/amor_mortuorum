@@ -55,6 +55,7 @@ ALPHA_EXPLORED = 90
 
 COLOR_WALL = (38, 38, 50)
 COLOR_FLOOR = (92, 92, 108)
+COLOR_FLOOR_CAVERN = (96, 86, 74)
 COLOR_STAIRS = (240, 240, 250)
 COLOR_CHEST = (214, 170, 60)
 COLOR_PORTAL = (0, 150, 150)
@@ -66,6 +67,7 @@ COLOR_TRAP = (200, 60, 60)
 COLOR_BOSS_STAIRS = (190, 50, 120)
 COLOR_MONSTER = (170, 60, 70)
 COLOR_MONSTER_CHASE = (235, 80, 80)
+COLOR_MONSTER_SLEEP = (120, 70, 95)
 
 MOVES: Dict[str, Pos] = {
     "move_up": (0, 1),
@@ -78,6 +80,12 @@ MOVES: Dict[str, Pos] = {
 def tile_center(pos: Pos) -> tuple[float, float]:
     x, y = pos
     return (x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2)
+
+
+def floor_shade(base, x: int, y: int):
+    """Vary a floor colour by position so large open areas read as flagstones."""
+    shade = ((x * 7 + y * 13) % 4) * 3
+    return tuple(min(255, c + shade) for c in base)
 
 
 class DungeonScene(BaseScene):
@@ -128,10 +136,10 @@ class DungeonScene(BaseScene):
         self._build_sprites()
         self.minimap = Minimap(self.fmap, self.vis, self.app)
         self._refresh_visibility(initial=True)
-        self._refresh_monsters()
         self.camera = arcade.Camera2D()
         self.hud = Hud(self.app)
         self.hud.push(f"Floor B{run.floor}. Find the stairs.")
+        self._refresh_monsters()
         boss = self.data.boss_for_floor(run.floor)
         if boss is not None and self.fmap.stairs_locked:
             self.hud.push(f"{boss.name} guards the way down.")
@@ -212,6 +220,7 @@ class DungeonScene(BaseScene):
 
     def _build_sprites(self) -> None:
         fmap = self.fmap
+        base_floor = COLOR_FLOOR_CAVERN if fmap.style == "cavern" else COLOR_FLOOR
         self.tiles = arcade.SpriteList(capacity=fmap.width * fmap.height)
         self._door_sprites = {}
         for y, row in enumerate(fmap.tiles):
@@ -219,7 +228,7 @@ class DungeonScene(BaseScene):
                 if tile == Tile.DOOR:
                     color = COLOR_DOOR_LOCKED if fmap.doors.get((x, y)) else COLOR_DOOR_OPEN
                 else:
-                    color = COLOR_FLOOR if tile == Tile.FLOOR else COLOR_WALL
+                    color = floor_shade(base_floor, x, y) if tile == Tile.FLOOR else COLOR_WALL
                 cx, cy = tile_center((x, y))
                 sprite = arcade.SpriteSolidColor(TILE_SIZE, TILE_SIZE, cx, cy, color)
                 sprite.alpha = 0
@@ -282,12 +291,17 @@ class DungeonScene(BaseScene):
                 self.monster_sprites.append(sprite)
                 self._monster_sprites[m.id] = sprite
             sprite.position = tile_center(m.pos)
-            sprite.color = COLOR_MONSTER_CHASE if m.chasing else COLOR_MONSTER
+            sprite.color = (
+                COLOR_MONSTER_CHASE if m.chasing
+                else COLOR_MONSTER_SLEEP if m.asleep
+                else COLOR_MONSTER
+            )
             seen = m.pos in self.vis.visible
             sprite.alpha = ALPHA_VISIBLE if seen else 0
             if seen and not m.noticed:
                 m.noticed = True
-                self.hud.push(f"A {m.name} prowls nearby.")
+                verb = "sleeps" if m.asleep else "prowls"
+                self.hud.push(f"A {m.name} {verb} nearby.")
 
     def _visible_monsters(self) -> list[Pos]:
         return [m.pos for m in self.monsters if m.pos in self.vis.visible]
@@ -342,7 +356,10 @@ class DungeonScene(BaseScene):
             return
         target = monster_at(self.monsters, (nx, ny))
         if target is not None:
-            self.hud.push(f"You engage the {target.name}.")
+            if target.asleep:
+                self.hud.push(f"You fall upon the sleeping {target.name}.")
+            else:
+                self.hud.push(f"You engage the {target.name}.")
             self._start_encounter(target)
             return
         self.pos = (nx, ny)
@@ -456,7 +473,8 @@ class DungeonScene(BaseScene):
         self.active_battle = Battle(self.run.party, enemies, rng, self.data)
         names = ", ".join(e.name for e in enemies)
         logger.info("Encounter on B%d: %s", self.run.floor, names)
-        self.manager.push(CombatScene(self.app, self.active_battle))
+        title = f"Battle! {names}" if monster is not None else None
+        self.manager.push(CombatScene(self.app, self.active_battle, title=title))
 
     def _gain_relic(self, relic_id: str) -> None:
         """Add a relic to the meta collection, persist it, and refresh passives."""
@@ -488,7 +506,9 @@ class DungeonScene(BaseScene):
         self.app.audio.play("boss")
         logger.info("Boss fight on B%d: %s", self.run.floor, boss.name)
         self.hud.push(f"{boss.name} rises to meet you.")
-        self.manager.push(CombatScene(self.app, self.active_battle))
+        self.manager.push(
+            CombatScene(self.app, self.active_battle, title=f"{boss.name} rises to meet you")
+        )
 
     def _on_boss_defeated(self) -> None:
         from .run_summary import RunSummaryScene

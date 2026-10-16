@@ -6,7 +6,9 @@ from amormortuorum.data import GameData
 from amormortuorum.systems.monsters import (
     FLEE_COOLDOWN,
     MONSTER_MEMORY,
+    SLEEP_CHANCE,
     SPAWN_MIN_DIST,
+    WAKE_DIST,
     Monster,
     daze,
     distance_field,
@@ -163,3 +165,39 @@ def test_respawn_only_below_strength_and_out_of_sight(data):
             break
     assert spawned is not None and spawned.pos not in visible
     assert spawned.pos in bfs_reachable(fmap, fmap.start)
+
+
+def test_sleepers_hold_still_until_the_party_is_close():
+    fmap = corridor(12)
+    m = Monster(id=0, pos=(8, 1), enemies=("skel_basic",), name="Skeleton", spd=9, state="sleep")
+    visible = {(x, 1) for x in range(1, 13)}
+    rng = Random(0)
+    for _ in range(10):
+        assert step_monsters([m], fmap, (1, 1), visible, rng) is None
+        assert m.asleep and m.pos == (8, 1)
+    # Out of sight but adjacent: still asleep
+    step_monsters([m], fmap, (7, 1), set(), rng)
+    assert m.asleep
+    # In sight within WAKE_DIST: wakes and closes in the same turn
+    player = (8 - WAKE_DIST, 1)
+    step_monsters([m], fmap, player, visible, rng)
+    assert m.chasing and m.pos == (8 - 1, 1)
+
+
+def test_some_spawns_sleep_and_respawns_never_do(data):
+    asleep = total = 0
+    for seed in range(40):
+        fmap = generate_floor(seed, 12)
+        for m in spawn_monsters(fmap, 12, data, monster_rng(seed, 12)):
+            total += 1
+            asleep += m.asleep
+    assert 0.15 < asleep / total < 0.45, (asleep, total, SLEEP_CHANCE)
+    fmap = generate_floor(3, 12)
+    rng = Random(1)
+    for _ in range(3000):
+        spawned = maybe_respawn([], fmap, 12, fmap.start, data, rng)
+        if spawned is not None:
+            assert not spawned.asleep
+            break
+    else:
+        raise AssertionError("no respawn in 3000 tries")

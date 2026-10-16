@@ -36,9 +36,10 @@ LOG_COLORS = {
 
 
 class CombatScene(BaseScene):
-    def __init__(self, app, battle: Battle):
+    def __init__(self, app, battle: Battle, title: Optional[str] = None):
         super().__init__(app)
         self.battle = battle
+        self.title = title
         self.data = app.state.data
         self.mode = "command"  # command | item | done
         self.actor = 0
@@ -58,7 +59,7 @@ class CombatScene(BaseScene):
         super().on_enter()
         names = ", ".join(e.name for e in self.battle.enemies)
         self._header = arcade.Text(
-            f"Ambush! {names}", 0, 0, color=TEXT, font_size=fs(20),
+            self.title or f"Ambush! {names}", 0, 0, color=TEXT, font_size=fs(20),
             anchor_x="center", anchor_y="top",
         )
         self._prompt = arcade.Text("", 0, 0, color=DIM, font_size=fs(12), anchor_x="center")

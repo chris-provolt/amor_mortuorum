@@ -170,7 +170,9 @@ def run_pyinstaller_with_spec(spec_file: Path) -> None:
 
 
 # Package data directories that must ship inside the bundle (relative to src/).
-PACKAGE_DATA_DIRS = ("amormortuorum/config", "amormortuorum/data")
+PACKAGE_DATA_DIRS = (
+    "amormortuorum/config", "amormortuorum/data", "amormortuorum/resources"
+)
 
 
 def pyinstaller_args(entry_file: Path, name: str, root: Optional[Path] = None) -> List[str]:
