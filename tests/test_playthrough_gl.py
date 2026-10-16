@@ -102,13 +102,19 @@ def _walk_to(driver: Driver, goal):
     scene = driver.scene
     path = _path(scene.fmap, scene.pos, goal)
     for nxt in path:
-        if driver.scene_name() == "CombatScene":
-            driver.fight_until_done()
-        if driver.scene_name() != "DungeonScene":
-            return  # died (summary) or left the floor
-        scene = driver.scene
-        dx, dy = nxt[0] - scene.pos[0], nxt[1] - scene.pos[1]
-        driver.press({(1, 0): "right", (-1, 0): "left", (0, 1): "up", (0, -1): "down"}[(dx, dy)])
+        # Walking into a wandering monster fights it without moving, so a tile may
+        # take a few presses before the party stands on it.
+        for _ in range(6):
+            if driver.scene_name() == "CombatScene":
+                driver.fight_until_done()
+            if driver.scene_name() != "DungeonScene":
+                return  # died (summary) or left the floor
+            scene = driver.scene
+            if scene.pos == nxt:
+                break
+            dx, dy = nxt[0] - scene.pos[0], nxt[1] - scene.pos[1]
+            key = {(1, 0): "right", (-1, 0): "left", (0, 1): "up", (0, -1): "down"}[(dx, dy)]
+            driver.press(key)
     if driver.scene_name() == "CombatScene":  # an encounter on the final step
         driver.fight_until_done()
 
@@ -760,3 +766,61 @@ def test_records_and_profile_switch(app, tmp_path, monkeypatch):
     d.press("enter")
     assert app.state.save_manager.profile_id == "play"
     assert app.state.meta.stats.get("runs_started") == 1
+
+
+def test_wandering_monster_chases_then_engages(app):
+    """A visible monster closes in each step; bumping into it opens combat and kills it."""
+    from amormortuorum.systems.monsters import Monster, distance_field
+
+    d = Driver(app)
+    d.boot_to_menu()
+    d.press("enter")  # New Run
+    d.press("enter")  # Enter the Dungeon
+    assert d.scene_name() == "DungeonScene"
+    scene = d.scene
+    fmap = scene.fmap
+
+    # Place one fast monster on a visible tile 3-5 steps away; clear the rest.
+    field = distance_field(fmap, scene.pos, 5)
+    spot = next(
+        p for p, dist in sorted(field.items(), key=lambda kv: -kv[1])
+        if 3 <= dist <= 5 and p in scene.vis.visible and p != fmap.stairs
+        and p not in fmap.chests
+    )
+    monster = Monster(id=99, pos=spot, enemies=("skel_basic",), name="Skeleton", spd=99)
+    scene.monsters[:] = [monster]
+    scene._mon_rng.random()  # any state is fine; the chase is deterministic
+    scene._refresh_monsters()
+    sprite = scene._monster_sprites[99]
+    assert sprite.alpha == 255
+
+    old_pos = monster.pos
+    # Step somewhere: the monster takes its turn and ends closer to where we now stand.
+    for key in ("left", "right", "up", "down"):
+        start = scene.pos
+        d.press(key)
+        if d.scene_name() != "DungeonScene" or scene.pos != start:
+            break
+    if d.scene_name() == "DungeonScene":
+        assert monster.chasing
+        now = distance_field(fmap, scene.pos, 12)
+        assert now.get(monster.pos, 99) < now.get(old_pos, 99) or monster.pos == scene.pos
+        assert "prowls" in " ".join(scene.hud.messages)
+        # Keep stepping until it catches us or we walk into it
+        for _ in range(8):
+            if d.scene_name() == "CombatScene":
+                break
+            tx, ty = monster.pos
+            px, py = scene.pos
+            dx = (tx > px) - (tx < px)
+            dy = (ty > py) - (ty < py)
+            key = "right" if dx > 0 else "left" if dx < 0 else "up" if dy > 0 else "down"
+            d.press(key)
+    assert d.scene_name() == "CombatScene"
+    assert [e.def_id for e in scene.active_battle.enemies] == ["skel_basic"]
+    d.fight_until_done()
+    if d.scene_name() == "DungeonScene":
+        assert monster.id not in {m.id for m in scene.monsters}
+        assert 99 not in scene._monster_sprites
+        # Minimap draws the (now absent) monsters without error
+        d.frame()

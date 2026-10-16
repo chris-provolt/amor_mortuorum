@@ -1,6 +1,6 @@
 {
   "T1": {
-    "step_chance": 0.03,
+    "step_chance": 0.01,
     "formations": [
       {
         "enemies": [
@@ -37,7 +37,7 @@
     ]
   },
   "T2": {
-    "step_chance": 0.035,
+    "step_chance": 0.012,
     "formations": [
       {
         "enemies": [
@@ -70,7 +70,7 @@
     ]
   },
   "T3": {
-    "step_chance": 0.04,
+    "step_chance": 0.014,
     "formations": [
       {
         "enemies": [
@@ -96,7 +96,7 @@
     ]
   },
   "T4": {
-    "step_chance": 0.045,
+    "step_chance": 0.016,
     "formations": [
       {
         "enemies": [
@@ -120,7 +120,7 @@
     ]
   },
   "T5": {
-    "step_chance": 0.05,
+    "step_chance": 0.018,
     "formations": [
       {
         "enemies": [

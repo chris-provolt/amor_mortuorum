@@ -9,6 +9,7 @@ import arcade
 from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.combat import Battle, Outcome
+from ..systems.entities import Enemy
 from ..systems.encounters import (
     boss_formation,
     combat_rng,
@@ -19,6 +20,16 @@ from ..systems.encounters import (
 from ..systems.fov import Visibility
 from ..systems.hub import GraveyardHub
 from ..systems.loot import roll_chest, roll_chest_gold, roll_relic
+from ..systems.monsters import (
+    Monster,
+    daze,
+    maybe_respawn,
+    monster_at,
+    monster_rng,
+    remove_monster,
+    spawn_monsters,
+    step_monsters,
+)
 from ..systems.procgen import (
     KEY_ITEM_ID,
     TILE_SIZE,
@@ -53,6 +64,8 @@ COLOR_DOOR_OPEN = (70, 62, 52)
 COLOR_KEY = (180, 120, 230)
 COLOR_TRAP = (200, 60, 60)
 COLOR_BOSS_STAIRS = (190, 50, 120)
+COLOR_MONSTER = (170, 60, 70)
+COLOR_MONSTER_CHASE = (235, 80, 80)
 
 MOVES: Dict[str, Pos] = {
     "move_up": (0, 1),
@@ -78,6 +91,11 @@ class DungeonScene(BaseScene):
         self.tiles = arcade.SpriteList()
         self.features = arcade.SpriteList()
         self.player = arcade.SpriteList()
+        self.monster_sprites = arcade.SpriteList()
+        self.monsters: list[Monster] = []
+        self._monster_sprites: Dict[int, arcade.Sprite] = {}
+        self._engaged: Optional[Monster] = None
+        self._floor_steps = 0
         self._feature_sprites: Dict[Pos, arcade.Sprite] = {}
         self._door_sprites: Dict[Pos, arcade.Sprite] = {}
         self._tile_sprites: Dict[Pos, arcade.Sprite] = {}
@@ -102,12 +120,15 @@ class DungeonScene(BaseScene):
         self.pos = self.fmap.start
         self._chest_rng = chest_rng(run.seed, run.floor)
         self._enc_rng = encounter_rng(run.seed, run.floor)
+        self._mon_rng = monster_rng(run.seed, run.floor)
+        self.monsters = spawn_monsters(self.fmap, run.floor, self.data, self._mon_rng)
         record_max(self.state.meta, "deepest_floor", run.floor)
         self.state.meta.deepest_floor = max(self.state.meta.deepest_floor, run.floor)
         self.vis.radius += run.leader.bonus("fov")
         self._build_sprites()
         self.minimap = Minimap(self.fmap, self.vis, self.app)
         self._refresh_visibility(initial=True)
+        self._refresh_monsters()
         self.camera = arcade.Camera2D()
         self.hud = Hud(self.app)
         self.hud.push(f"Floor B{run.floor}. Find the stairs.")
@@ -160,6 +181,7 @@ class DungeonScene(BaseScene):
         battle = self.active_battle
         self.active_battle = None
         was_boss, self._boss_battle = self._boss_battle, False
+        engaged, self._engaged = self._engaged, None
         self.app.audio.play_music("dungeon")
         if battle is None:
             return
@@ -175,8 +197,14 @@ class DungeonScene(BaseScene):
                     self.hud.push(f"{member.name}: {up.describe()}")
             if was_boss:
                 self._on_boss_defeated()
+            if engaged is not None:
+                remove_monster(self.monsters, engaged)
+                self._refresh_monsters()
         elif battle.outcome is Outcome.FLED:
             self.hud.push("You escaped.")
+            if engaged is not None:
+                daze(engaged)
+                self._refresh_monsters()
         elif battle.outcome is Outcome.DEFEAT:
             self._on_party_defeated()
 
@@ -216,6 +244,8 @@ class DungeonScene(BaseScene):
         cx, cy = tile_center(self.pos)
         self._player_sprite = arcade.SpriteSolidColor(20, 20, cx, cy, COLOR_PLAYER)
         self.player.append(self._player_sprite)
+        self.monster_sprites = arcade.SpriteList()
+        self._monster_sprites = {}
 
     def _add_feature(self, pos: Pos, color, size: int) -> None:
         cx, cy = tile_center(pos)
@@ -236,6 +266,46 @@ class DungeonScene(BaseScene):
             self.hud.push(f"Achievement: {ach.name}")
         if persist or unlocked:
             self.state.save_manager.save_meta(meta)
+
+    # Monsters
+
+    def _refresh_monsters(self) -> None:
+        """Sync monster markers with the model: position, colour, and visibility."""
+        alive = {m.id for m in self.monsters}
+        for mid in [mid for mid in self._monster_sprites if mid not in alive]:
+            self._monster_sprites.pop(mid).remove_from_sprite_lists()
+        for m in self.monsters:
+            sprite = self._monster_sprites.get(m.id)
+            if sprite is None:
+                cx, cy = tile_center(m.pos)
+                sprite = arcade.SpriteSolidColor(22, 22, cx, cy, COLOR_MONSTER)
+                self.monster_sprites.append(sprite)
+                self._monster_sprites[m.id] = sprite
+            sprite.position = tile_center(m.pos)
+            sprite.color = COLOR_MONSTER_CHASE if m.chasing else COLOR_MONSTER
+            seen = m.pos in self.vis.visible
+            sprite.alpha = ALPHA_VISIBLE if seen else 0
+            if seen and not m.noticed:
+                m.noticed = True
+                self.hud.push(f"A {m.name} prowls nearby.")
+
+    def _visible_monsters(self) -> list[Pos]:
+        return [m.pos for m in self.monsters if m.pos in self.vis.visible]
+
+    def _step_monsters(self) -> None:
+        """Monsters take their turn after the party's step; one may catch the party."""
+        caught = step_monsters(
+            self.monsters, self.fmap, self.pos, self.vis.visible, self._mon_rng,
+            step=self._floor_steps, player_spd=self.run.leader.effective_spd(self.data),
+        )
+        maybe_respawn(
+            self.monsters, self.fmap, self.run.floor, self.pos, self.data, self._mon_rng,
+            visible=self.vis.visible,
+        )
+        self._refresh_monsters()
+        if caught is not None:
+            self.hud.push(f"The {caught.name} catches you!")
+            self._start_encounter(caught)
 
     # Fog of war
 
@@ -270,13 +340,21 @@ class DungeonScene(BaseScene):
             return
         if not self.fmap.is_walkable(nx, ny):
             return
+        target = monster_at(self.monsters, (nx, ny))
+        if target is not None:
+            self.hud.push(f"You engage the {target.name}.")
+            self._start_encounter(target)
+            return
         self.pos = (nx, ny)
         self._player_sprite.position = tile_center(self.pos)
         self.app.audio.play("step")
         self._refresh_visibility()
         self._stat("steps")
         self.run.steps_since_encounter += 1
+        self._floor_steps += 1
         self._on_step()
+        if self.active_battle is None and self.manager.current is self:
+            self._step_monsters()
 
     def _try_unlock(self, pos: Pos) -> None:
         leader = self.run.leader
@@ -329,6 +407,7 @@ class DungeonScene(BaseScene):
         elif feature == "portal":
             self.hud.push("A portal to the Graveyard. Press Enter to step through.")
         if step_encounter(self._enc_rng, self.run.floor, self.run.steps_since_encounter, self.data):
+            self.hud.push("Something lunges from the dark!")
             self._start_encounter()
 
     def _open_chest(self) -> None:
@@ -359,10 +438,18 @@ class DungeonScene(BaseScene):
         except AmorError:
             self.hud.push(f"Found {item.name}, but your bag cannot hold it.")
 
-    def _start_encounter(self) -> None:
+    def _start_encounter(self, monster: Optional[Monster] = None) -> None:
+        """Fight ``monster``'s group, or an ambush rolled from the floor's formations."""
         from .combat import CombatScene
 
-        enemies = roll_formation(self._enc_rng, self.run.floor, self.data)
+        if monster is not None:
+            enemies = [
+                Enemy.from_def(self.data.enemy(eid), self.run.floor, self.data.balance)
+                for eid in monster.enemies
+            ]
+            self._engaged = monster
+        else:
+            enemies = roll_formation(self._enc_rng, self.run.floor, self.data)
         rng = combat_rng(self.run.seed, self.run.floor, self.run.encounters)
         self.run.encounters += 1
         self.run.steps_since_encounter = 0
@@ -500,12 +587,13 @@ class DungeonScene(BaseScene):
             self.camera.use()
         self.tiles.draw()
         self.features.draw()
+        self.monster_sprites.draw()
         self.player.draw()
         self.app.default_camera.use()
         if self.hud is not None:
             self.hud.draw(self.run, extra=f"Steps {self.run.steps_since_encounter}   [M] map")
         if self.minimap is not None:
-            self.minimap.draw(self.pos)
+            self.minimap.draw(self.pos, self._visible_monsters())
         if self.paused:
             arcade.draw_lbwh_rectangle_filled(0, 0, self.app.width, self.app.height, (0, 0, 0, 170))
             self._pause_title.draw()

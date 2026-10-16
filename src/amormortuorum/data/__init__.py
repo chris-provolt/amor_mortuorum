@@ -181,6 +181,9 @@ class Balance:
     enemy_gold_per_floor: float = 0.03
     encounter_cap: float = 0.2
     encounter_growth_per_step: float = 0.05
+    monsters_base: float = 3.0           # roaming groups on B1
+    monsters_per_floor: float = 0.04     # extra groups per floor of depth
+    monster_respawn_chance: float = 0.01  # per step, while below strength
 
     @staticmethod
     def from_raw(raw: dict) -> "Balance":
@@ -539,11 +542,13 @@ class GameData:
         b = self.balance
         for name in ("enemy_atk_per_floor", "enemy_df_per_floor", "enemy_hp_per_floor",
                      "enemy_spd_per_floor", "enemy_xp_per_floor", "enemy_gold_per_floor",
-                     "encounter_growth_per_step"):
+                     "encounter_growth_per_step", "monsters_base", "monsters_per_floor"):
             if getattr(b, name) < 0:
                 raise DataError(f"balance: {name} must be >= 0")
         if not 0.0 < b.encounter_cap <= 1.0:
             raise DataError("balance: encounter_cap must be within (0, 1]")
+        if not 0.0 <= b.monster_respawn_chance <= 1.0:
+            raise DataError("balance: monster_respawn_chance must be within 0..1")
 
         # XP curve
         curve = self.xp_curve
