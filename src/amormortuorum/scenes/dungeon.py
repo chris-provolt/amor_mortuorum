@@ -9,8 +9,13 @@ import arcade
 from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.combat import Battle, Outcome
-from ..systems.encounters import combat_rng, encounter_rng, roll_formation, step_encounter
-from ..systems.entities import Enemy
+from ..systems.encounters import (
+    boss_formation,
+    combat_rng,
+    encounter_rng,
+    roll_formation,
+    step_encounter,
+)
 from ..systems.fov import Visibility
 from ..systems.hub import GraveyardHub
 from ..systems.loot import roll_chest, roll_chest_gold, roll_relic
@@ -25,10 +30,12 @@ from ..systems.procgen import (
 )
 from ..systems.progression import sync_level
 from ..systems.relics import apply_passives
+from ..systems.stats import bump, check_achievements, record_max
 from ..systems.rng import chest_rng
 from ..ui.hud import Hud
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 from ..ui.minimap import Minimap
+from ..ui.theme import fs
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +102,8 @@ class DungeonScene(BaseScene):
         self.pos = self.fmap.start
         self._chest_rng = chest_rng(run.seed, run.floor)
         self._enc_rng = encounter_rng(run.seed, run.floor)
+        record_max(self.state.meta, "deepest_floor", run.floor)
+        self.state.meta.deepest_floor = max(self.state.meta.deepest_floor, run.floor)
         self.vis.radius += run.leader.bonus("fov")
         self._build_sprites()
         self.minimap = Minimap(self.fmap, self.vis, self.app)
@@ -110,7 +119,7 @@ class DungeonScene(BaseScene):
         if self.fmap.portal is not None:
             self.hud.push("A pale light flickers somewhere on this floor...")
         self._pause_title = arcade.Text(
-            "Paused", 0, 0, color=arcade.color.GHOST_WHITE, font_size=28,
+            "Paused", 0, 0, color=arcade.color.GHOST_WHITE, font_size=fs(28),
             anchor_x="center", anchor_y="center",
         )
         self.pause_menu.set_items(
@@ -129,7 +138,7 @@ class DungeonScene(BaseScene):
             ],
             keep_selection=False,
         )
-        self._pause_view = MenuView(self.pause_menu, 0, 0, font_size=20, anchor_x="center")
+        self._pause_view = MenuView(self.pause_menu, 0, 0, font_size=fs(20), anchor_x="center")
         self.pause_menu.sfx = self.app.audio.play
         self.app.audio.play_music("dungeon")
         self.on_resize(self.app.width, self.app.height)
@@ -157,6 +166,9 @@ class DungeonScene(BaseScene):
         if battle.outcome is Outcome.VICTORY:
             xp, gold = battle.rewards()
             self.hud.push(f"Victory. +{xp} XP, +{gold} gold.")
+            self._stat("battles_won")
+            self._stat("enemies_slain", len(battle.enemies))
+            self._stat("gold_earned", gold)
             for member in self.run.party:
                 for up in sync_level(member, self.data):
                     self.app.audio.play("level_up")
@@ -212,6 +224,19 @@ class DungeonScene(BaseScene):
         self.features.append(sprite)
         self._feature_sprites[pos] = sprite
 
+    # Statistics
+
+    def _stat(self, key: str, amount: int = 1, *, persist: bool = False) -> None:
+        """Bump a lifetime counter, announce unlocks, and persist meta when asked."""
+        meta = self.state.meta
+        bump(meta, key, amount)
+        unlocked = check_achievements(meta, self.data)
+        for ach in unlocked:
+            self.app.audio.play("relic")
+            self.hud.push(f"Achievement: {ach.name}")
+        if persist or unlocked:
+            self.state.save_manager.save_meta(meta)
+
     # Fog of war
 
     def _alpha_for(self, pos: Pos) -> int:
@@ -249,6 +274,7 @@ class DungeonScene(BaseScene):
         self._player_sprite.position = tile_center(self.pos)
         self.app.audio.play("step")
         self._refresh_visibility()
+        self._stat("steps")
         self.run.steps_since_encounter += 1
         self._on_step()
 
@@ -311,6 +337,7 @@ class DungeonScene(BaseScene):
         if sprite is not None:
             sprite.remove_from_sprite_lists()
         leader = self.run.leader
+        self._stat("chests_opened")
         relic = roll_relic(
             self._chest_rng, self.run.floor, self.data, self.state.meta.relics.collected
         )
@@ -320,6 +347,7 @@ class DungeonScene(BaseScene):
         gold = roll_chest_gold(self._chest_rng, self.run.floor)
         if gold is not None:
             leader.add_gold(gold)
+            self._stat("gold_earned", gold)
             self.app.audio.play("gold")
             self.hud.push(f"The chest holds {gold} gold.")
             return
@@ -364,7 +392,7 @@ class DungeonScene(BaseScene):
         if boss is None:  # a boss floor without data: just unlock
             self.fmap.stairs_locked = False
             return
-        enemies = [Enemy.from_def(self.data.enemy(eid)) for eid in boss.enemies]
+        enemies = boss_formation(self.run.floor, self.data)
         rng = combat_rng(self.run.seed, self.run.floor, 1000 + self.run.encounters)
         self.run.encounters += 1
         self.run.steps_since_encounter = 0
@@ -380,6 +408,7 @@ class DungeonScene(BaseScene):
 
         boss = self.data.boss_for_floor(self.run.floor)
         self.fmap.stairs_locked = False
+        self._stat("bosses_slain")
         stairs = self._feature_sprites.get(self.fmap.stairs)
         if stairs is not None:
             stairs.color = COLOR_STAIRS
@@ -389,6 +418,7 @@ class DungeonScene(BaseScene):
         meta.deepest_floor = max(meta.deepest_floor, self.run.floor)
         self.state.save_manager.save_meta(meta)
         if boss is not None and boss.final:
+            self._stat("runs_won", persist=True)
             summary = self.run.summary(cause="reached the bottom of the Veil", victory=True)
             self._hub().end_run(self.run)
             self.manager.replace(
@@ -424,8 +454,9 @@ class DungeonScene(BaseScene):
 
         hub = self._hub()
         result = self.run.on_death(self.state.meta, self.data)
+        self._stat("deaths")
         if result.revived:
-            self.state.save_manager.save_meta(self.state.meta)
+            self._stat("revives", persist=True)
             summary = self.run.summary(cause=cause, revived=True)
         else:
             summary = self.run.summary(cause=cause, revived=False)

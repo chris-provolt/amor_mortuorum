@@ -12,6 +12,7 @@ from ..errors import AmorError
 from ..systems.combat import Action, ActionKind, Battle, LogEvent, Outcome
 from ..systems.party import most_wounded
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
+from ..ui.theme import fs
 
 logger = logging.getLogger(__name__)
 
@@ -57,19 +58,20 @@ class CombatScene(BaseScene):
         super().on_enter()
         names = ", ".join(e.name for e in self.battle.enemies)
         self._header = arcade.Text(
-            f"Ambush! {names}", 0, 0, color=TEXT, font_size=20, anchor_x="center", anchor_y="top"
+            f"Ambush! {names}", 0, 0, color=TEXT, font_size=fs(20),
+            anchor_x="center", anchor_y="top",
         )
-        self._prompt = arcade.Text("", 0, 0, color=DIM, font_size=12, anchor_x="center")
-        self._log_rows = [arcade.Text("", 0, 0, font_size=13, anchor_y="top") for _ in range(7)]
+        self._prompt = arcade.Text("", 0, 0, color=DIM, font_size=fs(12), anchor_x="center")
+        self._log_rows = [arcade.Text("", 0, 0, font_size=fs(13), anchor_y="top") for _ in range(7)]
         self._enemy_rows = [
-            arcade.Text("", 0, 0, color=TEXT, font_size=15, anchor_y="center")
+            arcade.Text("", 0, 0, color=TEXT, font_size=fs(15), anchor_y="center")
             for _ in self.battle.enemies
         ]
         self._party_rows = [
-            arcade.Text("", 0, 0, color=TEXT, font_size=15, anchor_y="center")
+            arcade.Text("", 0, 0, color=TEXT, font_size=fs(15), anchor_y="center")
             for _ in self.battle.party
         ]
-        self._view = MenuView(self.menu, 0, 0, font_size=20)
+        self._view = MenuView(self.menu, 0, 0, font_size=fs(20))
         self.menu.sfx = self.app.audio.play
         self.app.audio.play_music("combat")
         self._log.append(LogEvent("The dead stir.", "info"))
@@ -83,11 +85,11 @@ class CombatScene(BaseScene):
         if self._prompt is not None:
             self._prompt.position = (width / 2, 22)
         for i, row in enumerate(self._enemy_rows):
-            row.position = (width * 0.08, height * 0.74 - i * 46)
+            row.position = (width * 0.08, height * 0.74 - i * fs(46))
         for i, row in enumerate(self._party_rows):
-            row.position = (width * 0.08, height * 0.26 - i * 46)
+            row.position = (width * 0.08, height * 0.26 - i * fs(46))
         for i, row in enumerate(self._log_rows):
-            row.position = (width * 0.52, height * 0.78 - i * 20)
+            row.position = (width * 0.52, height * 0.78 - i * fs(20))
         if self._view is not None:
             self._view.set_position(width * 0.56, height * 0.30)
 
@@ -258,7 +260,7 @@ class CombatScene(BaseScene):
                 row.text = text
             row.color = DIM if not b.is_alive else TARGET if b.index == self.target else TEXT
             row.draw()
-            self._draw_bar(row.x + 12, row.y - 20, b.stats.hp / b.stats.max_hp, HP_FRONT)
+            self._draw_bar(row.x + 12, row.y - fs(20), b.stats.hp / b.stats.max_hp, HP_FRONT)
 
         for row, b in zip(self._party_rows, self.battle.players):
             marker = ">" if (b.index == self.actor and self.mode != "done") else " "
@@ -272,7 +274,7 @@ class CombatScene(BaseScene):
                 row.text = text
             row.color = DIM if not b.is_alive else TEXT
             row.draw()
-            self._draw_bar(row.x + 12, row.y - 20, b.stats.hp / b.stats.max_hp, HP_PARTY)
+            self._draw_bar(row.x + 12, row.y - fs(20), b.stats.hp / b.stats.max_hp, HP_PARTY)
 
         for row, event in zip(self._log_rows, list(self._log)[::-1]):
             if row.text != event.text:

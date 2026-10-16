@@ -91,9 +91,27 @@ class Minimap:
 
     # Drawing
 
-    def _icon(self, pos: Pos, color, size: float = SCALE) -> None:
+    def _icon(self, pos: Pos, color, size: float = SCALE, shape: str = "square") -> None:
+        """Draw a feature marker. Shapes differ per feature so colour is never the only cue:
+        stairs = hollow square, chest = filled square, portal = ring, key = diamond,
+        trap = cross, player = filled circle."""
         cx, cy = self._screen(*pos)
-        arcade.draw_lbwh_rectangle_filled(cx - size / 2, cy - size / 2, size, size, color)
+        half = size / 2
+        if shape == "square":
+            arcade.draw_lbwh_rectangle_filled(cx - half, cy - half, size, size, color)
+        elif shape == "hollow":
+            arcade.draw_lbwh_rectangle_outline(cx - half, cy - half, size, size, color, 1)
+        elif shape == "ring":
+            arcade.draw_circle_outline(cx, cy, half, color, 1)
+        elif shape == "circle":
+            arcade.draw_circle_filled(cx, cy, half, color)
+        elif shape == "diamond":
+            arcade.draw_polygon_filled(
+                [(cx, cy + half), (cx + half, cy), (cx, cy - half), (cx - half, cy)], color
+            )
+        elif shape == "cross":
+            arcade.draw_line(cx - half, cy - half, cx + half, cy + half, color, 1)
+            arcade.draw_line(cx - half, cy + half, cx + half, cy - half, color, 1)
 
     def draw(self, player_pos: Pos) -> None:
         if not self.enabled:
@@ -105,16 +123,16 @@ class Minimap:
         fmap = self.fmap
         explored = self.vis.explored
         if fmap.stairs in explored:
-            self._icon(fmap.stairs, ICONS["stairs"], SCALE + 2)
+            self._icon(fmap.stairs, ICONS["stairs"], SCALE + 3, shape="hollow")
         for pos in fmap.chests:
             if pos in explored:
-                self._icon(pos, ICONS["chest"])
+                self._icon(pos, ICONS["chest"], SCALE + 1, shape="square")
         for pos in fmap.keys:
             if pos in explored:
-                self._icon(pos, ICONS["key"])
+                self._icon(pos, ICONS["key"], SCALE + 3, shape="diamond")
         for pos, trap in fmap.traps.items():
             if trap.revealed and pos in explored:
-                self._icon(pos, ICONS["trap"])
+                self._icon(pos, ICONS["trap"], SCALE + 2, shape="cross")
         if fmap.portal is not None and fmap.portal in explored:
-            self._icon(fmap.portal, ICONS["portal"], SCALE + 2)
-        self._icon(player_pos, ICONS["player"], SCALE + 2)
+            self._icon(fmap.portal, ICONS["portal"], SCALE + 4, shape="ring")
+        self._icon(player_pos, ICONS["player"], SCALE + 3, shape="circle")

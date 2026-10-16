@@ -13,6 +13,7 @@ from .core.input import InputManager
 from .core.scenes.manager import SceneManager
 from .core.settings import Settings
 from .persistence import SaveError, SaveManager
+from .ui.theme import set_ui_scale
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ class GameApp(arcade.Window):
             center_window=True,
         )
         self.background_color = arcade.color.BLACK
+        set_ui_scale(settings.video.ui_scale)
 
         # Shared state
         save_manager = save_manager or SaveManager()
@@ -94,6 +96,20 @@ class GameApp(arcade.Window):
         except ImportError:
             return
         self.state.data = GameData.load()
+
+    def switch_profile(self, profile_id: str) -> None:
+        """Point the game at another save profile (new or existing) and reload meta."""
+        from .persistence import MetaState
+
+        old = self.state.save_manager
+        self.state.save_manager = SaveManager(root_dir=old.root_dir, profile_id=profile_id)
+        try:
+            self.state.meta = self.state.save_manager.load_meta()
+        except SaveError:
+            self.state.meta = MetaState()
+        self.state.run = None
+        self.settings.game.profile = profile_id
+        logger.info("Switched to profile %r", profile_id)
 
     @staticmethod
     def smoke_mode_env() -> bool:

@@ -124,11 +124,19 @@ class MetaState:
     meta_seed: int = 1337
     runs_completed: int = 0
     deepest_floor: int = 0
+    stats: Dict[str, int] = field(default_factory=dict)
+    achievements: Set[str] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         for name in ("hub_cycle", "meta_seed", "runs_completed", "deepest_floor"):
             if not isinstance(getattr(self, name), int):
                 raise SaveValidationError(f"MetaState.{name} must be an integer")
+        if not isinstance(self.stats, dict) or not all(
+            isinstance(k, str) and isinstance(v, int) for k, v in self.stats.items()
+        ):
+            raise SaveValidationError("MetaState.stats must map strings to integers")
+        if not isinstance(self.achievements, set):
+            self.achievements = set(self.achievements)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -138,6 +146,8 @@ class MetaState:
             "meta_seed": self.meta_seed,
             "runs_completed": self.runs_completed,
             "deepest_floor": self.deepest_floor,
+            "stats": dict(self.stats),
+            "achievements": sorted(self.achievements),
         }
 
     @staticmethod
@@ -149,6 +159,8 @@ class MetaState:
             meta_seed=int(data.get("meta_seed", 1337)),
             runs_completed=int(data.get("runs_completed", 0)),
             deepest_floor=int(data.get("deepest_floor", 0)),
+            stats={str(k): int(v) for k, v in (data.get("stats") or {}).items()},
+            achievements=set(data.get("achievements") or []),
         )
 
 

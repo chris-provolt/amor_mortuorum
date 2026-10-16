@@ -25,6 +25,8 @@ What works today, end to end:
 - **Audio**: named sound hooks (menus, steps, chests, combat, level-ups, relics, bosses) and ambient loops for the Graveyard, dungeon and combat. Placeholder tones are synthesized with the standard library on first run; drop real `.wav` files into `resources/audio/` to replace them.
 - **Settings screen** (title menu and pause menu): fullscreen, music and SFX volume, VSync, a view of the key bindings, and Save to a per-user `settings.json` that the game loads automatically.
 - **Controller support**: any pyglet-recognised gamepad, hot-pluggable. D-pad or left stick moves, A confirms, B cancels, Y opens the bag, X toggles the map, Start pauses.
+- **Records and achievements**: lifetime counters (runs, deaths, floors, battles, chests, gold, steps) with fourteen data-driven achievements (`achievements.json`) announced on the HUD when unlocked.
+- **Profiles**: switch or create save profiles from the title menu; the choice is remembered in `settings.json` and `--profile` still overrides it.
 - **Save & Quit** from the pause menu: a one-shot mid-run save that resumes at the start of the current floor and is consumed on load.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.
 
@@ -104,8 +106,14 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
 - **Persistence:** Stored in the meta save; completion survives across runs.
 - **Names:** Lamplight of the Veil, Thorn of Epitaph, Obol of Passage, Votive Ashes, Mortis Dial, Widow's Knot, Catacomb Key, Lacrimosa Phial, Ossuary Crown, **Heart of Oblivion**.
 
+## Balance Model
+- **Enemies scale per floor** (`balance.json`): ATK +0.45, DEF +0.15, HP +2.5%, XP and gold +3% per floor below B1. Tier bases in `enemies.json` are the stats at B1 and rise gently across tiers; depth does the rest.
+- **Players** gain +6 HP, +1 MP and +1 ATK per level, +1 DEF every second level and +1 SPD every third (`xp_curve.json`, 40 levels). The stairs restore 10% HP and 15% MP on every descent.
+- **Encounters**: per-step chance starts at the tier's `step_chance` (3-5%), grows 5% per quiet step and caps at 20%, giving roughly 3-5 fights per floor.
+- **Measured with** `python tools/balance/simulate.py --runs 80 --party N`, which plays whole runs with an auto-policy. Current targets: solo runs end around B20-40, pairs around B40 with a long tail to B80, full parties reach the nineties and clear B99 a few percent of the time. Re-run it after touching any number.
+
 ## Procedural Generation
-- **Algorithm:** BSP split into leaves, one room per leaf, L-shaped corridors joining sibling subtrees; the whole floor is connected.
+- **Algorithms:** BSP split into leaves, one room per leaf, L-shaped corridors joining sibling subtrees; the whole floor is connected. From B6, 30% of floors are **cellular-automata caverns** instead: one connected open region with the stairs at the far end of the cave (no rooms, so no key doors).
 - **Features:** Start room, stairs in the room farthest from the start, 1-5 chests scaling with depth, a portal on a chance roll, 0-4 hidden traps, and (35% of floors from B2) locked doors on every entrance of the stairs room with a key placed somewhere still reachable.
 - **Determinism:** Floor layout derives from `floor_rng(seed, floor)`; chest contents from `chest_rng(seed, floor)`; encounters and each battle from named streams (see [Testing & Determinism](#testing--determinism)).
 
@@ -114,7 +122,7 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
 - **Formula** (`systems/procgen.py`):
   ```py
   PORTAL_BASE_CHANCE = 0.30     # 30% on Floor 1
-  PORTAL_DECAY       = 0.985    # multiplicative decay per floor
+  PORTAL_DECAY       = 0.99     # multiplicative decay per floor
   PORTAL_MIN_CHANCE  = 0.02     # floor at 2%
   # chance(floor) = max(PORTAL_MIN_CHANCE, PORTAL_BASE_CHANCE * (PORTAL_DECAY ** (floor-1)))
   ```
@@ -132,7 +140,7 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
   - **Minimap toggle:** M
   - **Controller:** D-pad / left stick move, A confirm, B back, Y bag, X map, Start pause
   - **Combat target:** Left / Right
-- **Planned:** screen-shake and colourblind toggles (minimap icons are colour-only today), font scaling, in-game key rebinding (today: edit the saved `settings.json`).
+- **Accessibility:** minimap icons are shape-coded as well as coloured (hollow square stairs, filled square chest, ring portal, diamond key, cross trap, dot player); a **UI scale** setting (80-160%) resizes every menu and panel; keys can be **rebound in-game** from Settings. Planned: a screen-shake toggle once effects exist.
 
 ## Tech Stack
 - **Language:** Python **3.10+** (tested on 3.11 and 3.13)
@@ -160,7 +168,8 @@ src/amormortuorum/
 ├── data/                  # JSON content + GameData loader/validator
 │   ├── items.json  enemies.json  loot_tables.json  floor_tiers.json
 │   ├── relics.json  encounters.json  shop.json  xp_curve.json
-│   └── bosses.json  skills.json  companions.json
+│   ├── bosses.json  skills.json  companions.json
+│   └── balance.json  achievements.json
 ├── systems/               # pure-Python game rules (no arcade)
 │   ├── rng.py             # seeded streams
 │   ├── procgen.py         # BSP floors, portal chance
@@ -173,11 +182,13 @@ src/amormortuorum/
 │   ├── fov.py             # shadowcasting field of view, explored memory
 │   ├── relics.py          # relic passives and collection rows
 │   ├── party.py           # recruiting, shared bag, most-wounded targeting
+│   ├── stats.py           # lifetime counters and achievement checks
 │   ├── hub.py  shop.py  crypt.py
 ├── persistence/           # SaveManager, SaveGame/MetaState/RunState, atomic writes
 ├── ui/                    # VerticalMenu model + MenuView, Hud, Minimap
 ├── resources/audio/       # optional real .wav assets (override placeholders)
-└── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, relics, settings, run_summary
+└── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, relics,
+                           #   records, profiles, settings, run_summary
 tests/                     # pytest; GL-marked tests open a window (opt-in)
 tools/ci/build_binary.py   # PyInstaller one-file build
 docs/                      # design notes per epic, CI, save system
@@ -307,11 +318,9 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 
 ## Roadmap
 Design notes for each epic live in `docs/epics/`. Every epic now has a first implementation; what remains is polish:
-1. A balance pass across all five tiers (enemy stats, boss HP, loot and XP curves are first guesses).
+1. Hand playtesting against the simulator's numbers (see Balance Model); the auto-policy never flees and never misjudges a potion, so real runs end earlier.
 2. Real art and audio assets (sprites, tiles, SFX, music) replacing the placeholders.
-3. Accessibility: colourblind-safe minimap icons, screen-shake and font-scale toggles, in-game key rebinding.
-4. Cellular-cavern floors as a second generator; enemy pathfinding on the map.
-5. Run statistics, achievements, and a profile picker for multiple save profiles.
+3. Visible wandering enemies with grid pathfinding (today encounters are random per step).
 
 ---
 

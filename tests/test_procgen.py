@@ -1,7 +1,9 @@
 import pytest
 
 from amormortuorum.systems.procgen import (
+    CAVERN_MIN_FLOOR,
     DOOR_MIN_FLOOR,
+    PORTAL_DECAY,
     PORTAL_MIN_CHANCE,
     TRAP_KINDS,
     FloorMap,
@@ -83,8 +85,8 @@ def test_border_is_wall(seed, floor):
 
 def test_portal_chance_formula():
     assert portal_chance(1) == 0.30
-    assert portal_chance(50) == pytest.approx(0.30 * 0.985 ** 49)
-    assert portal_chance(99) == pytest.approx(max(0.02, 0.30 * 0.985 ** 98))
+    assert portal_chance(50) == pytest.approx(0.30 * PORTAL_DECAY ** 49)
+    assert portal_chance(99) == pytest.approx(max(0.02, 0.30 * PORTAL_DECAY ** 98))
     assert portal_chance(10_000) == PORTAL_MIN_CHANCE
 
 
@@ -184,3 +186,26 @@ def test_boss_floors_lock_stairs_and_never_use_key_doors(floor):
         assert m.is_boss_floor and m.stairs_locked
         assert not m.doors and not m.keys
     assert not generate_floor(1, 21).stairs_locked
+
+
+def test_caverns_appear_from_the_minimum_floor_and_are_connected():
+    for seed in range(1, 40):
+        assert generate_floor(seed, CAVERN_MIN_FLOOR - 1).style == "rooms"
+    maps = [generate_floor(seed, 12) for seed in range(1, 121)]
+    caverns = [m for m in maps if m.style == "cavern"]
+    assert 15 <= len(caverns) <= 60, len(caverns)
+    for m in caverns:
+        assert not m.doors and not m.keys
+        assert m.rooms and m.rooms[0].contains(m.start)
+        assert m.is_walkable(*m.start) and m.is_walkable(*m.stairs)
+        reachable = bfs_reachable(m, m.start)
+        assert m.stairs in reachable
+        assert len(reachable) >= 0.2 * (m.width - 2) * (m.height - 2)
+        assert abs(m.stairs[0] - m.start[0]) + abs(m.stairs[1] - m.start[1]) >= 10
+        for pos in m.chests | set(m.traps):
+            assert pos in reachable and pos not in (m.start, m.stairs)
+        if m.portal is not None:
+            assert m.portal in reachable and m.portal not in m.chests
+    # Deterministic like everything else
+    a, b = generate_floor(7, 12), generate_floor(7, 12)
+    assert (a.style, a.tiles, a.start, a.stairs) == (b.style, b.tiles, b.start, b.stairs)

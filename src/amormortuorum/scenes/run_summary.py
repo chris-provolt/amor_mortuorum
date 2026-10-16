@@ -8,6 +8,7 @@ import arcade
 
 from ..core.scenes.base_scene import BaseScene
 from ..systems.run import RunSummary
+from ..ui.theme import fs
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +40,12 @@ class RunSummaryScene(BaseScene):
         ]
         self._lines = [
             arcade.Text(
-                title, 0, 0, color=arcade.color.GHOST_WHITE, font_size=30,
+                title, 0, 0, color=arcade.color.GHOST_WHITE, font_size=fs(30),
                 anchor_x="center", anchor_y="center",
             )
         ] + [
             arcade.Text(
-                line, 0, 0, color=(200, 200, 215), font_size=16,
+                line, 0, 0, color=(200, 200, 215), font_size=fs(16),
                 anchor_x="center", anchor_y="center",
             )
             for line in body
@@ -53,7 +54,7 @@ class RunSummaryScene(BaseScene):
 
     def on_resize(self, width: int, height: int):
         for i, text in enumerate(self._lines):
-            text.position = (width / 2, height * 0.68 - i * 34)
+            text.position = (width / 2, height * 0.68 - i * fs(34))
 
     def draw(self):
         for text in self._lines:

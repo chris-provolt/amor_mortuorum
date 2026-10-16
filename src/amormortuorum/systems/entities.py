@@ -343,15 +343,30 @@ class Enemy:
     enrage: int = 0
 
     @staticmethod
-    def from_def(d: EnemyDef) -> "Enemy":
+    def from_def(d: EnemyDef, floor: int = 1, balance=None) -> "Enemy":
+        """Instantiate ``d`` scaled for ``floor`` (floor 1 = the JSON numbers as written)."""
+        depth = max(0, floor - 1)
+        if balance is None:
+            from ..data import Balance
+
+            balance = Balance()
+        hp = int(round(d.hp * (1 + balance.enemy_hp_per_floor * depth)))
+        atk = int(round(d.atk + balance.enemy_atk_per_floor * depth))
+        df = int(round(d.df + balance.enemy_df_per_floor * depth))
+        spd = int(round(d.spd + balance.enemy_spd_per_floor * depth))
+        xp = int(round(d.xp * (1 + balance.enemy_xp_per_floor * depth)))
+        gold = int(round(d.gold * (1 + balance.enemy_gold_per_floor * depth)))
+        enrage = 0
+        if d.enrage:
+            enrage = int(round(d.enrage + balance.enemy_atk_per_floor * depth * 0.25))
         return Enemy(
             def_id=d.id,
             name=d.name,
-            stats=Stats(max_hp=d.hp, hp=d.hp, max_mp=d.mp, mp=d.mp, atk=d.atk, df=d.df, spd=d.spd),
-            xp=d.xp,
-            gold=d.gold,
+            stats=Stats(max_hp=hp, hp=hp, max_mp=d.mp, mp=d.mp, atk=atk, df=df, spd=spd),
+            xp=xp,
+            gold=gold,
             boss=d.boss,
-            enrage=d.enrage,
+            enrage=enrage,
         )
 
     @property

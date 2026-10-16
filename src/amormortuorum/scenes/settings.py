@@ -9,6 +9,8 @@ import arcade
 from ..core.scenes.base_scene import BaseScene
 from ..core.settings import user_settings_path
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
+from ..ui.theme import MAX_SCALE, MIN_SCALE, set_ui_scale, ui_scale
+from ..ui.theme import fs
 
 logger = logging.getLogger(__name__)
 
@@ -26,25 +28,21 @@ class SettingsScene(BaseScene):
         self._title: arcade.Text | None = None
         self._bindings: List[arcade.Text] = []
         self._msg: arcade.Text | None = None
+        self.mode = "main"  # main | keys | listen
+        self._listen_action: str | None = None
 
     def on_enter(self):
         super().on_enter()
         self._title = arcade.Text(
-            "Settings", 0, 0, color=arcade.color.GHOST_WHITE, font_size=28,
+            "Settings", 0, 0, color=arcade.color.GHOST_WHITE, font_size=fs(28),
             anchor_x="center", anchor_y="center",
         )
-        self._msg = arcade.Text("", 0, 0, color=(255, 215, 120), font_size=13, anchor_x="center")
-        self._view = MenuView(self.menu, 0, 0, font_size=18)
+        self._msg = arcade.Text(
+            "", 0, 0, color=(255, 215, 120), font_size=fs(13), anchor_x="center"
+        )
+        self._view = MenuView(self.menu, 0, 0, font_size=fs(18))
         self.menu.sfx = self.app.audio.play
-        mapping = self.app.input.mapping_names()
-        self._bindings = [
-            arcade.Text("Key bindings (edit in settings.json)", 0, 0, color=TEXT, font_size=14,
-                        anchor_y="top")
-        ] + [
-            arcade.Text(f"{action:<12} {', '.join(keys)}", 0, 0, color=DIM, font_size=12,
-                        anchor_y="top")
-            for action, keys in mapping.items()
-        ]
+        self._refresh_bindings()
         self._build_menu()
         self.on_resize(self.app.width, self.app.height)
 
@@ -63,7 +61,52 @@ class SettingsScene(BaseScene):
     def _pct(self, value: float) -> str:
         return f"{int(round(value * 100)):>3}%"
 
+    def _refresh_bindings(self) -> None:
+        mapping = self.app.input.mapping_names()
+        self._bindings = [
+            arcade.Text("Key bindings", 0, 0, color=TEXT, font_size=fs(14), anchor_y="top")
+        ] + [
+            arcade.Text(f"{action:<12} {', '.join(keys)}", 0, 0, color=DIM, font_size=fs(12),
+                        anchor_y="top")
+            for action, keys in mapping.items()
+        ]
+        self.on_resize(self.app.width, self.app.height)
+
+    def _build_keys_menu(self) -> None:
+        self.mode = "keys"
+        mapping = self.app.input.mapping_names()
+        items = [
+            MenuItem(
+                f"{action:<12} {', '.join(keys)}",
+                lambda a=action: self._listen_for(a),
+                hint="Enter, then press the new key (Esc cancels)",
+            )
+            for action, keys in mapping.items()
+        ]
+        items.append(MenuItem("Back", self._build_menu))
+        self.menu.set_items(items, keep_selection=False)
+
+    def _listen_for(self, action: str) -> None:
+        self.mode = "listen"
+        self._listen_action = action
+        self._say(f"Press a key for '{action}'...")
+
+    def _apply_rebind(self, code: int) -> None:
+        action = self._listen_action or ""
+        name = self.app.input.rebind_key(action, code)
+        mapping = {a: list(k) for a, k in self.settings.input.mapping.items()}
+        for other in mapping:
+            if other != action and name in mapping[other]:
+                mapping[other] = [k for k in mapping[other] if k != name]
+        mapping[action] = [name]
+        self.settings.input.mapping = mapping
+        self._listen_action = None
+        self._say(f"'{action}' is now {name}. Save to keep it.")
+        self._refresh_bindings()
+        self._build_keys_menu()
+
     def _build_menu(self) -> None:
+        self.mode = "main"
         s = self.settings
         pad = self.app.controller.connected if self.app.controller else None
         self.menu.set_items(
@@ -84,6 +127,12 @@ class SettingsScene(BaseScene):
                     f"VSync           {'On' if s.video.vsync else 'Off'}", self._toggle_vsync,
                     hint="Enter toggles (applies next launch)",
                 ),
+                MenuItem(
+                    f"UI scale        {int(round(ui_scale() * 100)):>3}%", None,
+                    hint="Left / Right adjust; applies when a screen is reopened",
+                    payload="scale",
+                ),
+                MenuItem("Rebind keys", self._build_keys_menu, hint="Change one key per action"),
                 MenuItem(
                     f"Controller      {pad or 'none detected'}", None,
                     hint="Xbox-style: A confirm, B back, Y bag, X map, Start pause",
@@ -117,6 +166,9 @@ class SettingsScene(BaseScene):
         elif payload == "sfx":
             audio.sfx_volume = round(max(0.0, min(1.0, audio.sfx_volume + delta)), 2)
             self.app.audio.play("menu_move")
+        elif payload == "scale":
+            value = round(max(MIN_SCALE, min(MAX_SCALE, ui_scale() + delta)), 2)
+            self.settings.video.ui_scale = set_ui_scale(value)
         self.app.audio.apply_volumes()
         selected = self.menu.selected
         self._build_menu()
@@ -143,11 +195,22 @@ class SettingsScene(BaseScene):
         if self._msg is not None and self._msg.text:
             self._msg.draw()
 
+    def on_key_press(self, key: int, modifiers: int):
+        if self.mode == "listen" and self._listen_action is not None:
+            self._apply_rebind(key)
+
     def on_key_actions(self, actions: list[str], pressed: bool) -> bool:
         if not pressed:
             return False
+        if self.mode == "listen":
+            if "cancel" in actions:
+                self._listen_action = None
+                self._say("Rebind cancelled.")
+                self._build_keys_menu()
+                return True
+            return False  # let the raw key reach on_key_press
         current = self.menu.current
-        if current is not None and current.payload in ("music", "sfx"):
+        if current is not None and current.payload in ("music", "sfx", "scale"):
             if "move_left" in actions:
                 self._adjust(current.payload, -STEP)
                 return True
@@ -157,6 +220,9 @@ class SettingsScene(BaseScene):
         if self.menu.handle_actions(actions):
             return True
         if "cancel" in actions:
-            self._back()
+            if self.mode == "keys":
+                self._build_menu()
+            else:
+                self._back()
             return True
         return False

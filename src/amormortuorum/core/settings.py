@@ -39,10 +39,16 @@ class InputSettings:
 
 
 @dataclass
+class GameSettings:
+    profile: str = "default"
+
+
+@dataclass
 class Settings:
     video: VideoSettings = field(default_factory=VideoSettings)
     audio: AudioSettings = field(default_factory=AudioSettings)
     input: InputSettings = field(default_factory=InputSettings)
+    game: GameSettings = field(default_factory=GameSettings)
 
     @staticmethod
     def _load_json(path: Path) -> dict:
@@ -64,7 +70,8 @@ class Settings:
         video = VideoSettings(**data.get("video", {}))
         audio = AudioSettings(**data.get("audio", {}))
         input_ = InputSettings(mapping=data.get("input", {}).get("mapping", {}))
-        return Settings(video=video, audio=audio, input=input_)
+        game = GameSettings(**data.get("game", {}))
+        return Settings(video=video, audio=audio, input=input_, game=game)
 
     @classmethod
     def load(cls, user_path: Optional[Path] = None) -> "Settings":
@@ -101,6 +108,7 @@ class Settings:
             "video": dataclasses.asdict(self.video),
             "audio": dataclasses.asdict(self.audio),
             "input": {"mapping": {k: list(v) for k, v in self.input.mapping.items()}},
+            "game": dataclasses.asdict(self.game),
         }
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as f:

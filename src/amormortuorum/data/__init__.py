@@ -154,6 +154,40 @@ class CompanionDef:
     desc: str = ""
 
 
+TRACKED_STATS: Tuple[str, ...] = (
+    "runs_started", "runs_won", "deaths", "revives", "deepest_floor", "battles_won",
+    "enemies_slain", "bosses_slain", "chests_opened", "gold_earned", "steps", "relics",
+)
+
+
+@dataclass(frozen=True)
+class AchievementDef:
+    id: str
+    name: str
+    stat: str
+    at_least: int
+    desc: str = ""
+
+
+@dataclass(frozen=True)
+class Balance:
+    """Global tuning knobs (data/balance.json)."""
+
+    enemy_atk_per_floor: float = 0.45
+    enemy_df_per_floor: float = 0.2
+    enemy_hp_per_floor: float = 0.025
+    enemy_spd_per_floor: float = 0.05
+    enemy_xp_per_floor: float = 0.03
+    enemy_gold_per_floor: float = 0.03
+    encounter_cap: float = 0.2
+    encounter_growth_per_step: float = 0.05
+
+    @staticmethod
+    def from_raw(raw: dict) -> "Balance":
+        known = {f for f in Balance.__dataclass_fields__}
+        return Balance(**{k: float(v) for k, v in raw.items() if k in known})
+
+
 @dataclass(frozen=True)
 class XpCurve:
     """``thresholds[i]`` is the total XP needed to reach level ``i + 1``."""
@@ -161,9 +195,14 @@ class XpCurve:
     max_level: int = 30
     thresholds: Tuple[int, ...] = tuple(int(20 * (n ** 1.6)) for n in range(30))
     per_level: Dict[str, int] = field(
-        default_factory=lambda: {"max_hp": 6, "max_mp": 1, "atk": 1, "df": 1}
+        default_factory=lambda: {"max_hp": 6, "max_mp": 1, "atk": 1}
     )
-    spd_every: int = 3
+    # stat -> period: +1 on every level divisible by the period
+    every: Dict[str, int] = field(default_factory=lambda: {"df": 2, "spd": 3})
+
+    @property
+    def spd_every(self) -> int:
+        return self.every.get("spd", 1)
 
     def xp_for_level(self, level: int) -> int:
         level = max(1, min(level, self.max_level))
@@ -180,11 +219,14 @@ class XpCurve:
 
     @staticmethod
     def from_raw(raw: dict) -> "XpCurve":
+        every = {k: int(v) for k, v in raw.get("every", {}).items()}
+        if "spd_every" in raw and "spd" not in every:  # legacy key
+            every["spd"] = int(raw["spd_every"])
         return XpCurve(
             max_level=int(raw.get("max_level", 30)),
             thresholds=tuple(int(t) for t in raw.get("thresholds", ())),
             per_level={k: int(v) for k, v in raw.get("per_level", {}).items()},
-            spd_every=int(raw.get("spd_every", 3)),
+            every=every or {"df": 2, "spd": 3},
         )
 
 
@@ -201,6 +243,8 @@ class GameData:
     bosses: Dict[int, BossDef] = field(default_factory=dict)
     skills: Dict[str, SkillDef] = field(default_factory=dict)
     companions: Dict[str, CompanionDef] = field(default_factory=dict)
+    balance: Balance = field(default_factory=Balance)
+    achievements: List[AchievementDef] = field(default_factory=list)
 
     # Lookups
 
@@ -298,6 +342,8 @@ class GameData:
             bosses=read("bosses.json"),
             skills=read("skills.json"),
             companions=read("companions.json"),
+            balance=read("balance.json"),
+            achievements=read("achievements.json"),
         )
 
     @classmethod
@@ -315,9 +361,16 @@ class GameData:
         bosses: Optional[Dict[str, dict]] = None,
         skills: Optional[List[dict]] = None,
         companions: Optional[List[dict]] = None,
+        balance: Optional[dict] = None,
+        achievements: Optional[List[dict]] = None,
     ) -> "GameData":
         """Build from already-parsed JSON structures and validate."""
         data = cls()
+        data.achievements = [
+            _build(AchievementDef, raw, "achievements") for raw in (achievements or [])
+        ]
+        if balance:
+            data.balance = Balance.from_raw(balance)
         data.companions = _unique_by_id(
             "companions", [_build(CompanionDef, raw, "companions") for raw in (companions or [])]
         )
@@ -471,6 +524,27 @@ class GameData:
             if comp.stats["max_hp"] < 1:
                 raise DataError(f"companions[{comp.id}]: max_hp must be >= 1")
 
+        # Achievements
+        seen_ach = set()
+        for ach in self.achievements:
+            if ach.id in seen_ach:
+                raise DataError(f"achievements: duplicate id {ach.id!r}")
+            seen_ach.add(ach.id)
+            if ach.stat not in TRACKED_STATS:
+                raise DataError(f"achievements[{ach.id}]: unknown stat {ach.stat!r}")
+            if ach.at_least < 1:
+                raise DataError(f"achievements[{ach.id}]: at_least must be >= 1")
+
+        # Balance
+        b = self.balance
+        for name in ("enemy_atk_per_floor", "enemy_df_per_floor", "enemy_hp_per_floor",
+                     "enemy_spd_per_floor", "enemy_xp_per_floor", "enemy_gold_per_floor",
+                     "encounter_growth_per_step"):
+            if getattr(b, name) < 0:
+                raise DataError(f"balance: {name} must be >= 0")
+        if not 0.0 < b.encounter_cap <= 1.0:
+            raise DataError("balance: encounter_cap must be within (0, 1]")
+
         # XP curve
         curve = self.xp_curve
         if curve.max_level < 1 or len(curve.thresholds) != curve.max_level:
@@ -479,8 +553,9 @@ class GameData:
             raise DataError("xp_curve: level 1 must start at 0 XP")
         if any(b <= a for a, b in zip(curve.thresholds, curve.thresholds[1:])):
             raise DataError("xp_curve: thresholds must be strictly increasing")
-        if curve.spd_every < 1:
-            raise DataError("xp_curve: spd_every must be >= 1")
+        for stat, period in curve.every.items():
+            if period < 1:
+                raise DataError(f"xp_curve: every[{stat!r}] must be >= 1")
 
 
 def _build(cls, raw: dict, source: str):
@@ -517,5 +592,8 @@ __all__ = [
     "SkillDef",
     "SKILL_TARGETS",
     "CompanionDef",
+    "Balance",
+    "AchievementDef",
+    "TRACKED_STATS",
     "GameData",
 ]

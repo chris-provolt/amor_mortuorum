@@ -1,0 +1,16 @@
+[
+  {"id": "first_blood", "name": "First Blood", "desc": "Win a battle.", "stat": "battles_won", "at_least": 1},
+  {"id": "gravedigger", "name": "Gravedigger", "desc": "Slay 100 enemies.", "stat": "enemies_slain", "at_least": 100},
+  {"id": "ossuary", "name": "Ossuary", "desc": "Slay 1000 enemies.", "stat": "enemies_slain", "at_least": 1000},
+  {"id": "treasure_hunter", "name": "Treasure Hunter", "desc": "Open 50 chests.", "stat": "chests_opened", "at_least": 50},
+  {"id": "deep_breath", "name": "Deep Breath", "desc": "Reach floor B20.", "stat": "deepest_floor", "at_least": 20},
+  {"id": "halfway_down", "name": "Halfway Down", "desc": "Reach floor B50.", "stat": "deepest_floor", "at_least": 50},
+  {"id": "the_bottom", "name": "The Bottom", "desc": "Reach floor B99.", "stat": "deepest_floor", "at_least": 99},
+  {"id": "warden_slayer", "name": "Warden Slayer", "desc": "Defeat a mini-boss.", "stat": "bosses_slain", "at_least": 1},
+  {"id": "heart_still", "name": "The Heart Stilled", "desc": "Win a run.", "stat": "runs_won", "at_least": 1},
+  {"id": "persistent", "name": "Persistent", "desc": "Start 10 runs.", "stat": "runs_started", "at_least": 10},
+  {"id": "token_spent", "name": "Second Chance", "desc": "Be revived by a Resurrection Token.", "stat": "revives", "at_least": 1},
+  {"id": "collector", "name": "Collector", "desc": "Collect all ten Relics of the Veil.", "stat": "relics", "at_least": 10},
+  {"id": "walker", "name": "Long Walker", "desc": "Take 10,000 steps.", "stat": "steps", "at_least": 10000},
+  {"id": "rich", "name": "Obol Hoard", "desc": "Earn 5,000 gold across all runs.", "stat": "gold_earned", "at_least": 5000}
+]

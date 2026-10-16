@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Callable, List, Optional, Sequence
+from .theme import fs
 
 
 @dataclass
@@ -143,7 +144,8 @@ class MenuView:
         self.cursor = cursor
         self._rows: List[Any] = []
         self._hint = arcade.Text(
-            "", x, y, color=disabled_color, font_size=max(10, font_size - 6), anchor_x=anchor_x
+            "", x, y, color=disabled_color, font_size=max(fs(10), font_size - fs(6)),
+            anchor_x=anchor_x,
         )
         self.rebuild()
 

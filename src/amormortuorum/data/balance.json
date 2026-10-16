@@ -1,0 +1,10 @@
+{
+  "enemy_atk_per_floor": 0.45,
+  "enemy_df_per_floor": 0.15,
+  "enemy_hp_per_floor": 0.025,
+  "enemy_spd_per_floor": 0.05,
+  "enemy_xp_per_floor": 0.03,
+  "enemy_gold_per_floor": 0.03,
+  "encounter_cap": 0.2,
+  "encounter_growth_per_step": 0.05
+}

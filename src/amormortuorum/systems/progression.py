@@ -32,7 +32,9 @@ def xp_to_next_level(player: Player, data: GameData) -> Optional[int]:
 def _gains_for_level(level: int, data: GameData) -> Dict[str, int]:
     curve = data.xp_curve
     gains = dict(curve.per_level)
-    gains["spd"] = gains.get("spd", 0) + (1 if level % curve.spd_every == 0 else 0)
+    for stat, period in curve.every.items():
+        if level % period == 0:
+            gains[stat] = gains.get(stat, 0) + 1
     return {k: v for k, v in gains.items() if v}
 
 

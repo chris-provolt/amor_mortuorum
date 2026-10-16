@@ -32,8 +32,8 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "--profile",
-        default="default",
-        help="Save profile name (separate meta/run saves per profile).",
+        default=None,
+        help="Save profile name (default: the profile chosen in-game, else 'default').",
     )
     parser.add_argument(
         "--smoke",
@@ -62,7 +62,7 @@ def main(argv=None) -> int:
     if settings_path is None and user_settings_path().exists():
         settings_path = user_settings_path()
     settings = Settings.load(user_path=settings_path)
-    save_manager = SaveManager(profile_id=args.profile)
+    save_manager = SaveManager(profile_id=args.profile or settings.game.profile or "default")
 
     app = GameApp(
         settings,
