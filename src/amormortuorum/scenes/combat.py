@@ -114,6 +114,7 @@ class CombatScene(BaseScene):
         self._fx: List[dict] = []            # transient effects (slash, burst, glyph)
         self._numbers: List[dict] = []       # floating damage/heal numbers
         self._dying: Dict[Tuple[str, int], float] = {}  # (side, idx) -> fade progress
+        self._shown: Dict[Tuple[str, int], int] = {}    # HP as the gauges currently show it
         self._layout: Dict[str, Tuple[float, float, float, float]] = {}
 
     # Lifecycle
@@ -280,6 +281,7 @@ class CombatScene(BaseScene):
             return
         if events:
             # The round resolved: play it out before anyone acts again
+            self._snapshot_hp()
             self._queue.extend(events)
             self.mode = "anim"
             self.menu.set_items([], keep_selection=False)
@@ -306,6 +308,18 @@ class CombatScene(BaseScene):
                             anchor_x="center", anchor_y="center")
         self._numbers.append({"text": label, "y": y + 30, "t": 0.0})
 
+    def _shown_hp(self, side: Tuple[str, int], battler) -> int:
+        """HP for the gauges: lags the model while a round plays so hits read in order."""
+        if self.mode != "anim":
+            return max(0, battler.stats.hp)
+        return self._shown.get(side, max(0, battler.stats.hp))
+
+    def _snapshot_hp(self) -> None:
+        for b in self.battle.foes:
+            self._shown[("foe", b.index)] = max(0, b.stats.hp)
+        for b in self.battle.players:
+            self._shown[("party", b.index)] = max(0, b.stats.hp)
+
     def _start_event(self, ev: LogEvent) -> None:
         """Begin playing one log event: show its line and set up its visuals."""
         self._current = ev
@@ -319,6 +333,7 @@ class CombatScene(BaseScene):
         elif ev.effect == "heal":
             audio.play("heal")
             if ev.target is not None:
+                self._shown[ev.target] = self._shown.get(ev.target, 0) + ev.amount
                 self._add_fx("heal", ev.target, FX_HEAL, 0.6)
                 self._add_number(ev.target, f"+{ev.amount}", NUM_HEAL)
         elif ev.effect == "guard" and ev.actor is not None:
@@ -341,6 +356,7 @@ class CombatScene(BaseScene):
         if ev.target is None:
             return
         self._hits[ev.target] = HIT_SHAKE_TIME
+        self._shown[ev.target] = max(0, self._shown.get(ev.target, 0) - ev.amount)
         if ev.target[0] == "party":
             self._flash = FLASH_TIME
         self.app.audio.play("hit")
@@ -605,22 +621,22 @@ class CombatScene(BaseScene):
         frame.draw_window(*foes_w)
         bar_w = foes_w[2] - 48
         for row, b in zip(self._enemy_rows, self.battle.foes):
-            text = f"{b.name}   {max(0, b.stats.hp)}/{b.stats.max_hp}"
+            hp = self._shown_hp(("foe", b.index), b)
+            text = f"{b.name}   {hp}/{b.stats.max_hp}"
             if row.text != text:
                 row.text = text
             row.color = DIM if not b.is_alive else TARGET if b.index == self.target else TEXT
             row.draw()
             if b.index == self.target and b.is_alive and self.mode != "done":
                 frame.draw_cursor(row.x - 12, row.y)
-            frame.draw_gauge(
-                row.x + 4, row.y - fs(18), bar_w, 7, b.stats.hp / b.stats.max_hp, HP_FRONT
-            )
+            frame.draw_gauge(row.x + 4, row.y - fs(18), bar_w, 7, hp / b.stats.max_hp, HP_FRONT)
 
         party_w = self._layout["party"]
         frame.draw_window(*party_w)
         bar_w = (party_w[2] - 64) / 2
         for row, b in zip(self._party_rows, self.battle.players):
-            text = f"{b.name}   HP {max(0, b.stats.hp)}/{b.stats.max_hp}  MP {b.stats.mp}"
+            hp = self._shown_hp(("party", b.index), b)
+            text = f"{b.name}   HP {hp}/{b.stats.max_hp}  MP {b.stats.mp}"
             if b.defending:
                 text += "  [guard]"
             if row.text != text:
@@ -629,9 +645,7 @@ class CombatScene(BaseScene):
             row.draw()
             if b.index == self.actor and self.mode != "done" and b.is_alive:
                 frame.draw_cursor(row.x - 12, row.y)
-            frame.draw_gauge(
-                row.x + 4, row.y - fs(18), bar_w, 7, b.stats.hp / b.stats.max_hp, HP_PARTY
-            )
+            frame.draw_gauge(row.x + 4, row.y - fs(18), bar_w, 7, hp / b.stats.max_hp, HP_PARTY)
             frame.draw_gauge(
                 row.x + 12 + bar_w, row.y - fs(18), bar_w, 7,
                 b.stats.mp / b.stats.max_mp if b.stats.max_mp else 0.0, MP_FRONT,
