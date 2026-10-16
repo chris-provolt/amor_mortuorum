@@ -13,6 +13,7 @@ from ..errors import AmorError
 from ..systems.combat import Action, ActionKind, Battle, LogEvent, Outcome
 from ..systems.party import most_wounded
 from ..ui import frame, pixelart, tiles
+from ..ui import fx as ambient
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 from ..ui.theme import fs
 
@@ -77,10 +78,7 @@ def lunge_offset(progress: float, reach: float = LUNGE_PX) -> float:
     return reach * math.cos(math.pi / 2 * (p - IMPACT_AT) / (1 - IMPACT_AT))
 
 
-def jitter(i: int, k: int = 0) -> float:
-    """A fixed pseudo-random value in [0, 1) for particle ``i`` of effect ``k``
-    (effects must not draw from the game's RNG, and must look the same each frame)."""
-    return (math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1.0
+jitter = ambient.jitter  # effects never draw from the game's RNG
 
 
 def spell_style(source: str) -> Tuple[str, Tuple[int, int, int]]:
@@ -595,6 +593,23 @@ class CombatScene(BaseScene):
                 arcade.draw_texture_rect(
                     tex, rect, pixelated=True, color=Color(tone, tone, min(255, tone + 12), 255)
                 )
+        # Sconces burn on the wall, their light pooling on the bricks and floor
+        sconce = pixelart.texture("sconce")
+        wall_y = top - STAGE_TILE * 1.6  # the brick face row
+        for i, fxp in enumerate((0.56, 0.74, 0.92)):  # clear of the log window
+            x = sl + sw * fxp
+            glow = ambient.flicker(self._anim, i + 11, 0.08)
+            ambient.draw_light_pool(
+                x, wall_y + 8, STAGE_TILE * 1.4 * glow, (255, 170, 90), 40
+            )
+            rect = arcade.LBWH(x - STAGE_TILE / 2, wall_y, STAGE_TILE, STAGE_TILE)
+            arcade.draw_texture_rect(sconce, rect, pixelated=True)
+            flame_y = wall_y + STAGE_TILE * 0.68
+            ambient.draw_flame(x, flame_y, self._anim, 16, seed=i + 11)
+            ambient.draw_embers(x, flame_y + 6, self._anim, count=4, rise=40, spread=8, seed=i + 11)
+        # Low fog creeping over the floor
+        ambient.draw_fog(sl, sb + 8, sw, (floor_top - sb) * 0.5, self._anim, bands=6,
+                         color=(170, 180, 215), alpha=11, seed=4)
         # Soft shadow where the stage meets the windows
         arcade.draw_lbwh_rectangle_filled(sl, sb, sw, 10, (0, 0, 0, 90))
 

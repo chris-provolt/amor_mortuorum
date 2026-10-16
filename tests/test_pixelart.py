@@ -278,3 +278,14 @@ def test_hd_tiles_are_64_px_and_opaque():
     grout = tiles.STYLES["rooms"]["grout"]
     for y in (20, 21):  # the grain pass jitters tones a little
         assert all(abs(a - b) <= 8 for a, b in zip(floor.getpixel((10, y))[:3], grout))
+
+
+def test_ambient_fx_are_deterministic_and_bounded():
+    from amormortuorum.ui import fx
+
+    assert fx.jitter(3, 1) == fx.jitter(3, 1) and 0 <= fx.jitter(3, 1) < 1
+    values = [fx.flicker(t / 10, 2) for t in range(600)]
+    assert 0.6 < min(values) < 1.0 < max(values) < 1.1
+    assert fx.light_pulse(0.0, 0.0) == 0.5
+    assert fx.tint((200, 100, 50), 0.5) == (100, 50, 25)
+    assert px.render("sconce").size == (px.HD_PX, px.HD_PX)
