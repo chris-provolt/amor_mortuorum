@@ -93,3 +93,76 @@ def test_walk_cycle_and_facing_helpers():
     assert px.facing_from(1, 0) == "right" and px.facing_from(-1, 0) == "left"
     assert px.facing_from(0, 1) == "up" and px.facing_from(0, -1) == "down"
     assert px.facing_from(0, 0, "left") == "left"
+
+
+def test_battle_poses_and_weapons():
+    for name in px.PARTY:
+        assert px.has_poses(name)
+        stand = px.render(name, 0, "left")
+        raised, strike, cast = (px.render(name, f, "left") for f in (4, 5, 6))
+        assert len({img.tobytes() for img in (stand, raised, strike, cast)}) == 4
+        # the strike template holds the body back so the blade has room
+        assert px.pose_shift(name, 5) == 7 and px.pose_shift(name, 4) == 0
+        # an equipped blade appears in the hand; unarmed hands stay empty
+        armed = px.render(name, 4, "left", weapon="sword_bone")
+        assert armed.tobytes() != raised.tobytes()
+        assert armed.getpixel((5, 7))[3] == 255 and raised.getpixel((5, 7))[3] == 0
+        thrust = px.render(name, 5, "left", weapon="dagger")
+        assert thrust.getpixel((4, 19))[3] == 255 and strike.getpixel((4, 19))[3] == 0
+        # mirrored for the right facing, weapon and all
+        right = px.image(name, facing="right", frame=5, weapon="dagger")
+        assert right.tobytes() == px.image(
+            name, facing="left", frame=5, weapon="dagger"
+        ).transpose(px.Image.FLIP_LEFT_RIGHT).tobytes()
+    assert px.weapon_art(None) is None and px.weapon_art("dagger_rust") == "dagger"
+    assert px.weapon_art("blade_mystery") == "sword_bone"
+    for kind in px.WEAPONS:
+        for direction in ("up", "left"):
+            pixels = px.weapon_pixels(kind, direction)
+            assert set(pixels.values()) <= set(px.PALETTE)
+            assert (0, 0) not in pixels  # the grip is the hand's own
+    # monsters lean instead: the strike shifts the upper body right
+    assert not px.has_poses("ghoul") and px.pose_shift("ghoul", 5) == 0
+    stand, strike = px.render("ghoul", 0), px.render("ghoul", 5)
+    assert strike.tobytes() != stand.tobytes()
+    assert px.render("ghoul", 4).tobytes() != stand.tobytes()
+
+
+def test_tile_palettes_change_with_the_floor_tier():
+    from amormortuorum.ui import tiles
+
+    assert tiles.style_for("rooms", "T1") == "rooms"
+    assert tiles.style_for("nonsense", "T1") == "rooms"
+    keys = [tiles.style_for("rooms", t) for t in ("T2", "T3", "T4", "T5")]
+    assert keys == ["rooms/T2", "rooms/T3", "rooms/T4", "rooms/T5"]
+    assert tiles.style_for("rooms", "T3") == "rooms/T3"  # built once, reused
+    palettes = [tiles.STYLES[k] for k in ["rooms"] + keys]
+    assert len({p["floor"] for p in palettes}) == 5
+    # the deepest tier is darkest, the ossuary warm, the crypt cold
+    assert sum(palettes[4]["floor"]) < sum(palettes[0]["floor"])
+    rust, crypt = palettes[2]["floor"], palettes[3]["floor"]
+    assert rust[0] > rust[2] and crypt[2] > crypt[1]
+    floors = [tiles.floor_image(k, 0).getpixel((5, 5)) for k in ["rooms"] + keys]
+    assert len(set(floors)) == 5
+    cavern = tiles.style_for("cavern", "T4")
+    assert tiles.wall_image(cavern, True, (False,) * 4).size == (tiles.PX, tiles.PX)
+    tinted, plain = tiles.floor_image(cavern, 1), tiles.floor_image("cavern", 1)
+    assert tinted.getpixel((3, 3)) != plain.getpixel((3, 3))
+    assert tiles.tint((100, 100, 100), 0.0, 1.0, 0.5, 0.0) != (100, 100, 100)
+
+
+def test_every_item_has_an_icon():
+    data = GameData.load()
+    icons = {px.item_icon(item) for item in data.items.values()}
+    assert icons <= set(px.names())
+    assert len(icons) >= 10  # flasks, scrolls, weapons, armour pieces, keys, tokens
+    assert px.item_icon(data.item("potion_small")) == "icon_potion"
+    assert px.item_icon(data.item("tonic_mind")) == "icon_tonic"
+    assert px.item_icon(data.item("dagger_rust")) == "icon_dagger"
+    assert px.item_icon(data.item("blade_bone")) == "icon_sword"
+    assert px.item_icon(data.item("boots_silent")) == "icon_boots"
+    assert px.item_icon(data.item("key_catacomb")) == "key"
+    assert px.item_icon(data.item("res_token")) == "icon_token"
+    for name in icons:
+        assert px.image(name).getpixel((0, 0))[3] == 0, name
+    assert "icon_flask" not in px.names()

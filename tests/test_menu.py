@@ -74,3 +74,10 @@ def test_lunge_offset_dashes_in_and_returns():
     assert 0 < lunge_offset(IMPACT_AT / 2) < LUNGE_PX
     assert abs(lunge_offset(1.0)) < 1e-6
     assert lunge_offset(-1) == 0.0 and abs(lunge_offset(2.0)) < 1e-6
+
+
+def test_menu_items_may_carry_an_icon():
+    from amormortuorum.ui.menu import MenuItem, VerticalMenu
+
+    menu = VerticalMenu([MenuItem("Potion", icon="icon_potion"), MenuItem("Back")])
+    assert menu.items[0].icon == "icon_potion" and menu.items[1].icon is None

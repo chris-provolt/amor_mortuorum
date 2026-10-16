@@ -33,13 +33,14 @@ ENEMY_SCALE = 4.0       # 32 px art drawn at 128 px on the stage
 PARTY_SCALE = 3.0
 IDLE_FRAME_TIME = 0.5
 HIT_SHAKE_TIME = 0.3    # seconds a struck battler shudders
-LUNGE_PX = 44           # how far an attacker lunges towards its target
+LUNGE_PX = 44           # the shortest dash an attacker makes towards its target
+STANDOFF = 0.55         # share of the two sprites' mean size kept between them
 IMPACT_AT = 0.45        # share of a strike's duration before the blow lands
 DEATH_TIME = 0.55       # seconds a fallen foe takes to dissolve
 NUMBER_TIME = 0.8       # seconds a damage number floats
 # Seconds each log event takes to play on the battle screen
 EVENT_TIME = {
-    "round": 0.3, "slash": 0.7, "spell": 0.75, "cast": 0.45, "heal": 0.65,
+    "round": 0.3, "slash": 0.75, "spell": 0.75, "cast": 0.45, "heal": 0.65,
     "item": 0.6, "guard": 0.4, "death": DEATH_TIME, "rage": 0.45, "flee": 0.6,
     "flee_fail": 0.45, "victory": 0.35, "defeat": 0.35, "miss": 0.35, "none": 0.35,
 }
@@ -48,6 +49,16 @@ FX_HEAL = (120, 240, 150)
 FX_ITEM = (255, 220, 120)
 FX_RAGE = (255, 90, 70)
 FX_SLASH = (255, 255, 255)
+# Skill / item id -> (effect style, colour). Styles: fire, frost, wave, bolt,
+# heal, tears. Anything else gets the generic burst in FX_SPELL.
+SPELL_FX = {
+    "ember": ("fire", (255, 150, 60)), "scroll_embers": ("fire", (255, 150, 60)),
+    "grave_frost": ("frost", (170, 220, 255)), "scroll_frost": ("frost", (170, 220, 255)),
+    "dirge": ("wave", (205, 135, 255)),
+    "oblivion_bolt": ("bolt", (170, 100, 240)),
+    "mend": ("heal", (120, 240, 150)), "lament": ("tears", (150, 205, 255)),
+    "tonic_mind": ("heal", (120, 160, 255)),
+}
 NUM_DAMAGE = (255, 240, 230)
 NUM_PARTY = (255, 110, 110)
 NUM_HEAL = (150, 255, 170)
@@ -63,6 +74,16 @@ def lunge_offset(progress: float, reach: float = LUNGE_PX) -> float:
     if p < IMPACT_AT:
         return reach * math.sin(math.pi / 2 * p / IMPACT_AT)
     return reach * math.cos(math.pi / 2 * (p - IMPACT_AT) / (1 - IMPACT_AT))
+
+
+def jitter(i: int, k: int = 0) -> float:
+    """A fixed pseudo-random value in [0, 1) for particle ``i`` of effect ``k``
+    (effects must not draw from the game's RNG, and must look the same each frame)."""
+    return (math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1.0
+
+
+def spell_style(source: str) -> Tuple[str, Tuple[int, int, int]]:
+    return SPELL_FX.get(source, ("burst", FX_SPELL))
 
 
 def flash_alpha(remaining: float, total: float = FLASH_TIME, peak: int = FLASH_ALPHA) -> int:
@@ -85,10 +106,13 @@ LOG_COLORS = {
 
 
 class CombatScene(BaseScene):
-    def __init__(self, app, battle: Battle, title: Optional[str] = None):
+    def __init__(
+        self, app, battle: Battle, title: Optional[str] = None, style: str = "rooms"
+    ):
         super().__init__(app)
         self.battle = battle
         self.title = title
+        self.style = style  # tile style of the floor the fight is on
         self.data = app.state.data
         self.mode = "command"  # command | item | done
         self.actor = 0
@@ -104,7 +128,6 @@ class CombatScene(BaseScene):
         self._flash = 0.0  # seconds of hit flash left
         self._anim = 0.0
         self._hits: Dict[Tuple[str, int], float] = {}  # (side, index) -> shake time left
-        self._flipped: Dict[Tuple[str, int], arcade.Texture] = {}
         # Animation queue: log events play one at a time
         self._queue: Deque[LogEvent] = deque()
         self._current: Optional[LogEvent] = None
@@ -150,8 +173,8 @@ class CombatScene(BaseScene):
         panel_h = max(fs(196), height * 0.36)
         stage_bottom = panel_h + pad
         col = (width - pad * 4) / 10
-        foes = (pad, pad, col * 3.6, panel_h)
-        cmds = (foes[0] + foes[2] + pad, pad, col * 2.2, panel_h)
+        foes = (pad, pad, col * 3.2, panel_h)
+        cmds = (foes[0] + foes[2] + pad, pad, col * 3.0, panel_h)
         party = (cmds[0] + cmds[2] + pad, pad, width - cmds[0] - cmds[2] - pad * 2, panel_h)
         log_h = fs(20) * 4 + 14
         log = (pad, height - pad - log_h, width * 0.5, log_h)
@@ -255,7 +278,8 @@ class CombatScene(BaseScene):
                 effect = f"Deals {item.damage}"
             items.append(
                 MenuItem(
-                    f"{item.name} x{qty}", lambda iid=item_id: self._use_item(iid), hint=effect
+                    f"{item.name} x{qty}", lambda iid=item_id: self._use_item(iid), hint=effect,
+                    icon=pixelart.item_icon(item),
                 )
             )
         if not items:
@@ -274,6 +298,8 @@ class CombatScene(BaseScene):
                 return
 
     def _submit(self, action: Action) -> None:
+        # Gauges start the round where it began and follow the blows as they play
+        self._snapshot_hp()
         try:
             events = self.battle.submit(action)
         except AmorError as e:
@@ -281,7 +307,6 @@ class CombatScene(BaseScene):
             return
         if events:
             # The round resolved: play it out before anyone acts again
-            self._snapshot_hp()
             self._queue.extend(events)
             self.mode = "anim"
             self.menu.set_items([], keep_selection=False)
@@ -298,9 +323,13 @@ class CombatScene(BaseScene):
             return self._enemy_spot(idx, len(self.battle.foes))
         return self._party_spot(idx, len(self.battle.players))
 
-    def _add_fx(self, kind: str, side: Tuple[str, int], color, dur: float = 0.45) -> None:
+    def _add_fx(
+        self, kind: str, side: Tuple[str, int], color, dur: float = 0.45, **extra
+    ) -> None:
         x, y = self._spot(side)
-        self._fx.append({"kind": kind, "x": x, "y": y, "t": 0.0, "dur": dur, "color": color})
+        fx = {"kind": kind, "x": x, "y": y, "t": 0.0, "dur": dur, "color": color}
+        fx.update(extra)
+        self._fx.append(fx)
 
     def _add_number(self, side: Tuple[str, int], text: str, color) -> None:
         x, y = self._spot(side)
@@ -329,12 +358,27 @@ class CombatScene(BaseScene):
         self._log.append(ev)
         audio = self.app.audio
         if ev.effect == "cast" and ev.actor is not None:
-            self._add_fx("burst", ev.actor, FX_SPELL, 0.45)
+            style, colour = spell_style(ev.source)
+            self._add_fx("glyph", ev.actor, colour, 0.5)
+            if style == "wave":  # the dirge rolls out from the singer
+                self._add_fx("wave", ev.actor, colour, 1.1)
+        elif ev.effect == "spell" and ev.target is not None:
+            style, colour = spell_style(ev.source)
+            if style in ("fire", "frost"):  # builds on the target before the blow
+                self._add_fx(style, ev.target, colour, self._cur_dur + 0.15)
+            elif style == "bolt" and ev.actor is not None:
+                x2, y2 = self._spot(ev.actor)
+                self._add_fx("bolt", ev.target, colour, self._cur_dur * IMPACT_AT + 0.1,
+                             x2=x2, y2=y2)
         elif ev.effect == "heal":
             audio.play("heal")
             if ev.target is not None:
+                style, colour = spell_style(ev.source)
                 self._shown[ev.target] = self._shown.get(ev.target, 0) + ev.amount
-                self._add_fx("heal", ev.target, FX_HEAL, 0.6)
+                if style == "tears":
+                    self._add_fx("tears", ev.target, colour, 0.75)
+                else:
+                    self._add_fx("heal", ev.target, colour if style == "heal" else FX_HEAL, 0.6)
                 self._add_number(ev.target, f"+{ev.amount}", NUM_HEAL)
         elif ev.effect == "guard" and ev.actor is not None:
             self._add_fx("guard", ev.actor, FX_ITEM, 0.4)
@@ -363,9 +407,13 @@ class CombatScene(BaseScene):
         color = NUM_PARTY if ev.target[0] == "party" else NUM_DAMAGE
         self._add_number(ev.target, str(ev.amount), color)
         if ev.effect == "slash":
-            self._add_fx("slash", ev.target, FX_SLASH, 0.3)
+            from_right = ev.actor is not None and ev.actor[0] == "party"
+            self._add_fx("slash", ev.target, FX_SLASH, 0.35, direction=1 if from_right else -1)
         else:
-            self._add_fx("burst", ev.target, FX_SPELL if ev.kind == "item" else FX_ITEM, 0.5)
+            style, colour = spell_style(ev.source)
+            if style in ("fire", "frost"):
+                return  # the element already plays on the target
+            self._add_fx("burst", ev.target, colour if ev.kind == "item" else FX_ITEM, 0.5)
 
     def _finish_queue(self) -> None:
         if self.battle.outcome is not Outcome.ONGOING:
@@ -398,13 +446,23 @@ class CombatScene(BaseScene):
         if self._current is not None:
             self._cur_t = self._cur_dur
 
-    def _lunge(self, side: Tuple[str, int]) -> float:
-        """Horizontal offset of a battler mid-strike (foes lunge right, the party left)."""
+    def _lunge(self, side: Tuple[str, int]) -> Tuple[float, float]:
+        """Offset of a battler mid-strike: it dashes up to its target, strikes at
+        arm's length and returns (foes rush right, the party left)."""
         ev = self._current
         if ev is None or ev.effect != "slash" or ev.actor != side or self._cur_dur <= 0:
-            return 0.0
-        direction = 1.0 if side[0] == "foe" else -1.0
-        return direction * lunge_offset(self._cur_t / self._cur_dur)
+            return 0.0, 0.0
+        ax, ay = self._spot(side)
+        if ev.target is not None:
+            tx, ty = self._spot(ev.target)
+        else:
+            tx, ty = ax + (LUNGE_PX if side[0] == "foe" else -LUNGE_PX), ay
+        standoff = pixelart.RENDER_PX * (ENEMY_SCALE + PARTY_SCALE) / 2 * STANDOFF
+        reach = max(LUNGE_PX, abs(tx - ax) - standoff)
+        progress = self._cur_t / self._cur_dur
+        dx = math.copysign(lunge_offset(progress, reach), tx - ax or 1.0)
+        dy = lunge_offset(progress, ty - ay) if ty != ay else 0.0
+        return dx, dy
 
     def _attack(self) -> None:
         self._refresh_target()
@@ -467,21 +525,30 @@ class CombatScene(BaseScene):
         left = self._hits.get(key, 0.0)
         return math.sin(self._anim * 70) * 6 * (left / HIT_SHAKE_TIME) if left > 0 else 0.0
 
-    def _party_texture(self, art: str, frame: int, i: int) -> arcade.Texture:
-        """Party sprites face left towards the foes; flipped textures are cached."""
-        key = (f"{art}:{frame}", i)
-        tex = self._flipped.get(key)
-        if tex is None:
-            tex = pixelart.texture(art, frame).flip_left_right()
-            self._flipped[key] = tex
-        return tex
+    def _pose(self, side: Tuple[str, int], idle: int) -> int:
+        """The render frame for a battler: its attack or cast pose while it acts."""
+        ev = self._current
+        if ev is None or self.mode != "anim" or ev.actor != side:
+            return idle
+        if ev.effect == "slash":
+            progress = self._cur_t / self._cur_dur if self._cur_dur > 0 else 1.0
+            return pixelart.ATTACK_FRAMES[0 if progress < IMPACT_AT else 1]
+        if ev.effect in ("cast", "spell", "heal", "item"):
+            return pixelart.CAST_FRAME
+        return idle
+
+    @staticmethod
+    def _weapon_of(battler) -> Optional[str]:
+        equipment = getattr(battler.ref, "equipment", None)
+        slots = getattr(equipment, "slots", None) or {}
+        return pixelart.weapon_art(slots.get("weapon"))
 
     def _draw_stage(self) -> None:
         """A dungeon backdrop: wall top, brick face, then floor receding into shadow."""
         sl, sb, sw, sh = self._layout["stage"]
         top = sb + sh
-        wall_top = tiles.wall_texture("rooms", False, (False, False, False, False))
-        wall_face = tiles.wall_texture("rooms", True, (False, False, False, False), 1)
+        wall_top = tiles.wall_texture(self.style, False, (False, False, False, False))
+        wall_face = tiles.wall_texture(self.style, True, (False, False, False, False), 1)
         cols = int(sw // STAGE_TILE) + 2
         y = top - STAGE_TILE * 0.6
         for c in range(cols):
@@ -498,7 +565,7 @@ class CombatScene(BaseScene):
             depth = 1 - r / max(1, rows)  # back rows (r = 0) are darkest
             tone = int(90 + 150 * (1 - depth))
             for c in range(cols):
-                tex = tiles.floor_texture("rooms", c, r, r == 0, False, decals=False)
+                tex = tiles.floor_texture(self.style, c, r, r == 0, False, decals=False)
                 rect = arcade.LBWH(sl + c * STAGE_TILE, yy, STAGE_TILE, STAGE_TILE)
                 arcade.draw_texture_rect(
                     tex, rect, pixelated=True, color=Color(tone, tone, min(255, tone + 12), 255)
@@ -514,7 +581,9 @@ class CombatScene(BaseScene):
             if not b.is_alive and (dying is None or dying >= 1.0):
                 continue
             x, y = self._enemy_spot(i, len(foes))
-            x += self._shake(("foe", i)) + self._lunge(("foe", i))
+            lx, ly = self._lunge(("foe", i))
+            x += self._shake(("foe", i)) + lx
+            y += ly
             size = pixelart.RENDER_PX * ENEMY_SCALE
             alpha = 255
             if dying is not None and dying < 1.0:
@@ -523,7 +592,8 @@ class CombatScene(BaseScene):
             arcade.draw_ellipse_filled(
                 x, y - size * 0.46, size * 0.7, size * 0.16, (0, 0, 0, 90 * alpha // 255)
             )
-            tex = pixelart.texture(pixelart.enemy_sprite_name(b.ref.def_id), frame)
+            art = pixelart.enemy_sprite_name(b.ref.def_id)
+            tex = pixelart.texture(art, self._pose(("foe", i), frame))
             rect = arcade.LBWH(x - size / 2, y - size / 2, size, size)
             if dying is not None and dying < 1.0:
                 arcade.draw_texture_rect(
@@ -540,12 +610,17 @@ class CombatScene(BaseScene):
         players = self.battle.players
         for i, b in enumerate(players):
             x, y = self._party_spot(i, len(players))
-            x += self._shake(("party", i)) + self._lunge(("party", i))
+            lx, ly = self._lunge(("party", i))
+            x += self._shake(("party", i)) + lx
+            y += ly
             size = pixelart.RENDER_PX * PARTY_SCALE
             art = pixelart.party_sprite_name(getattr(b.ref, "companion_id", None))
             alive = b.is_alive
             arcade.draw_ellipse_filled(x, y - size * 0.46, size * 0.7, size * 0.16, (0, 0, 0, 90))
-            tex = self._party_texture(art, frame if alive else 0, i)
+            pose = self._pose(("party", i), frame) if alive else 0
+            tex = pixelart.texture(art, pose, "left", self._weapon_of(b))
+            # a pose template may hold the body back to make room for the blade
+            x -= pixelart.pose_shift(art, pose) * PARTY_SCALE
             rect = arcade.LBWH(x - size / 2, y - size / 2, size, size)
             if alive:
                 arcade.draw_texture_rect(tex, rect, pixelated=True)
@@ -568,13 +643,29 @@ class CombatScene(BaseScene):
             a = int(255 * (1 - p))
             color = (*fx["color"], a)
             if fx["kind"] == "slash":
-                for k in range(3):
-                    off = (k - 1) * 14
-                    sweep = p * 70
-                    arcade.draw_line(
-                        x - 40 + sweep + off, y + 40 - off, x - 10 + sweep + off, y - 30 - off,
-                        color, 4 - k,
+                # a crescent swung from the attacker's side, sweeping down across the
+                # target, with a flash at the point of impact
+                d = fx.get("direction", 1)
+                cx, cy = x + d * 70, y + 30
+                head = (180 if d > 0 else 0) - d * (-45 + 110 * p)
+                tail = head + d * 55
+                for k, (radius, width) in enumerate(((84, 9), (74, 5), (66, 3))):
+                    fade = int(a * (1 - k * 0.3))
+                    arcade.draw_arc_outline(
+                        cx, cy, radius * 2, radius * 2, (*fx["color"], fade),
+                        min(head, tail), max(head, tail), width,
                     )
+                if p < 0.4:
+                    flash = int(220 * (1 - p / 0.4))
+                    arcade.draw_circle_filled(x, y + 6, 10 + 30 * p, (255, 255, 255, flash))
+                    for k in range(5):
+                        ang = -0.6 + k * 0.55 + (0.0 if d > 0 else math.pi)
+                        r0, r1 = 14 + 40 * p, 26 + 60 * p
+                        arcade.draw_line(
+                            x + math.cos(ang) * r0, y + 6 + math.sin(ang) * r0,
+                            x + math.cos(ang) * r1, y + 6 + math.sin(ang) * r1,
+                            (255, 255, 230, flash), 2,
+                        )
             elif fx["kind"] == "burst":
                 r = 12 + 60 * p
                 arcade.draw_circle_outline(x, y, r, color, 3)
@@ -592,6 +683,99 @@ class CombatScene(BaseScene):
                     arcade.draw_circle_filled(sx, sy, 3, color)
                     arcade.draw_line(sx - 5, sy, sx + 5, sy, color, 1)
                     arcade.draw_line(sx, sy - 5, sx, sy + 5, color, 1)
+            elif fx["kind"] == "glyph":  # casting: a rune ring turns about the caster
+                r = 36 + 8 * math.sin(p * math.pi)
+                cy = y - 24
+                arcade.draw_ellipse_outline(x, cy, r * 2, r * 0.7, color, 2)
+                for k in range(8):
+                    ang = k * math.pi / 4 + p * 5
+                    rx, ry = x + math.cos(ang) * r, cy + math.sin(ang) * r * 0.35
+                    arcade.draw_lbwh_rectangle_filled(rx - 2, ry, 4, 8 + 8 * jitter(k, 1), color)
+            elif fx["kind"] == "fire":  # tongues of grave-fire with rising embers
+                base = y - 42
+                a = int(255 * min(1.0, (1 - p) * 2.5))  # burns bright, dies fast
+                for k in range(7):
+                    fx_x = x - 32 + 64 * jitter(k, 2)
+                    flicker = 0.5 + 0.5 * math.sin(p * 26 + k * 1.7)
+                    h = (28 + 54 * flicker) * (1 - 0.4 * p)
+                    w = 9 + 8 * jitter(k, 3)
+                    tip = fx_x + math.sin(p * 18 + k) * 6
+                    arcade.draw_triangle_filled(
+                        fx_x - w, base, fx_x + w, base, tip, base + h, (210, 50, 20, a)
+                    )
+                    arcade.draw_triangle_filled(
+                        fx_x - w * 0.75, base, fx_x + w * 0.75, base, tip, base + h * 0.85,
+                        (255, 140, 40, a),
+                    )
+                    arcade.draw_triangle_filled(
+                        fx_x - w * 0.5, base, fx_x + w * 0.5, base, tip, base + h * 0.6,
+                        (255, 236, 130, a),
+                    )
+                for k in range(10):
+                    ex = x - 38 + 76 * jitter(k, 4)
+                    ey = base + (p * 140 + k * 19) % 120
+                    arcade.draw_circle_filled(ex, ey, 2, (255, 210, 90, a))
+            elif fx["kind"] == "frost":  # ice shards burst up, snow drifts down
+                base = y - 46
+                rise = min(1.0, p * 3)
+                a = int(255 * min(1.0, (1 - p) * 2.5))
+                for k in range(6):
+                    sx = x - 36 + 72 * jitter(k, 5)
+                    h = (28 + 52 * jitter(k, 6)) * rise
+                    w = 6 + 5 * jitter(k, 7)
+                    arcade.draw_triangle_filled(
+                        sx - w - 1, base, sx + w + 1, base, sx + 2, base + h + 2, (40, 90, 160, a)
+                    )
+                    arcade.draw_triangle_filled(
+                        sx - w, base, sx + w, base, sx + 2, base + h, (165, 215, 255, a)
+                    )
+                    arcade.draw_triangle_filled(
+                        sx - w * 0.4, base, sx + w * 0.2, base, sx + 1, base + h * 0.9,
+                        (240, 250, 255, a),
+                    )
+                for k in range(12):
+                    fx_x = x - 50 + 100 * jitter(k, 8)
+                    fy = y + 60 - (p * 90 + k * 13) % 110
+                    arcade.draw_circle_filled(fx_x, fy, 2, (235, 246, 255, a))
+            elif fx["kind"] == "wave":  # the dirge: song rings roll across the stage
+                for k in range(4):
+                    r = (30 + 420 * p) - k * 34
+                    if r <= 0:
+                        continue
+                    fade = int(a * (1 - k * 0.2))
+                    arcade.draw_ellipse_outline(x, y, r * 2, r * 0.6, (*fx["color"], fade), 3)
+                for k in range(6):  # drifting notes
+                    nx = x - 60 - 360 * jitter(k, 9) * min(1.0, p * 1.5)
+                    ny = y + 10 + 50 * jitter(k, 10) + 30 * math.sin(p * 6 + k)
+                    arcade.draw_circle_filled(nx, ny, 4, color)
+                    arcade.draw_line(nx + 3, ny, nx + 3, ny + 14, color, 2)
+            elif fx["kind"] == "bolt":  # oblivion: a jagged shard leaps caster to target
+                x2, y2 = fx["x2"], fx["y2"]
+                phase = int(p * 24)
+                points = []
+                segments = 9
+                for k in range(segments + 1):
+                    t = k / segments
+                    bx, by = x2 + (x - x2) * t, y2 + 20 + (y - y2) * t
+                    if 0 < k < segments:
+                        by += (jitter(k, phase) - 0.5) * 44
+                    points.append((bx, by))
+                arcade.draw_line_strip(points, (50, 10, 80, a), 7)
+                arcade.draw_line_strip(points, color, 3)
+                arcade.draw_line_strip(points, (245, 230, 255, a), 1)
+                if p > 0.5:  # the dark closes in on the target
+                    r = 60 * (1 - (p - 0.5) * 2)
+                    arcade.draw_circle_outline(x, y, r + 2, (30, 0, 50, a), 4)
+                    arcade.draw_circle_outline(x, y, r, color, 2)
+            elif fx["kind"] == "tears":  # lament: tears fall and a glow gathers below
+                for k in range(9):
+                    tx = x - 34 + 68 * jitter(k, 11)
+                    ty = y + 70 - (p * 130 + k * 21) % 120
+                    arcade.draw_ellipse_filled(tx, ty, 8, 14, (40, 80, 160, a))
+                    arcade.draw_ellipse_filled(tx, ty, 6, 12, color)
+                    arcade.draw_circle_filled(tx - 1, ty + 3, 2, (255, 255, 255, a))
+                r = 20 + 40 * p
+                arcade.draw_ellipse_outline(x, y - 44, r * 2, r * 0.5, color, 2)
             elif fx["kind"] == "guard":
                 top = y + 56 + 6 * math.sin(p * math.pi)
                 shield = [(x - 14, top), (x + 14, top), (x + 14, top - 16),

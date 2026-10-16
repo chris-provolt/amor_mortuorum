@@ -59,7 +59,8 @@ class LogEvent:
     ``effect`` names what happened for the battle screen: round, slash, cast, spell,
     heal, item, guard, death, rage, flee, flee_fail, victory, defeat, miss or none.
     ``actor``/``target`` identify battlers by side and index; ``amount`` is the HP
-    dealt or restored.
+    dealt or restored; ``source`` is the id of the skill or item behind a cast,
+    spell or heal so the screen can pick its own effect for it.
     """
 
     text: str
@@ -68,6 +69,7 @@ class LogEvent:
     actor: Optional[Side] = None
     target: Optional[Side] = None
     amount: int = 0
+    source: str = ""
 
 
 def side_of(battler: "Battler") -> Side:
@@ -369,7 +371,7 @@ class Battle:
             healed = target.ref.heal(skill.heal)  # type: ignore[union-attr]
             text = f"{battler.name} casts {skill.name}: {target.name} recovers {healed} HP."
             events.append(LogEvent(text, "heal", "heal", actor=side_of(battler),
-                                   target=side_of(target), amount=healed))
+                                   target=side_of(target), amount=healed, source=skill.id))
             return
         if skill.target == "all_enemies":
             targets = list(self.living_enemies)
@@ -381,13 +383,13 @@ class Battle:
             return
         player.spend_mp(skill.mp)
         events.append(LogEvent(f"{battler.name} casts {skill.name}!", "item", "cast",
-                               actor=side_of(battler)))
+                               actor=side_of(battler), source=skill.id))
         for target in targets:
             amount = skill.damage + player.level
             if target.defending:
                 amount = _halved(amount)
             self._hit(battler, target, amount, events, kind="item", source=skill.name,
-                      effect="spell")
+                      effect="spell", source_id=skill.id)
 
     def _use_item(self, battler: Battler, action: Action, events: List[LogEvent]) -> None:
         item = self.data.item(action.item_id or "")
@@ -402,7 +404,7 @@ class Battle:
                 return
             bag.remove(item, 1)
             self._hit(battler, target, item.damage, events, kind="item", source=item.name,
-                      effect="spell")
+                      effect="spell", source_id=item.id)
             return
         target_idx = battler.index if action.target is None else action.target
         target = self.players[target_idx]
@@ -419,7 +421,8 @@ class Battle:
             parts.append(f"regains {restored} MP")
         text = f"{battler.name} uses {item.name}: {target.name} " + " and ".join(parts) + "."
         events.append(LogEvent(text, "heal", "heal", actor=side_of(battler),
-                               target=side_of(target), amount=healed + restored))
+                               target=side_of(target), amount=healed + restored,
+                               source=item.id))
 
     def _enemy_turn(self, battler: Battler, events: List[LogEvent]) -> None:
         living = self.living_players
@@ -441,13 +444,14 @@ class Battle:
         kind: str,
         source: Optional[str] = None,
         effect: str = "slash",
+        source_id: str = "",
     ) -> None:
         was_enraged = bool(getattr(target.ref, "is_enraged", False))
         dealt = target.ref.take_damage(amount)
         verb = f"uses {source} on" if source else "hits"
         events.append(LogEvent(
             f"{attacker.name} {verb} {target.name} for {dealt}.", kind, effect,
-            actor=side_of(attacker), target=side_of(target), amount=dealt,
+            actor=side_of(attacker), target=side_of(target), amount=dealt, source=source_id,
         ))
         if not target.is_alive:
             events.append(LogEvent(f"{target.name} is defeated.", "defeat", "death",
