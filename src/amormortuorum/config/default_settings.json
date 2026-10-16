@@ -4,7 +4,8 @@
     "height": 720,
     "fullscreen": false,
     "vsync": true,
-    "ui_scale": 1.0
+    "ui_scale": 1.0,
+    "screen_flash": true
   },
   "audio": {
     "music_volume": 0.6,
@@ -12,16 +13,42 @@
   },
   "input": {
     "mapping": {
-      "move_up": ["W", "UP"],
-      "move_down": ["S", "DOWN"],
-      "move_left": ["A", "LEFT"],
-      "move_right": ["D", "RIGHT"],
-      "confirm": ["ENTER", "SPACE"],
-      "cancel": ["ESCAPE", "BACKSPACE"],
-      "menu": ["TAB"],
-      "pause": ["P"],
-      "map": ["M"],
-      "debug": ["F3"]
+      "move_up": [
+        "W",
+        "UP"
+      ],
+      "move_down": [
+        "S",
+        "DOWN"
+      ],
+      "move_left": [
+        "A",
+        "LEFT"
+      ],
+      "move_right": [
+        "D",
+        "RIGHT"
+      ],
+      "confirm": [
+        "ENTER",
+        "SPACE"
+      ],
+      "cancel": [
+        "ESCAPE",
+        "BACKSPACE"
+      ],
+      "menu": [
+        "TAB"
+      ],
+      "pause": [
+        "P"
+      ],
+      "map": [
+        "M"
+      ],
+      "debug": [
+        "F3"
+      ]
     }
   }
 }

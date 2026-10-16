@@ -2,8 +2,9 @@
 """Headless run simulator for balance work.
 
 Plays whole runs with a plain auto-policy (attack the weakest foe, cast when it
-pays off, drink when low, rest and shop when a portal shows up and the party is
-hurt) and reports how deep parties get. Pure systems code, no arcade.
+pays off, drink when low, run from a fight it cannot win, rest and shop when a
+portal shows up and the party is hurt) and reports how deep parties get. Pure
+systems code, no arcade.
 
 Each floor is walked tile by tile along the shortest route (key, chests, stairs)
 with the real wandering-monster rules, so fights happen where the game would
@@ -59,6 +60,7 @@ from amormortuorum.systems.shop import Shop  # noqa: E402
 
 POTIONS = ("potion_grand", "potion_large", "potion_medium", "potion_small")
 LOW_HP = 0.35
+FLEE_MARGIN = 1.5  # flee when the foes would kill us this many times faster than we kill them
 REST_BELOW = 0.5
 MAX_POTIONS = 8
 
@@ -73,6 +75,7 @@ class RunResult:
     battles: int
     boss_kills: List[int] = field(default_factory=list)
     revived: bool = False
+    fled: int = 0
 
 
 def _shortest_path(fmap: FloorMap, a: Pos, b: Pos) -> List[Pos]:
@@ -147,9 +150,27 @@ class AutoPolicy:
             return None
         return min(living, key=lambda b: (b.stats.hp, b.index)).index
 
+    def doomed(self, battle: Battle) -> bool:
+        """Would the enemies win a slugging match by a wide margin? (Never flee bosses.)"""
+        foes = battle.living_enemies
+        players = battle.living_players
+        if not foes or not players or any(getattr(f.ref, "boss", False) for f in foes):
+            return False
+        our_df = min(p.ref.effective_df(self.data) for p in players)
+        their_hit = sum(max(1, f.stats.atk - our_df + 1) for f in foes)
+        our_hit = sum(
+            max(1, p.ref.effective_atk(self.data) - min(f.stats.df for f in foes) + 1)
+            for p in players
+        )
+        rounds_to_die = sum(max(0, p.stats.hp) for p in players) / their_hit
+        rounds_to_win = sum(max(0, f.stats.hp) for f in foes) / our_hit
+        return rounds_to_win > rounds_to_die * FLEE_MARGIN
+
     def choose(self, battle: Battle, actor_idx: int) -> Action:
         actor: Player = battle.party[actor_idx]
         bag = battle.bag
+        if self._potion(bag) is None and self.doomed(battle):
+            return Action(ActionKind.FLEE, actor_idx)
         # Emergency drink
         if actor.hp <= actor.max_hp * LOW_HP:
             pid = self._potion(bag)
@@ -246,6 +267,7 @@ def simulate_run(
     run = new_run(data, seed=seed, meta=meta)
     policy = AutoPolicy(data, run)
     battles = 0
+    fled = 0
     boss_kills: List[int] = []
     revived = False
     companions = ["ossian", "sister_vel", "pale_cassia", "brother_moss"]
@@ -289,11 +311,12 @@ def simulate_run(
 
         def fight(enemies: List[Enemy], monster: Optional[Monster]) -> bool:
             """Run one battle; return True if the party fell."""
-            nonlocal battles
+            nonlocal battles, fled
             battle = _fight(run, enemies, combat_rng(seed, floor, run.encounters), data, policy)
             run.encounters += 1
             run.steps_since_encounter = 0
             battles += 1
+            fled += battle.outcome is Outcome.FLED
             if monster is not None:
                 if battle.outcome is Outcome.VICTORY:
                     run.leader.add_gold(monster.bounty)
@@ -346,7 +369,7 @@ def simulate_run(
                     boss_kills.append(floor)
                     if boss.final:
                         return RunResult(seed, floor, run.leader.level, "victory", True, battles,
-                                         boss_kills, revived)
+                                         boss_kills, revived, fled)
         if died_here:
             if run.has_token() and not revived:
                 result = run.on_death(meta, data)
@@ -356,7 +379,7 @@ def simulate_run(
                     print(f"  seed {seed}: fell on B{floor}, token revived")
                 continue  # retry the same floor
             return RunResult(seed, floor, run.leader.level, "died", False, battles, boss_kills,
-                             revived)
+                             revived, fled)
         # Portal home when hurt
         hurt = min(m.hp / m.max_hp for m in run.party if m.is_alive)
         if fmap.portal is not None and hurt < REST_BELOW:
@@ -370,7 +393,7 @@ def simulate_run(
         run.descend()
         floor += 1
     return RunResult(
-        seed, MAX_FLOOR, run.leader.level, "victory", True, battles, boss_kills, revived
+        seed, MAX_FLOOR, run.leader.level, "victory", True, battles, boss_kills, revived, fled
     )
 
 
@@ -390,6 +413,7 @@ def summarize(results: List[RunResult]) -> Dict[str, object]:
         "boss_kills": {f: bosses.get(f, 0) for f in (20, 40, 60, 80, 99)},
         "mean_level": round(statistics.mean(r.level for r in results), 1),
         "mean_battles": round(statistics.mean(r.battles for r in results), 1),
+        "mean_fled": round(statistics.mean(r.fled for r in results), 1),
     }
 
 
@@ -414,7 +438,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     print(f"victories {summary['victories']}  token revives {summary['revived']}")
     print(f"boss kills: {summary['boss_kills']}")
-    print(f"mean level at end {summary['mean_level']}  mean battles {summary['mean_battles']}")
+    print(
+        f"mean level at end {summary['mean_level']}  mean battles {summary['mean_battles']}"
+        f"  mean escapes {summary['mean_fled']}"
+    )
     hist = Counter((r.floor - 1) // 10 for r in results)
     for bucket in range(10):
         label = f"B{bucket * 10 + 1:>2}-{bucket * 10 + 10:<3}"

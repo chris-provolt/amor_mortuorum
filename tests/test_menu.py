@@ -55,3 +55,12 @@ def test_set_items_keeps_selection_in_range():
     assert menu.selected == 1
     menu.set_items([MenuItem("Only", enabled=False)])
     assert menu.activate() is False
+
+
+def test_combat_flash_fades_linearly_to_zero():
+    from amormortuorum.scenes.combat import FLASH_ALPHA, FLASH_TIME, flash_alpha
+
+    assert flash_alpha(FLASH_TIME) == FLASH_ALPHA
+    assert flash_alpha(FLASH_TIME / 2) == round(FLASH_ALPHA / 2)
+    assert flash_alpha(0.0) == 0 and flash_alpha(-1.0) == 0
+    assert flash_alpha(FLASH_TIME * 3) == FLASH_ALPHA  # never brighter than the peak
