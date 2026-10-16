@@ -83,19 +83,17 @@ def platform_tag() -> str:
 
 
 def find_spec_file(root: Path) -> Optional[Path]:
-    # Prefer ./pyinstaller/*.spec
+    """A hand-written spec in ./pyinstaller/, if any.
+
+    Only that directory is honoured: PyInstaller writes the spec it generates
+    for an entry-file build into the working directory, and picking up such a
+    leftover would silently replay a previous build's flags.
+    """
     pi = root / "pyinstaller"
     if pi.exists():
         specs = sorted(pi.glob("*.spec"))
         if specs:
             return specs[0]
-    # Fallback: any .spec
-    any_specs = sorted(root.glob("*.spec"))
-    if any_specs:
-        return any_specs[0]
-    # Deep search as last resort
-    for p in root.rglob("*.spec"):
-        return p
     return None
 
 
@@ -179,13 +177,19 @@ def pyinstaller_args(entry_file: Path, name: str, root: Optional[Path] = None) -
     """Build the PyInstaller argument list for a one-file build of ``entry_file``."""
     root = root or Path.cwd()
     src = root / "src"
-    args = ["--clean", "--onefile", "--name", name, "--paths", str(src)]
+    args = [
+        "--clean", "--onefile", "--name", name, "--paths", str(src),
+        "--specpath", str(root / "build"),  # keep the generated spec out of the repo root
+    ]
     for rel in PACKAGE_DATA_DIRS:
         data_dir = src / rel
         if data_dir.is_dir():
             args += ["--add-data", f"{data_dir}{os.pathsep}{rel}"]
-    # Arcade and pyglet ship fonts/shaders/resources that are loaded at runtime.
-    args += ["--collect-data", "arcade", "--collect-data", "pyglet"]
+    # pyglet ships fonts/shaders/resources loaded at runtime. Arcade bundles its own
+    # PyInstaller hook (arcade/__pyinstaller) that adds its resources and VERSION file;
+    # a second `--collect-data arcade` would also add VERSION as a file where the hook
+    # makes a directory, and the frozen app then fails to extract at startup.
+    args += ["--collect-data", "pyglet"]
     if sys.platform in ("win32", "darwin"):
         args.append("--windowed")
     args.append(str(entry_file))

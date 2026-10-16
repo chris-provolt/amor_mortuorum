@@ -19,6 +19,13 @@ def test_find_spec_file(tmp_path: Path):
     assert find_spec_file(tmp_path) == spec
 
 
+def test_generated_spec_in_root_is_ignored(tmp_path: Path):
+    (tmp_path / "Leftover.spec").write_text("# written by a previous build", encoding="utf-8")
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "deep.spec").write_text("# nope", encoding="utf-8")
+    assert find_spec_file(tmp_path) is None
+
+
 def test_parse_pyproject_entrypoint(tmp_path: Path):
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text(
@@ -80,4 +87,5 @@ def test_pyinstaller_args_bundle_package_data(tmp_path: Path):
     add_data = [args[i + 1] for i, a in enumerate(args) if a == "--add-data"]
     assert f"{src / 'amormortuorum' / 'config'}{os.pathsep}amormortuorum/config" in add_data
     assert f"{src / 'amormortuorum' / 'data'}{os.pathsep}amormortuorum/data" in add_data
-    assert "arcade" in args and "pyglet" in args
+    assert args[args.index("--collect-data") + 1] == "pyglet"
+    assert "arcade" not in args  # arcade's own hook does this; doubling it breaks startup

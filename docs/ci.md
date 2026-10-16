@@ -17,12 +17,16 @@
 - Matrix across ubuntu-latest, windows-latest, macos-latest.
 - Installs the project with the `build` extra (PyInstaller) and runs
   `tools/ci/build_binary.py --name AmorMortuorum --out dist/release`.
-- Entry point detection, in order: a `pyinstaller/*.spec` file, then
+- Entry point detection, in order: a hand-written `pyinstaller/*.spec` file (only
+  that directory; the spec PyInstaller generates itself goes to `build/` and is
+  never reused), then
   `src/amormortuorum/__main__.py` (preferred because it uses absolute imports),
   then the first `[project.scripts]` module.
 - The one-file build adds `--paths src`, bundles `amormortuorum/config`,
   `amormortuorum/data` and `amormortuorum/resources` with `--add-data`, collects
-  arcade and pyglet resource files, and uses `--windowed` on Windows and macOS.
+  pyglet's resource files (arcade ships its own PyInstaller hook; do not add
+  `--collect-data arcade`, it duplicates arcade's VERSION entry and the frozen
+  app fails to extract), and uses `--windowed` on Windows and macOS.
 - A windowed build has no console, so the game logs to `amor.log` in the save
   root (`%APPDATA%\AmorMortuorum` on Windows) and writes any fatal traceback
   there instead of dying silently.
