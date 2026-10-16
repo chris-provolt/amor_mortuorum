@@ -48,7 +48,7 @@ from ..systems.stats import bump, check_achievements, record_max
 from ..systems.rng import chest_rng
 from ..ui.hud import Hud
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
-from ..ui import pixelart, tiles
+from ..ui import frame, pixelart, tiles
 from ..ui.minimap import Minimap
 from ..ui.theme import fs
 
@@ -769,7 +769,9 @@ class DungeonScene(BaseScene):
         if self.minimap is not None:
             self.minimap.draw(self.pos, self._visible_monsters())
         if self.paused:
-            arcade.draw_lbwh_rectangle_filled(0, 0, self.app.width, self.app.height, (0, 0, 0, 170))
+            arcade.draw_lbwh_rectangle_filled(0, 0, self.app.width, self.app.height, (0, 0, 0, 150))
+            cx, cy = self.app.width / 2, self.app.height / 2
+            frame.draw_window(cx - 340, cy - fs(215), 680, fs(215) + 110)
             self._pause_title.draw()
             self._pause_view.draw()
             self._pause_legend.draw()

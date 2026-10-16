@@ -7,11 +7,11 @@ from typing import Deque, Optional
 import arcade
 
 from ..systems.run import Run
+from . import frame
 from .theme import fs
 
 TEXT = (230, 230, 240)
 DIM = (150, 150, 165)
-PANEL = (0, 0, 0, 160)
 
 
 class Hud:
@@ -39,7 +39,7 @@ class Hud:
     def draw(self, run: Optional[Run], extra: str = "") -> None:
         height = self.app.height
         panel_h = fs(92)
-        arcade.draw_lbwh_rectangle_filled(0, height - panel_h, self.app.width, panel_h, PANEL)
+        frame.draw_window(-4, height - panel_h, self.app.width + 8, panel_h + 8, alpha=215)
         if run is not None:
             p = run.leader
             members = "   ".join(

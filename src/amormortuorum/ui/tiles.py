@@ -340,22 +340,23 @@ def portal_image(frame: int, frames: int = 4) -> Image.Image:
 _cache: Dict[Tuple, arcade.Texture] = {}
 
 
-def _tex(key: Tuple, img: Image.Image) -> arcade.Texture:
+def _tex(key: Tuple, make) -> arcade.Texture:
+    """Cached texture for ``key``; ``make`` builds the image only on a miss."""
     tex = _cache.get(key)
     if tex is None:
-        tex = arcade.Texture(img, hash="tiles:" + ":".join(str(k) for k in key))
+        tex = arcade.Texture(make(), hash="tiles:" + ":".join(str(k) for k in key))
         _cache[key] = tex
     return tex
 
 
 def floor_texture(
-    style_name: str, x: int, y: int, shadow_top: bool, shadow_left: bool
+    style_name: str, x: int, y: int, shadow_top: bool, shadow_left: bool, *, decals: bool = True
 ) -> arcade.Texture:
     """Floor at map cell (x, y): variant and decal are picked from the position."""
     variant = hash32(x, y, 1) % 4
-    decal = hash32(x, y, 2) % 4 if noise(x, y, 3) < DECAL_CHANCE else None
+    decal = hash32(x, y, 2) % 4 if decals and noise(x, y, 3) < DECAL_CHANCE else None
     key = ("floor", style_name, variant, shadow_top, shadow_left, decal)
-    return _tex(key, floor_image(style_name, variant, shadow_top, shadow_left, decal))
+    return _tex(key, lambda: floor_image(style_name, variant, shadow_top, shadow_left, decal))
 
 
 def wall_texture(
@@ -364,22 +365,22 @@ def wall_texture(
     """Wall at a cell: ``face`` when floor lies below it on screen, ``rims`` per side."""
     seed = hash32(x, y, 4) % 3  # three brick layouts so faces are not identical
     key = ("wall", style_name, face, rims if not face else (), seed)
-    return _tex(key, wall_image(style_name, face, rims, seed))
+    return _tex(key, lambda: wall_image(style_name, face, rims, seed))
 
 
 def texture(name: str, style_name: str = "rooms") -> arcade.Texture:
     """Doors and stairs: ``door_locked``, ``door_open``, ``stairs``."""
     if name == "door_locked":
-        return _tex(("door", True, style_name), door_image(True, style_name))
+        return _tex(("door", True, style_name), lambda: door_image(True, style_name))
     if name == "door_open":
-        return _tex(("door", False, style_name), door_image(False, style_name))
+        return _tex(("door", False, style_name), lambda: door_image(False, style_name))
     if name == "stairs":
-        return _tex(("stairs", style_name), stairs_image(style_name))
+        return _tex(("stairs", style_name), lambda: stairs_image(style_name))
     raise KeyError(name)
 
 
 def portal_frames(frames: int = 4) -> List[arcade.Texture]:
-    return [_tex(("portal", i, frames), portal_image(i, frames)) for i in range(frames)]
+    return [_tex(("portal", i, frames), lambda i=i: portal_image(i, frames)) for i in range(frames)]
 
 
 __all__ = [

@@ -13,7 +13,7 @@ from ..systems.party import MAX_PARTY, available_companions, recruit
 from ..systems.progression import xp_to_next_level
 from ..systems.relics import apply_passives
 from ..ui.hud import Hud
-from ..ui import pixelart
+from ..ui import frame, pixelart
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 from ..ui.theme import fs
 
@@ -306,6 +306,9 @@ class GraveyardScene(BaseScene):
             self._backdrop.draw(pixelated=True)
         if self._title is not None:
             self._title.draw()
+        panel_top = h * 0.66 + fs(20)
+        frame.draw_window(w * 0.49, panel_top - 17 * fs(20), w * 0.49, 17 * fs(20))
+        frame.draw_window(w * 0.08, panel_top - 17 * fs(20), w * 0.38, 17 * fs(20))
         self._refresh_panel()
         for line in self._panel:
             if line.text:
