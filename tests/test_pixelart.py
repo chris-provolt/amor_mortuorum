@@ -66,11 +66,15 @@ def test_native_art_renders_without_upscaling_and_shares_the_16px_fallback():
     # the idle frame bobs the head: a head row of frame 1 is the row below it in
     # frame 0, while the feet stay planted
     a, b = px.render("hero", 0), px.render("hero", 1)
-    assert a.getpixel((16, 3)) == b.getpixel((16, 2))
+
+    def close(p, q):  # the volume gradient shifts tones a touch between rows
+        return all(abs(i - j) <= 8 for i, j in zip(p, q))
+
+    assert close(a.getpixel((16, 3)), b.getpixel((16, 2)))
     assert a.getpixel((12, 29)) == b.getpixel((12, 29))
     # floaters rise whole
     a, b = px.render("wraith", 0), px.render("wraith", 1)
-    assert a.getpixel((16, 3)) == b.getpixel((16, 1))
+    assert close(a.getpixel((16, 3)), b.getpixel((16, 1)))
     variants = {px.floor_variant(x, y) for x in range(8) for y in range(8)}
     assert variants == set(px.FLOOR_VARIANTS)
 
@@ -212,3 +216,18 @@ def test_death_dissolve_crumbles_from_the_top_down():
                if base.getpixel((x, y))[3]]
     assert spread < sum(max(c) - min(c) for c in px_base) / len(px_base)
     assert px.dissolve(base, 0.5).tobytes() == px.dissolve(base, 0.5).tobytes()  # deterministic
+
+
+def test_ghost_hems_are_translucent_and_shading_darkens_downwards():
+    wraith = px.render("wraith")
+    alphas = {wraith.getpixel((x, y))[3] for x in range(32) for y in range(24, 32)}
+    assert any(0 < a < 255 for a in alphas)  # the tattered hem
+    skel = px.render("skel_basic")
+    assert skel.getpixel((12, 8))[0] > 150  # the eye glows red
+    # the same fill colour ends up darker lower down the sprite (volume gradient)
+    img = px.Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+    for y in range(4, 28):
+        for x in range(8, 24):
+            img.putpixel((x, y), px.PALETTE["e"])
+    shaded = px.shade(img)
+    assert sum(shaded.getpixel((16, 6))[:3]) > sum(shaded.getpixel((16, 24))[:3])
