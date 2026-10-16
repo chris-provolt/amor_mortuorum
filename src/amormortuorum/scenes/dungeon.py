@@ -243,7 +243,10 @@ class DungeonScene(BaseScene):
             if was_boss:
                 self._on_boss_defeated()
             if engaged is not None:
+                if engaged.asleep:
+                    self._stat("ambushes")
                 if engaged.bounty > 0:
+                    self._stat("bounties")
                     self.run.leader.add_gold(engaged.bounty)
                     self._stat("gold_earned", engaged.bounty)
                     self.hud.push(f"The {engaged.name} drops its hoard: +{engaged.bounty} gold.")

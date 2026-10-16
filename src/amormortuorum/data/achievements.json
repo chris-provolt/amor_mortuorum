@@ -12,5 +12,7 @@
   {"id": "token_spent", "name": "Second Chance", "desc": "Be revived by a Resurrection Token.", "stat": "revives", "at_least": 1},
   {"id": "collector", "name": "Collector", "desc": "Collect all ten Relics of the Veil.", "stat": "relics", "at_least": 10},
   {"id": "walker", "name": "Long Walker", "desc": "Take 10,000 steps.", "stat": "steps", "at_least": 10000},
-  {"id": "rich", "name": "Obol Hoard", "desc": "Earn 5,000 gold across all runs.", "stat": "gold_earned", "at_least": 5000}
+  {"id": "rich", "name": "Obol Hoard", "desc": "Earn 5,000 gold across all runs.", "stat": "gold_earned", "at_least": 5000},
+  {"id": "bounty_hunter", "name": "Bounty Hunter", "desc": "Corner and slay 10 skittish groups.", "stat": "bounties", "at_least": 10},
+  {"id": "silent_knife", "name": "Silent Knife", "desc": "Slay 10 groups in their sleep.", "stat": "ambushes", "at_least": 10}
 ]

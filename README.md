@@ -25,7 +25,7 @@ What works today, end to end:
 - **Audio**: named sound hooks (menus, steps, chests, combat, level-ups, relics, bosses) and ambient loops for the Graveyard, dungeon and combat. Placeholder tones are synthesized with the standard library on first run; drop real `.wav` files into `resources/audio/` to replace them.
 - **Settings screen** (title menu and pause menu): fullscreen, music and SFX volume, VSync, a view of the key bindings, and Save to a per-user `settings.json` that the game loads automatically.
 - **Controller support**: any pyglet-recognised gamepad, hot-pluggable. D-pad or left stick moves, A confirms, B cancels, Y opens the bag, X toggles the map, Start pauses.
-- **Records and achievements**: lifetime counters (runs, deaths, floors, battles, chests, gold, steps) with fourteen data-driven achievements (`achievements.json`) announced on the HUD when unlocked.
+- **Records and achievements**: lifetime counters (runs, deaths, floors, battles, chests, gold, steps, bounties, sleepers slain) with sixteen data-driven achievements (`achievements.json`) announced on the HUD when unlocked.
 - **Profiles**: switch or create save profiles from the title menu; the choice is remembered in `settings.json` and `--profile` still overrides it.
 - **Save & Quit** from the pause menu: a one-shot mid-run save that resumes at the start of the current floor and is consumed on load.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.

@@ -26,6 +26,8 @@ STAT_LABELS: Dict[str, str] = {
     "gold_earned": "Gold earned",
     "steps": "Steps taken",
     "relics": "Relics found",
+    "bounties": "Bounties claimed",
+    "ambushes": "Sleepers slain",
 }
 
 
