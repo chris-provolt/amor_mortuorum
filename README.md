@@ -110,7 +110,7 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
 - **Enemies scale per floor** (`balance.json`): ATK +0.45, DEF +0.15, HP +2.5%, XP and gold +3% per floor below B1. Tier bases in `enemies.json` are the stats at B1 and rise gently across tiers; depth does the rest.
 - **Players** gain +6 HP, +1 MP and +1 ATK per level, +1 DEF every second level and +1 SPD every third (`xp_curve.json`, 40 levels). The stairs restore 10% HP and 15% MP on every descent.
 - **Encounters**: each floor spawns `monsters_base` roaming groups (+`monsters_per_floor` per floor of depth, jittered by one) at least 10 steps from the start, drawn from the tier's formations; the floor slowly respawns groups out of sight while under strength. Ambushes add a small per-step chance (the tier's `step_chance`, 1-2%, growing 5% per quiet step, capped at 20%). Together that is roughly 4-6 fights per floor.
-- **Measured with** `python tools/balance/simulate.py --runs 80 --party N`, which plays whole runs with an auto-policy, walking every floor tile by tile against the real monster rules. Current numbers: solo runs end around B20-35 (the Warden on B20 is the first wall), pairs around B40 with a long tail to B80, full parties reach the nineties and clear B99 a few percent of the time. Re-run it after touching any number.
+- **Measured with** `python tools/balance/simulate.py --runs 80 --party N`, which plays whole runs with an auto-policy, walking every floor tile by tile against the real monster rules. Current numbers: solo runs end around B20-35 (the Warden on B20 is the first wall) with a couple of escapes per run, pairs around B40 with a long tail to B80, full parties reach the mid-nineties and clear B99 only a few percent of the time at most. Re-run it after touching any number.
 
 ## Procedural Generation
 - **Algorithms:** BSP split into leaves, one room per leaf, L-shaped corridors joining sibling subtrees; the whole floor is connected. From B6, 30% of floors are **cellular-automata caverns** instead: one connected open region with the stairs at the far end of the cave (no rooms, so no key doors).
@@ -319,7 +319,7 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 
 ## Roadmap
 Design notes for each epic live in `docs/epics/`. Every epic now has a first implementation; what remains is polish:
-1. Hand playtesting against the simulator's numbers (see Balance Model); the auto-policy never flees and never misjudges a potion, so real runs end earlier.
+1. Hand playtesting against the simulator's numbers (see Balance Model); the auto-policy only flees when the maths says a fight is lost and never misjudges a potion, so real runs still end a little earlier.
 2. Real art and audio assets (sprites, tiles, SFX, music) replacing the placeholders.
 3. Monster ecology: packs that coordinate, noise that wakes sleepers, guards that call for help; the three map behaviours (hunter, guard, skittish) are the base to build on.
 
