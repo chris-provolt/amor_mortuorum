@@ -1,9 +1,12 @@
-"""Audio: named sound-effect hooks and ambient loops with volume settings.
+"""Audio: named sound-effect hooks and music loops with volume settings.
 
 Real assets go in ``amormortuorum/resources/audio/<name>.wav`` and take
-priority. When a name has no asset, a small placeholder tone is synthesized
-once into a cache directory with the standard library, so the game is never
-silent and no binary assets need to live in the repo.
+priority. When a name has no asset, the effect or track is rendered once by
+the game's own chiptune synthesizer (:mod:`.chiptune`) into a cache
+directory, so the game is never silent and no binary assets need to live in
+the repo. Rendering is quick (a few seconds for the whole soundtrack) and
+happens in a background thread at start-up; anything requested before it is
+ready is rendered on the spot.
 
 Everything is guarded: if the audio driver is missing (headless CI) the
 manager silently disables itself.
@@ -11,98 +14,45 @@ manager silently disables itself.
 from __future__ import annotations
 
 import logging
-import math
 import os
-import struct
+import threading
 import wave
 from importlib import resources
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional
+
+from . import chiptune
+from .chiptune import SAMPLE_RATE
 
 logger = logging.getLogger(__name__)
 
-SAMPLE_RATE = 22050
+CACHE_VERSION = "v2"  # bump when the synthesizer or any definition changes
 
-# name -> list of (frequency_hz, seconds, shape) segments; shape: "sine" | "square" | "noise"
-PLACEHOLDER_SFX: Dict[str, List[Tuple[float, float, str]]] = {
-    "menu_move": [(660, 0.03, "square")],
-    "menu_confirm": [(523, 0.05, "square"), (784, 0.07, "square")],
-    "menu_back": [(392, 0.06, "square")],
-    "step": [(110, 0.02, "noise")],
-    "chest": [(659, 0.06, "sine"), (880, 0.06, "sine"), (1175, 0.1, "sine")],
-    "gold": [(1318, 0.04, "square"), (1568, 0.06, "square")],
-    "hit": [(180, 0.05, "noise"), (90, 0.05, "square")],
-    "heal": [(523, 0.07, "sine"), (659, 0.07, "sine"), (784, 0.1, "sine")],
-    "victory": [(523, 0.08, "square"), (659, 0.08, "square"), (784, 0.08, "square"),
-                (1046, 0.2, "square")],
-    "defeat": [(392, 0.15, "sine"), (311, 0.15, "sine"), (233, 0.3, "sine")],
-    "level_up": [(784, 0.06, "sine"), (988, 0.06, "sine"), (1318, 0.15, "sine")],
-    "relic": [(880, 0.1, "sine"), (1108, 0.1, "sine"), (1318, 0.1, "sine"), (1760, 0.25, "sine")],
-    "door": [(140, 0.12, "noise"), (200, 0.08, "square")],
-    "trap": [(1200, 0.03, "noise"), (160, 0.12, "square")],
-    "stairs": [(330, 0.08, "sine"), (262, 0.08, "sine"), (196, 0.12, "sine")],
-    "portal": [(440, 0.08, "sine"), (554, 0.08, "sine"), (659, 0.08, "sine"), (880, 0.2, "sine")],
-    "boss": [(110, 0.25, "square"), (104, 0.25, "square"), (98, 0.4, "square")],
-    "flee": [(600, 0.04, "square"), (500, 0.04, "square"), (400, 0.06, "square")],
-}
-
-# name -> (base frequency, seconds) ambient drone loops
-PLACEHOLDER_MUSIC: Dict[str, Tuple[float, float]] = {
-    "graveyard": (55.0, 6.0),
-    "dungeon": (41.2, 6.0),
-    "combat": (73.4, 4.0),
-}
+# The effect and track names the game can ask for (see chiptune for the content)
+PLACEHOLDER_SFX = chiptune.SFX
+PLACEHOLDER_MUSIC = chiptune.MUSIC
 
 
-def _segment_samples(freq: float, seconds: float, shape: str, seed: int) -> List[int]:
-    n = int(SAMPLE_RATE * seconds)
-    out: List[int] = []
-    state = seed or 1
-    for i in range(n):
-        t = i / SAMPLE_RATE
-        env = min(1.0, (n - i) / max(1, n * 0.3))  # quick fade-out to avoid clicks
-        if shape == "square":
-            v = 0.5 if math.sin(2 * math.pi * freq * t) >= 0 else -0.5
-        elif shape == "noise":
-            state = (state * 1103515245 + 12345) & 0x7FFFFFFF
-            v = (state / 0x7FFFFFFF) * 1.2 - 0.6
-        else:
-            v = math.sin(2 * math.pi * freq * t) * 0.7
-        out.append(int(v * env * 12000))
-    return out
-
-
-def _write_wav(path: Path, samples: Iterable[int]) -> None:
+def _write_wav(path: Path, pcm) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = b"".join(struct.pack("<h", max(-32768, min(32767, s))) for s in samples)
-    with wave.open(str(path), "wb") as wf:
+    tmp = path.with_suffix(".tmp")
+    with wave.open(str(tmp), "wb") as wf:
         wf.setnchannels(1)
         wf.setsampwidth(2)
         wf.setframerate(SAMPLE_RATE)
-        wf.writeframes(data)
+        wf.writeframes(pcm.tobytes())
+    os.replace(tmp, path)
 
 
 def synthesize_sfx(name: str, path: Path) -> Path:
-    """Write the placeholder effect ``name`` to ``path`` and return it."""
-    segments = PLACEHOLDER_SFX[name]
-    samples: List[int] = []
-    for i, (freq, seconds, shape) in enumerate(segments):
-        samples.extend(_segment_samples(freq, seconds, shape, seed=hash(name) % 9973 + i))
-    _write_wav(path, samples)
+    """Render the effect ``name`` to ``path`` and return it."""
+    _write_wav(path, chiptune.render_sfx(name))
     return path
 
 
 def synthesize_music(name: str, path: Path) -> Path:
-    """Write a seamless low drone for ``name`` (two detuned sines over a slow pulse)."""
-    base, seconds = PLACEHOLDER_MUSIC[name]
-    n = int(SAMPLE_RATE * seconds)
-    samples: List[int] = []
-    for i in range(n):
-        t = i / SAMPLE_RATE
-        pulse = 0.65 + 0.35 * math.sin(2 * math.pi * t / seconds)  # one full cycle: loops cleanly
-        v = (math.sin(2 * math.pi * base * t) + 0.6 * math.sin(2 * math.pi * base * 1.5 * t)) * 0.3
-        samples.append(int(v * pulse * 9000))
-    _write_wav(path, samples)
+    """Render the looping track ``name`` to ``path`` and return it."""
+    _write_wav(path, chiptune.render_track(chiptune.MUSIC[name]))
     return path
 
 
@@ -134,9 +84,11 @@ class AudioManager:
         enabled: Optional[bool] = None,
     ) -> None:
         self.settings = settings
-        self.cache_dir = Path(cache_dir)
+        self.cache_dir = Path(cache_dir) / CACHE_VERSION
         self._loader = loader
         self._sounds: Dict[str, Any] = {}
+        self._synth_lock = threading.Lock()
+        self._prewarm_thread: Optional[threading.Thread] = None
         self._music_player: Any = None
         self.current_music: Optional[str] = None
         if enabled is None:
@@ -150,6 +102,23 @@ class AudioManager:
             except Exception as e:  # pragma: no cover - depends on the host
                 logger.warning("Audio unavailable: %s", e)
                 self.enabled = False
+
+    # Rendering
+
+    def prewarm(self) -> None:
+        """Render every track and effect that is not cached yet, in the background."""
+        if not self.enabled or self._prewarm_thread is not None:
+            return
+
+        def work() -> None:
+            for name in list(PLACEHOLDER_MUSIC) + list(PLACEHOLDER_SFX):
+                try:
+                    self._path_for(name, music=name in PLACEHOLDER_MUSIC)
+                except Exception as e:  # pragma: no cover - disk trouble
+                    logger.warning("Could not render %s: %s", name, e)
+
+        self._prewarm_thread = threading.Thread(target=work, name="audio-prewarm", daemon=True)
+        self._prewarm_thread.start()
 
     # Volumes
 
@@ -181,7 +150,9 @@ class AudioManager:
             return None
         path = self.cache_dir / ("music" if music else "sfx") / f"{name}.wav"
         if not path.exists():
-            (synthesize_music if music else synthesize_sfx)(name, path)
+            with self._synth_lock:
+                if not path.exists():
+                    (synthesize_music if music else synthesize_sfx)(name, path)
         return path
 
     def _sound(self, name: str, music: bool = False) -> Any:
@@ -202,15 +173,19 @@ class AudioManager:
 
     # Playback
 
-    def play(self, name: str) -> bool:
-        """Play effect ``name`` at the SFX volume. Returns whether anything played."""
+    def play(self, name: str, *, speed: float = 1.0) -> bool:
+        """Play effect ``name`` at the SFX volume, optionally re-pitched by ``speed``
+        (1.0 = as rendered). Returns whether anything played."""
         if not self.enabled or self.sfx_volume <= 0:
             return False
         sound = self._sound(name)
         if sound is None:
             return False
         try:
-            sound.play(volume=self.sfx_volume)
+            if speed != 1.0:
+                sound.play(volume=self.sfx_volume, speed=speed)
+            else:
+                sound.play(volume=self.sfx_volume)
         except Exception as e:  # pragma: no cover - driver specific
             logger.debug("sfx %s failed: %s", name, e)
             return False
@@ -251,7 +226,7 @@ class NullAudio:
     enabled = False
     current_music = None
 
-    def play(self, name: str) -> bool:
+    def play(self, name: str, *, speed: float = 1.0) -> bool:
         return False
 
     def play_music(self, name: Optional[str]) -> None:
@@ -272,4 +247,5 @@ __all__ = [
     "synthesize_sfx",
     "synthesize_music",
     "asset_path",
+    "CACHE_VERSION",
 ]

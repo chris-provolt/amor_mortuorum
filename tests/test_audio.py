@@ -1,6 +1,7 @@
 import wave
 from pathlib import Path
 
+from amormortuorum.core import chiptune
 from amormortuorum.core.audio import (
     PLACEHOLDER_MUSIC,
     PLACEHOLDER_SFX,
@@ -38,18 +39,54 @@ class FakeSound:
         return player
 
 
-def test_placeholder_tones_are_valid_wavs(tmp_path):
+def test_rendered_effects_are_valid_wavs(tmp_path):
     for name in PLACEHOLDER_SFX:
         path = synthesize_sfx(name, tmp_path / f"{name}.wav")
         with wave.open(str(path)) as wf:
             assert wf.getnchannels() == 1 and wf.getsampwidth() == 2
             assert wf.getframerate() == SAMPLE_RATE
-            expected = sum(int(SAMPLE_RATE * sec) for _, sec, _ in PLACEHOLDER_SFX[name])
-            assert wf.getnframes() == expected
-    for name, (_, seconds) in PLACEHOLDER_MUSIC.items():
-        path = synthesize_music(name, tmp_path / f"{name}.wav")
-        with wave.open(str(path)) as wf:
-            assert wf.getnframes() == int(SAMPLE_RATE * seconds)
+            assert wf.getnframes() == chiptune.sfx_length(name)
+            assert 0.02 < wf.getnframes() / SAMPLE_RATE < 2.0, name
+
+
+def test_music_tracks_loop_to_the_bar(tmp_path):
+    name = "combat"
+    track = PLACEHOLDER_MUSIC[name]
+    path = synthesize_music(name, tmp_path / f"{name}.wav")
+    with wave.open(str(path)) as wf:
+        assert wf.getnframes() == int(round(track.seconds * SAMPLE_RATE))
+        assert 10 < track.seconds < 90
+    expected = {"title", "graveyard", "dungeon", "dungeon_deep", "combat", "boss"}
+    assert set(PLACEHOLDER_MUSIC) >= expected
+    assert chiptune.music_for_tier("T1") == "dungeon"
+    assert chiptune.music_for_tier("T5") == "dungeon_deep"
+
+
+def test_every_cue_the_scenes_play_exists():
+    import re
+    from pathlib import Path as P
+
+    src = P(__file__).resolve().parents[1] / "src" / "amormortuorum" / "scenes"
+    text = "\n".join(p.read_text(encoding="utf-8") for p in src.glob("*.py"))
+    for cue in set(re.findall(r'audio\.play\("([a-z_]+)"', text)):
+        assert cue in PLACEHOLDER_SFX, cue
+    for cue in set(re.findall(r'play_music\("([a-z_]+)"', text)):
+        assert cue in PLACEHOLDER_MUSIC, cue
+    for cue in ("slash", "fire", "frost", "bolt", "wave", "cast", "guard", "death", "rage"):
+        assert cue in PLACEHOLDER_SFX
+
+
+def test_synth_notation_and_levels():
+    assert abs(chiptune.note_hz("A4") - 440) < 1e-6
+    assert abs(chiptune.note_hz("A5") - 880) < 1e-6
+    assert abs(chiptune.note_hz("Bb3") - chiptune.note_hz("A#3")) < 1e-6
+    assert chiptune.parse_notation("E4:2 -:4 G#4") == [("E4", 2), (None, 4), ("G#4", 1)]
+    assert chiptune.parse_chord("Bb2M") == ("Bb", 2, (0, 4, 7))
+    pcm = chiptune.render_sfx("slash")
+    peak = max(abs(v) for v in pcm)
+    assert 3000 < peak <= chiptune.PEAK
+    # rendering is deterministic
+    assert chiptune.render_sfx("heal").tobytes() == chiptune.render_sfx("heal").tobytes()
 
 
 def test_manager_plays_sfx_at_setting_volume_and_caches(tmp_path):
@@ -65,7 +102,7 @@ def test_manager_plays_sfx_at_setting_volume_and_caches(tmp_path):
     assert audio.play("chest") is True
     assert audio.play("chest") is True
     assert made["chest.wav"].plays == [(0.4, False), (0.4, False)]
-    assert (tmp_path / "sfx" / "chest.wav").exists()
+    assert (tmp_path / "v2" / "sfx" / "chest.wav").exists()
     assert audio.play("not_a_sound") is False
 
     settings.audio.sfx_volume = 0.0

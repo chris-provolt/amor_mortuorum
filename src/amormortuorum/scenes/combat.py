@@ -107,12 +107,14 @@ LOG_COLORS = {
 
 class CombatScene(BaseScene):
     def __init__(
-        self, app, battle: Battle, title: Optional[str] = None, style: str = "rooms"
+        self, app, battle: Battle, title: Optional[str] = None, style: str = "rooms",
+        music: str = "combat",
     ):
         super().__init__(app)
         self.battle = battle
         self.title = title
         self.style = style  # tile style of the floor the fight is on
+        self.music = music
         self.data = app.state.data
         self.mode = "command"  # command | item | done
         self.actor = 0
@@ -161,7 +163,7 @@ class CombatScene(BaseScene):
         ]
         self._view = MenuView(self.menu, 0, 0, font_size=fs(18))
         self.menu.sfx = self.app.audio.play
-        self.app.audio.play_music("combat")
+        self.app.audio.play_music(self.music)
         self._log.append(LogEvent("The dead stir.", "info"))
         self._pick_next_actor()
         self._show_command_menu()
@@ -360,6 +362,7 @@ class CombatScene(BaseScene):
         if ev.effect == "cast" and ev.actor is not None:
             style, colour = spell_style(ev.source)
             self._add_fx("glyph", ev.actor, colour, 0.5)
+            audio.play("wave" if style == "wave" else "cast")
             if style == "wave":  # the dirge rolls out from the singer
                 self._add_fx("wave", ev.actor, colour, 1.1)
         elif ev.effect == "spell" and ev.target is not None:
@@ -382,10 +385,13 @@ class CombatScene(BaseScene):
                 self._add_number(ev.target, f"+{ev.amount}", NUM_HEAL)
         elif ev.effect == "guard" and ev.actor is not None:
             self._add_fx("guard", ev.actor, FX_ITEM, 0.4)
+            audio.play("guard")
         elif ev.effect == "death" and ev.target is not None:
             self._dying[ev.target] = 0.0
+            audio.play("death")
         elif ev.effect == "rage" and ev.target is not None:
             self._add_fx("burst", ev.target, FX_RAGE, 0.45)
+            audio.play("rage")
             self._hits[ev.target] = HIT_SHAKE_TIME
         elif ev.effect == "flee":
             audio.play("flee")
@@ -403,7 +409,14 @@ class CombatScene(BaseScene):
         self._shown[ev.target] = max(0, self._shown.get(ev.target, 0) - ev.amount)
         if ev.target[0] == "party":
             self._flash = FLASH_TIME
-        self.app.audio.play("hit")
+        if ev.effect == "slash":
+            self.app.audio.play("slash" if ev.target[0] == "foe" else "hit")
+        else:
+            style, _ = spell_style(ev.source)
+            if style in ("fire", "frost", "bolt"):
+                self.app.audio.play(style)
+            elif style != "wave":  # the dirge already sounded when it was sung
+                self.app.audio.play("spell")
         color = NUM_PARTY if ev.target[0] == "party" else NUM_DAMAGE
         self._add_number(ev.target, str(ev.amount), color)
         if ev.effect == "slash":

@@ -58,7 +58,7 @@ class MainMenuScene(BaseScene):
         )
         self._view = MenuView(self.menu, 0, 0, font_size=fs(22), anchor_x="center")
         self.menu.sfx = self.app.audio.play
-        self.app.audio.play_music("graveyard")
+        self.app.audio.play_music("title")
         self._rebuild_menu()
         self.on_resize(self.app.width, self.app.height)
         if self.app.smoke and self.app.state.run is None:
@@ -67,7 +67,7 @@ class MainMenuScene(BaseScene):
 
     def on_resume(self):
         super().on_resume()
-        self.app.audio.play_music("graveyard")
+        self.app.audio.play_music("title")
         self._rebuild_menu()
 
     def on_resize(self, width: int, height: int):
