@@ -53,8 +53,8 @@ def test_remaps_only_touch_template_letters_and_floor_variants_vary():
 
 def test_native_art_renders_without_upscaling_and_shares_the_16px_fallback():
     assert px.grid_size("hero") == px.RENDER_PX and px.grid_size("chest") == px.SIZE
-    for name in ("hero", "skel_basic", "ghoul", "wraith", "grave_hound", "bone_guard",
-                 "revenant", "warden_of_ash"):
+    data = GameData.load()
+    for name in list(data.enemies) + list(px.PARTY):  # every battler is native 32 px
         assert px.grid_size(name) == px.RENDER_PX, name
         assert px.render(name).size == (px.RENDER_PX, px.RENDER_PX)
         assert px.image(name, native=False).size == (px.SIZE, px.SIZE)
