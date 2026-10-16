@@ -27,6 +27,9 @@
   pyglet's resource files (arcade ships its own PyInstaller hook; do not add
   `--collect-data arcade`, it duplicates arcade's VERSION entry and the frozen
   app fails to extract), and uses `--windowed` on Windows and macOS.
+- The frozen app prints one harmless `Unable to load version number via
+  ...arcade\VERSION: Permission denied` line at startup: arcade's hook bundles
+  its VERSION file as a directory, and arcade falls back to a default string.
 - A windowed build has no console, so the game logs to `amor.log` in the save
   root (`%APPDATA%\AmorMortuorum` on Windows) and writes any fatal traceback
   there instead of dying silently.
