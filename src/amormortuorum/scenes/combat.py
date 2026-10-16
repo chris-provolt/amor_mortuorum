@@ -36,7 +36,8 @@ HIT_SHAKE_TIME = 0.3    # seconds a struck battler shudders
 LUNGE_PX = 44           # the shortest dash an attacker makes towards its target
 STANDOFF = 0.55         # share of the two sprites' mean size kept between them
 IMPACT_AT = 0.45        # share of a strike's duration before the blow lands
-DEATH_TIME = 0.55       # seconds a fallen foe takes to dissolve
+DEATH_TIME = 1.15       # seconds a fallen foe takes to blink out and crumble
+DEATH_BLINK = 0.3       # share of that spent blinking before the crumble
 NUMBER_TIME = 0.8       # seconds a damage number floats
 # Seconds each log event takes to play on the battle screen
 EVENT_TIME = {
@@ -339,6 +340,17 @@ class CombatScene(BaseScene):
                             anchor_x="center", anchor_y="center")
         self._numbers.append({"text": label, "y": y + 30, "t": 0.0})
 
+    def _shown_alive(self, side: Tuple[str, int], battler) -> bool:
+        """Is this battler still standing as far as the screen is concerned? The
+        model resolves a whole round at once, so a foe slain by the last blow is
+        dead before its death has played; it stays on stage until the death event
+        starts, then crumbles."""
+        if battler.is_alive:
+            return True
+        if side in self._dying:
+            return False
+        return self.mode == "anim"  # the death is still queued
+
     def _shown_hp(self, side: Tuple[str, int], battler) -> int:
         """HP for the gauges: lags the model while a round plays so hits read in order."""
         if self.mode != "anim":
@@ -590,30 +602,25 @@ class CombatScene(BaseScene):
         frame = int(self._anim / IDLE_FRAME_TIME) % 2
         foes = self.battle.foes
         for i, b in enumerate(foes):
-            dying = self._dying.get(("foe", i))
-            if not b.is_alive and (dying is None or dying >= 1.0):
+            side = ("foe", i)
+            dying = self._dying.get(side)
+            if dying is not None and dying >= 1.0:
+                continue  # crumbled away
+            if dying is None and not self._shown_alive(side, b):
                 continue
             x, y = self._enemy_spot(i, len(foes))
-            lx, ly = self._lunge(("foe", i))
-            x += self._shake(("foe", i)) + lx
+            lx, ly = self._lunge(side)
+            x += self._shake(side) + lx
             y += ly
             size = pixelart.RENDER_PX * ENEMY_SCALE
-            alpha = 255
-            if dying is not None and dying < 1.0:
-                alpha = int(255 * (1 - dying))
-                size *= 1 - 0.3 * dying
-            arcade.draw_ellipse_filled(
-                x, y - size * 0.46, size * 0.7, size * 0.16, (0, 0, 0, 90 * alpha // 255)
-            )
             art = pixelart.enemy_sprite_name(b.ref.def_id)
-            tex = pixelart.texture(art, self._pose(("foe", i), frame))
+            if dying is not None:
+                self._draw_death(art, x, y, size, dying)
+                continue
+            arcade.draw_ellipse_filled(x, y - size * 0.46, size * 0.7, size * 0.16, (0, 0, 0, 90))
+            tex = pixelart.texture(art, self._pose(side, frame))
             rect = arcade.LBWH(x - size / 2, y - size / 2, size, size)
-            if dying is not None and dying < 1.0:
-                arcade.draw_texture_rect(
-                    tex, rect, pixelated=True, alpha=alpha, color=Color(255, 120, 120, 255)
-                )
-            else:
-                arcade.draw_texture_rect(tex, rect, pixelated=True)
+            arcade.draw_texture_rect(tex, rect, pixelated=True)
             if b.index == self.target and self.mode not in ("done", "anim") and b.is_alive:
                 bob = math.sin(self._anim * 6) * 4
                 ty = y + size / 2 + 10 + bob
@@ -628,7 +635,7 @@ class CombatScene(BaseScene):
             y += ly
             size = pixelart.RENDER_PX * PARTY_SCALE
             art = pixelart.party_sprite_name(getattr(b.ref, "companion_id", None))
-            alive = b.is_alive
+            alive = self._shown_alive(("party", i), b)
             arcade.draw_ellipse_filled(x, y - size * 0.46, size * 0.7, size * 0.16, (0, 0, 0, 90))
             pose = self._pose(("party", i), frame) if alive else 0
             tex = pixelart.texture(art, pose, "left", self._weapon_of(b))
@@ -647,6 +654,38 @@ class CombatScene(BaseScene):
                 arcade.draw_polygon_filled(
                     [(x - 8, ty + 12), (x + 8, ty + 12), (x, ty)], (200, 230, 255)
                 )
+
+    def _draw_death(self, art: str, x: float, y: float, size: float, p: float) -> None:
+        """A foe's death: it blinks red, then crumbles to ash from the top down while
+        grey motes and embers drift up from the remains and the shadow fades."""
+        if p < DEATH_BLINK:
+            arcade.draw_ellipse_filled(x, y - size * 0.46, size * 0.7, size * 0.16, (0, 0, 0, 90))
+            if int(p / DEATH_BLINK * 6) % 2 == 0:
+                tex = pixelart.texture(art)
+                rect = arcade.LBWH(x - size / 2, y - size / 2, size, size)
+                arcade.draw_texture_rect(tex, rect, pixelated=True, color=Color(255, 90, 90, 255))
+            return
+        q = (p - DEATH_BLINK) / (1 - DEATH_BLINK)  # 0..1 through the crumble
+        shade = int(90 * (1 - q))
+        arcade.draw_ellipse_filled(x, y - size * 0.46, size * 0.7, size * 0.16, (0, 0, 0, shade))
+        frames_ = pixelart.dissolve_frames(art)
+        tex = frames_[min(len(frames_) - 1, int(q * len(frames_)))]
+        sink = q * size * 0.08
+        rect = arcade.LBWH(x - size / 2, y - size / 2 - sink, size, size)
+        arcade.draw_texture_rect(tex, rect, pixelated=True, alpha=int(255 * (1 - q * 0.35)))
+        for k in range(14):  # ash and embers lift off the crumbling edge
+            jx = jitter(k, 31)
+            born = jitter(k, 32) * 0.6  # when this mote leaves the body
+            if q < born:
+                continue
+            life = (q - born) / max(0.05, 1 - born)
+            mx = x - size * 0.4 + size * 0.8 * jx + math.sin(q * 9 + k) * 6
+            top = y + size / 2 - size * born * 0.9  # the edge was about here when it left
+            my = top + life * size * (0.4 + 0.5 * jitter(k, 33))
+            a = int(230 * (1 - life))
+            ember = k % 4 == 0
+            colour = (255, 140, 60, a) if ember else (150, 150, 160, a)
+            arcade.draw_circle_filled(mx, my, 2.5 if ember else 3.5, colour)
 
     def _draw_effects(self) -> None:
         """Slashes, bursts, heal sparkles, guard glyphs and floating numbers."""
@@ -822,7 +861,8 @@ class CombatScene(BaseScene):
             text = f"{b.name}   {hp}/{b.stats.max_hp}"
             if row.text != text:
                 row.text = text
-            row.color = DIM if not b.is_alive else TARGET if b.index == self.target else TEXT
+            standing = self._shown_alive(("foe", b.index), b)
+            row.color = DIM if not standing else TARGET if b.index == self.target else TEXT
             row.draw()
             if b.index == self.target and b.is_alive and self.mode != "done":
                 frame.draw_cursor(row.x - 12, row.y)

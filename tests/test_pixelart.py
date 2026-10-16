@@ -166,3 +166,24 @@ def test_every_item_has_an_icon():
     for name in icons:
         assert px.image(name).getpixel((0, 0))[3] == 0, name
     assert "icon_flask" not in px.names()
+
+
+def test_death_dissolve_crumbles_from_the_top_down():
+    base = px.render("ghoul")
+    early, late = px.dissolve(base, 0.25), px.dissolve(base, 0.8)
+
+    def alive(img):
+        return sum(1 for x in range(32) for y in range(32) if img.getpixel((x, y))[3])
+
+    assert alive(base) > alive(early) > alive(late) > 0
+    assert alive(px.dissolve(base, 1.0)) == 0
+    # the top rows go first: nothing left in the top quarter at 80 %
+    assert all(late.getpixel((x, y))[3] == 0 for x in range(32) for y in range(8))
+    # what remains has drained towards grey
+    px_late = [late.getpixel((x, y))[:3] for x in range(32) for y in range(32)
+               if late.getpixel((x, y))[3]]
+    spread = sum(max(c) - min(c) for c in px_late) / len(px_late)
+    px_base = [base.getpixel((x, y))[:3] for x in range(32) for y in range(32)
+               if base.getpixel((x, y))[3]]
+    assert spread < sum(max(c) - min(c) for c in px_base) / len(px_base)
+    assert px.dissolve(base, 0.5).tobytes() == px.dissolve(base, 0.5).tobytes()  # deterministic

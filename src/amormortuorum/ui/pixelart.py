@@ -2049,6 +2049,59 @@ def texture(
     return tex
 
 
+DISSOLVE_STEPS = 8
+
+
+def _hash(x: int, y: int, salt: int = 0) -> float:
+    """Stable per-pixel noise in [0, 1) (no random: deaths look the same every run)."""
+    h = (x * 374761393 + y * 668265263 + salt * 1442695041) & 0xFFFFFFFF
+    h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
+    return ((h ^ (h >> 16)) % 10007) / 10007.0
+
+
+def dissolve(img: Image.Image, progress: float) -> Image.Image:
+    """The sprite crumbling to ash: pixels vanish from the top down with a noisy
+    edge, and what remains drains to grey. ``progress`` runs 0 (whole) to 1
+    (gone)."""
+    size = img.size[0]
+    out = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    src = img.load()
+    dst = out.load()
+    for y in range(size):
+        yn = y / max(1, size - 1)  # 0 at the top
+        for x in range(size):
+            r, g, b, a = src[x, y]
+            if a == 0:
+                continue
+            survives = yn * 0.55 + _hash(x, y) * 0.45
+            if progress > survives:
+                continue
+            grey = (r * 30 + g * 59 + b * 11) // 100
+            k = min(1.0, progress * 1.4)
+            dst[x, y] = (
+                int(r + (grey + 20 - r) * k), int(g + (grey + 10 - g) * k),
+                int(b + (grey - b) * k), a,
+            )
+    return out
+
+
+_dissolve_cache: Dict[str, List[arcade.Texture]] = {}
+
+
+def dissolve_frames(name: str, steps: int = DISSOLVE_STEPS) -> List[arcade.Texture]:
+    """Cached textures of ``name`` crumbling away, from nearly whole to a last few motes."""
+    frames_ = _dissolve_cache.get(name)
+    if frames_ is None:
+        base = render(name)
+        frames_ = [
+            arcade.Texture(dissolve(base, (i + 1) / (steps + 1)),
+                           hash=f"pixelart:{name}:dissolve:{i}")
+            for i in range(steps)
+        ]
+        _dissolve_cache[name] = frames_
+    return frames_
+
+
 def frames(name: str, facing: str = "down") -> List[arcade.Texture]:
     """Both idle frames for ``name``."""
     return [texture(name, 0, facing), texture(name, 1, facing)]
@@ -2153,6 +2206,9 @@ __all__ = [
     "render",
     "texture",
     "frames",
+    "DISSOLVE_STEPS",
+    "dissolve",
+    "dissolve_frames",
     "sprite",
     "enemy_sprite_name",
     "party_sprite_name",
