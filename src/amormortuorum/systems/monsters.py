@@ -17,6 +17,12 @@ default, from the lead enemy's combat ``behavior``:
   ground when cornered. Catching one pays a gold ``bounty`` on top of the
   battle's normal rewards.
 
+Monsters also react to each other. A guard that rouses bellows and every idle
+hunter within ``CALL_RADIUS`` steps joins the chase; a hunter that first spots
+the party howls and its kin within ``HOWL_RADIUS`` steps follow. Battles and
+sprung traps make noise (``make_noise``): sleepers within earshot wake and
+idle hunters come to investigate.
+
 Walking into a monster, or being caught by one, starts a battle with the
 monster's formation. Slow monsters (lower SPD than the party leader) only move
 every other step while chasing or fleeing, so a quick party can outrun hunters
@@ -46,6 +52,10 @@ WAKE_DIST = 2             # Manhattan distance at which a visible sleeper wakes
 GUARD_RANGE = 4           # BFS steps within which a visible party rouses a guard
 GUARD_LEASH = 6           # BFS steps from its post a guard will chase before turning back
 GUARD_POST_DIST = 2       # guards spawn within this many steps of a chest, key or the stairs
+CALL_RADIUS = 8           # BFS steps a roused guard's bellow carries to idle hunters
+HOWL_RADIUS = 5           # BFS steps a hunter's howl carries when it first spots the party
+NOISE_RADIUS = 7          # BFS steps the din of a battle carries
+TRAP_NOISE_RADIUS = 4     # BFS steps a sprung trap's clatter carries
 CHASE_LIMIT = MONSTER_MEMORY + 14  # radius of the distance field chasers walk down
 NEIGHBOURS: Tuple[Pos, ...] = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
@@ -254,6 +264,47 @@ def _neighbours(pos: Pos) -> List[Pos]:
     return [(pos[0] + dx, pos[1] + dy) for dx, dy in NEIGHBOURS]
 
 
+def rally(
+    monsters: Iterable[Monster], fmap: FloorMap, caller: Monster, radius: int
+) -> List[Monster]:
+    """Idle, awake hunters within ``radius`` steps of ``caller`` join the chase."""
+    field = distance_field(fmap, caller.pos, radius)
+    joined: List[Monster] = []
+    for m in monsters:
+        if m is caller or m.kind != "hunter" or m.state != "wander" or m.cooldown > 0:
+            continue
+        if m.pos in field:
+            m.state, m.memory = "chase", MONSTER_MEMORY
+            joined.append(m)
+    return joined
+
+
+def make_noise(
+    monsters: Iterable[Monster], fmap: FloorMap, origin: Pos, radius: int = NOISE_RADIUS
+) -> List[Monster]:
+    """Something loud happened at ``origin``: wake sleepers and draw idle hunters.
+
+    Sleeping hunters wake straight into the chase, sleeping skittish groups wake
+    and start roaming, idle hunters come to investigate. Guards keep their posts
+    and dazed monsters stay dazed. Returns every monster whose state changed.
+    """
+    field = distance_field(fmap, origin, radius)
+    stirred: List[Monster] = []
+    for m in monsters:
+        if m.pos not in field or m.cooldown > 0 or m.kind == "guard":
+            continue
+        if m.asleep:
+            if m.kind == "hunter":
+                m.state, m.memory = "chase", MONSTER_MEMORY
+            else:
+                m.state = "wander"
+            stirred.append(m)
+        elif m.kind == "hunter" and m.state == "wander":
+            m.state, m.memory = "chase", MONSTER_MEMORY
+            stirred.append(m)
+    return stirred
+
+
 def step_monsters(
     monsters: List[Monster],
     fmap: FloorMap,
@@ -263,12 +314,15 @@ def step_monsters(
     *,
     step: int = 0,
     player_spd: int = 0,
+    log: Optional[List[Tuple[str, Monster, List[Monster]]]] = None,
 ) -> Optional[Monster]:
     """Advance every monster one turn. Returns the monster that caught the party, if any.
 
     ``visible`` is the party's current field of view: a monster standing in it
     sees the party too. ``step`` is the running step count on this floor and
     ``player_spd`` the leader's effective speed; both drive the slow-monster rule.
+    When ``log`` is given, every rally is appended to it as
+    ``("bellow" | "howl", caller, joiners)`` so the HUD can report it.
     """
     field: Dict[Pos, int] = {}
     post_fields: Dict[Pos, Dict[Pos, int]] = {}
@@ -298,9 +352,14 @@ def step_monsters(
             m.state = "flee" if m.kind == "skittish" else "chase"
             m.memory = MONSTER_MEMORY
         # Notice or forget the party
+        was_chasing = m.chasing
         if m.kind == "guard":
             if sees and player_field().get(m.pos, CHASE_LIMIT + 1) <= GUARD_RANGE:
                 m.state, m.memory = "chase", MONSTER_MEMORY
+                if not was_chasing:
+                    joined = rally(monsters, fmap, m, CALL_RADIUS)
+                    if joined and log is not None:
+                        log.append(("bellow", m, joined))
             elif m.chasing:
                 m.memory -= 1
                 if m.memory <= 0:
@@ -315,6 +374,10 @@ def step_monsters(
         else:
             if sees:
                 m.state, m.memory = "chase", MONSTER_MEMORY
+                if not was_chasing:
+                    joined = rally(monsters, fmap, m, HOWL_RADIUS)
+                    if joined and log is not None:
+                        log.append(("howl", m, joined))
             elif m.chasing:
                 m.memory -= 1
                 if m.memory <= 0:
@@ -403,6 +466,10 @@ __all__ = [
     "GUARD_RANGE",
     "GUARD_LEASH",
     "GUARD_POST_DIST",
+    "CALL_RADIUS",
+    "HOWL_RADIUS",
+    "NOISE_RADIUS",
+    "TRAP_NOISE_RADIUS",
     "KINDS",
     "KIND_FOR_BEHAVIOR",
     "Monster",
@@ -415,6 +482,8 @@ __all__ = [
     "maybe_respawn",
     "monster_at",
     "step_monsters",
+    "rally",
+    "make_noise",
     "remove_monster",
     "daze",
 ]

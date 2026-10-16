@@ -4,11 +4,14 @@ import pytest
 
 from amormortuorum.data import Formation, GameData
 from amormortuorum.systems.monsters import (
+    CALL_RADIUS,
     FLEE_COOLDOWN,
+    HOWL_RADIUS,
     GUARD_LEASH,
     GUARD_RANGE,
     KINDS,
     MONSTER_MEMORY,
+    NOISE_RADIUS,
     SLEEP_CHANCE,
     SPAWN_MIN_DIST,
     WAKE_DIST,
@@ -17,10 +20,12 @@ from amormortuorum.systems.monsters import (
     distance_field,
     guard_posts,
     kind_for,
+    make_noise,
     maybe_respawn,
     monster_at,
     monster_count,
     monster_rng,
+    rally,
     remove_monster,
     spawn_monsters,
     step_monsters,
@@ -295,3 +300,52 @@ def test_daze_sends_guards_home():
     g = _mon((12, 1), "guard", post=(10, 1), state="chase", memory=3)
     daze(g)
     assert g.state == "return" and g.cooldown == FLEE_COOLDOWN
+
+
+def test_noise_wakes_sleepers_in_earshot_and_draws_idle_hunters():
+    fmap = corridor(20)
+    near_sleeper = _mon((1 + NOISE_RADIUS, 1), "hunter", id=1, state="sleep")
+    far_sleeper = _mon((2 + NOISE_RADIUS, 1), "hunter", id=2, state="sleep")
+    skittish = _mon((4, 1), "skittish", id=3, state="sleep")
+    idle_hunter = _mon((3, 1), "hunter", id=4)
+    guard = _mon((5, 1), "guard", id=5, post=(5, 1))
+    dazed = _mon((6, 1), "hunter", id=6, cooldown=2)
+    monsters = [near_sleeper, far_sleeper, skittish, idle_hunter, guard, dazed]
+    stirred = make_noise(monsters, fmap, (1, 1))
+    assert set(m.id for m in stirred) == {1, 3, 4}
+    assert near_sleeper.chasing and near_sleeper.memory == MONSTER_MEMORY
+    assert far_sleeper.asleep
+    assert skittish.state == "wander"
+    assert idle_hunter.chasing
+    assert guard.state == "wander" and dazed.cooldown == 2
+    assert make_noise(monsters, fmap, (1, 1)) == []  # nothing left to stir
+
+
+def test_roused_guard_bellows_and_hunters_answer():
+    fmap = corridor(20)
+    guard = _mon((8, 1), "guard", id=1, post=(8, 1))
+    kin = _mon((8 + CALL_RADIUS, 1), "hunter", id=2)
+    deaf = _mon((9 + CALL_RADIUS, 1), "hunter", id=3)
+    sleeper = _mon((10, 1), "hunter", id=4, state="sleep")
+    visible = {(x, 1) for x in range(1, 10)}  # the party sees the guard, not the hunters
+    log = []
+    step_monsters([guard, kin, deaf, sleeper], fmap, (5, 1), visible, Random(0), log=log)
+    assert guard.chasing and kin.chasing and not deaf.chasing and sleeper.asleep
+    assert [(k, c.id, [j.id for j in js]) for k, c, js in log] == [("bellow", 1, [2])]
+    # Already chasing: no second bellow next step
+    log.clear()
+    step_monsters([guard, kin, deaf, sleeper], fmap, (5, 1), visible, Random(0), log=log)
+    assert log == []
+
+
+def test_hunter_howls_once_when_it_first_spots_the_party():
+    fmap = corridor(20)
+    scout = _mon((6, 1), "hunter", id=1)
+    pack = _mon((6 + HOWL_RADIUS, 1), "hunter", id=2)
+    far = _mon((7 + HOWL_RADIUS, 1), "hunter", id=3)
+    visible = {(x, 1) for x in range(1, 8)}  # the party only sees the scout
+    log = []
+    step_monsters([scout, pack, far], fmap, (1, 1), visible, Random(0), log=log)
+    assert scout.chasing and pack.chasing and not far.chasing
+    assert [(k, c.id) for k, c, _ in log] == [("howl", 1)]
+    assert rally([scout, pack, far], fmap, scout, HOWL_RADIUS) == []  # everyone near is busy

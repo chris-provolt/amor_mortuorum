@@ -73,3 +73,15 @@ def test_profile_listing_and_naming(tmp_path):
     assert SaveManager.list_profiles(tmp_path) == ["default", "profile2"]
     assert next_profile_name(["default", "profile2"]) == "profile3"
     assert next_profile_name([]) == "profile2"
+
+
+def test_every_tracked_stat_has_a_label_and_new_counters_unlock(data):
+    from amormortuorum.data import TRACKED_STATS
+    from amormortuorum.systems.stats import STAT_LABELS
+
+    assert set(TRACKED_STATS) == set(STAT_LABELS)
+    meta = MetaState()
+    bump(meta, "bounties", 10)
+    bump(meta, "ambushes", 9)
+    ids = {a.id for a in check_achievements(meta, data)}
+    assert "bounty_hunter" in ids and "silent_knife" not in ids

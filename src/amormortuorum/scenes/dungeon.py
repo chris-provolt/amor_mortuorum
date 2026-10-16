@@ -21,8 +21,11 @@ from ..systems.fov import Visibility
 from ..systems.hub import GraveyardHub
 from ..systems.loot import roll_chest, roll_chest_gold, roll_relic
 from ..systems.monsters import (
+    NOISE_RADIUS,
+    TRAP_NOISE_RADIUS,
     Monster,
     daze,
+    make_noise,
     maybe_respawn,
     monster_at,
     monster_rng,
@@ -240,7 +243,10 @@ class DungeonScene(BaseScene):
             if was_boss:
                 self._on_boss_defeated()
             if engaged is not None:
+                if engaged.asleep:
+                    self._stat("ambushes")
                 if engaged.bounty > 0:
+                    self._stat("bounties")
                     self.run.leader.add_gold(engaged.bounty)
                     self._stat("gold_earned", engaged.bounty)
                     self.hud.push(f"The {engaged.name} drops its hoard: +{engaged.bounty} gold.")
@@ -253,6 +259,8 @@ class DungeonScene(BaseScene):
                 self._refresh_monsters()
         elif battle.outcome is Outcome.DEFEAT:
             self._on_party_defeated()
+            return
+        self._make_noise(NOISE_RADIUS, "The din of battle carries. Something stirs.")
 
     # World building
 
@@ -330,12 +338,29 @@ class DungeonScene(BaseScene):
         for m in self._visible_monsters():
             arcade.draw_polygon_filled(monster_points(m), monster_color(m))
 
+    def _make_noise(self, radius: int, message: str) -> None:
+        """Wake and draw monsters within earshot of the party's tile."""
+        if self.fmap is None or not self.monsters:
+            return
+        stirred = make_noise(self.monsters, self.fmap, self.pos, radius)
+        if stirred:
+            self.hud.push(message)
+            self._refresh_monsters()
+
     def _step_monsters(self) -> None:
         """Monsters take their turn after the party's step; one may catch the party."""
+        log: list = []
         caught = step_monsters(
             self.monsters, self.fmap, self.pos, self.vis.visible, self._mon_rng,
             step=self._floor_steps, player_spd=self.run.leader.effective_spd(self.data),
+            log=log,
         )
+        for kind, caller, joined in log:
+            if kind == "bellow":
+                self.hud.push(f"The {caller.name} bellows. Something answers from the dark.")
+            else:
+                kin = "its kin take" if len(joined) > 1 else "another takes"
+                self.hud.push(f"The {caller.name} howls; {kin} up the hunt.")
         maybe_respawn(
             self.monsters, self.fmap, self.run.floor, self.pos, self.data, self._mon_rng,
             visible=self.vis.visible,
@@ -439,6 +464,7 @@ class DungeonScene(BaseScene):
             if not self.run.alive:
                 self._on_party_defeated(cause=f"a {trap.kind} trap")
                 return
+            self._make_noise(TRAP_NOISE_RADIUS, "The clatter echoes down the halls.")
         feature = self.fmap.feature_at(*self.pos)
         if feature == "chest":
             self._open_chest()

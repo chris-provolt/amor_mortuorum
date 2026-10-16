@@ -18,14 +18,14 @@ What works today, end to end:
 - **Fog of war and minimap**: shadowcast line of sight (walls and locked doors block), remembered tiles drawn dimmed, and a toggleable minimap (M) with icons for stairs, chests, portals, keys and sprung traps you have seen.
 - **Bosses**: mini-bosses guard the stairs on B20/40/60/80 (each drops a Relic of the Veil), and **The Oblivion Heart** waits on B99; beating it awards the final relic and ends the run in victory. Bosses enrage below half HP.
 - **Relics of the Veil**: the five non-boss relics turn up in chests (2% of chests on T1 up to 8% on T5), the collection screen lives on the title and in the Graveyard, and every relic grants a light passive (ATK/DEF/SPD, sight radius, gold or XP percent) that applies to every future run.
-- **Wandering monsters** roam each floor in plain sight, and each group behaves by its kind. **Hunters** (triangles) wander until they spot the party, then hunt them down corridors with grid pathfinding (slow ones only move every other step, so a quick party can outrun them). **Guards** (squares) stand watch beside a chest, key or the stairs, give chase only when the party comes close, and return to their post after a short pursuit. **Skittish** groups (diamonds) keep their distance and run when seen; corner one and it drops a gold bounty on top of the usual rewards. Some hunters and skittish groups start asleep and only wake when the party comes within two tiles in plain sight, so they can be slipped past or struck first. Bumping into one, or being caught, opens **turn-based combat**: Attack / Skill / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling. Fleeing dazes the monster for a few steps. Rare ambushes still lunge from the dark.
+- **Wandering monsters** roam each floor in plain sight, and each group behaves by its kind. **Hunters** (triangles) wander until they spot the party, then hunt them down corridors with grid pathfinding (slow ones only move every other step, so a quick party can outrun them). **Guards** (squares) stand watch beside a chest, key or the stairs, give chase only when the party comes close, and return to their post after a short pursuit. **Skittish** groups (diamonds) keep their distance and run when seen; corner one and it drops a gold bounty on top of the usual rewards. Some hunters and skittish groups start asleep and only wake when the party comes within two tiles in plain sight, so they can be slipped past or struck first. Monsters react to each other: a roused guard bellows and idle hunters within earshot join the chase, a hunter that spots you howls for its kin, and the din of a battle or a sprung trap wakes sleepers and draws hunters to investigate. Bumping into one, or being caught, opens **turn-based combat**: Attack / Skill / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling. Fleeing dazes the monster for a few steps. Rare ambushes still lunge from the dark.
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
 - **Skills**: six spells learned by level (`skills.json`) and cast for MP from the combat Skill menu: single-target, all-enemy, and healing. Resting and the Tonic of Clear Mind restore MP.
 - **Party of up to four**: recruit companions at the Graveyard for gold; they level with you, share the leader's bag and gold, carry their own equipment, act in SPD order, and every survivor earns full XP. Heals target the most wounded ally.
 - **Audio**: named sound hooks (menus, steps, chests, combat, level-ups, relics, bosses) and ambient loops for the Graveyard, dungeon and combat. Placeholder tones are synthesized with the standard library on first run; drop real `.wav` files into `resources/audio/` to replace them.
 - **Settings screen** (title menu and pause menu): fullscreen, music and SFX volume, VSync, a view of the key bindings, and Save to a per-user `settings.json` that the game loads automatically.
 - **Controller support**: any pyglet-recognised gamepad, hot-pluggable. D-pad or left stick moves, A confirms, B cancels, Y opens the bag, X toggles the map, Start pauses.
-- **Records and achievements**: lifetime counters (runs, deaths, floors, battles, chests, gold, steps) with fourteen data-driven achievements (`achievements.json`) announced on the HUD when unlocked.
+- **Records and achievements**: lifetime counters (runs, deaths, floors, battles, chests, gold, steps, bounties, sleepers slain) with sixteen data-driven achievements (`achievements.json`) announced on the HUD when unlocked.
 - **Profiles**: switch or create save profiles from the title menu; the choice is remembered in `settings.json` and `--profile` still overrides it.
 - **Save & Quit** from the pause menu: a one-shot mid-run save that resumes at the start of the current floor and is consumed on load.
 - Deterministic replays: the same `--seed` produces the same floors, chests and encounters.
@@ -177,7 +177,7 @@ src/amormortuorum/
 │   ├── entities.py        # Stats, Equipment, Inventory, Player, Enemy
 │   ├── combat.py          # Battle: actions, turn order, damage, outcome
 │   ├── encounters.py      # ambush rolls and formations
-│   ├── monsters.py        # roaming groups: hunters, guards, skittish; BFS chase, daze
+│   ├── monsters.py        # roaming groups: hunters, guards, skittish; chase, noise, rally
 │   ├── run.py             # Run state, death/resurrection, persistence bridge
 │   ├── progression.py     # XP curve, level-ups
 │   ├── fov.py             # shadowcasting field of view, explored memory
@@ -321,7 +321,7 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 Design notes for each epic live in `docs/epics/`. Every epic now has a first implementation; what remains is polish:
 1. Hand playtesting against the simulator's numbers (see Balance Model); the auto-policy only flees when the maths says a fight is lost and never misjudges a potion, so real runs still end a little earlier.
 2. Real art and audio assets (sprites, tiles, SFX, music) replacing the placeholders.
-3. Monster ecology: packs that coordinate, noise that wakes sleepers, guards that call for help; the three map behaviours (hunter, guard, skittish) are the base to build on.
+3. Deeper monster ecology on top of the current kinds, calls and noise: flanking packs, monsters that use doors, and ranged harassment on the map.
 
 ---
 

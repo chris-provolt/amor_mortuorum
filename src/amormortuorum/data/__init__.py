@@ -159,6 +159,7 @@ class CompanionDef:
 TRACKED_STATS: Tuple[str, ...] = (
     "runs_started", "runs_won", "deaths", "revives", "deepest_floor", "battles_won",
     "enemies_slain", "bosses_slain", "chests_opened", "gold_earned", "steps", "relics",
+    "bounties", "ambushes",
 )
 
 
