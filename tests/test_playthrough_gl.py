@@ -69,11 +69,23 @@ class Driver:
         self.frame(1.2)
         assert self.scene_name() == "MainMenuScene"
 
-    def fight_until_done(self, max_rounds: int = 60):
-        """Attack every round until the combat scene pops."""
-        for _ in range(max_rounds):
+    def settle(self, limit: int = 200):
+        """Let a combat round's animations finish."""
+        for _ in range(limit):
+            if getattr(self.scene, "mode", "") != "anim":
+                return
+            self.frame(0.25)
+
+    def fight_until_done(self, max_steps: int = 600, *, max_rounds: int = 0):
+        """Attack every round until the combat scene pops, letting rounds play out."""
+        if max_rounds:
+            max_steps = max(max_steps, max_rounds * 10)
+        for _ in range(max_steps):
             if self.scene_name() != "CombatScene":
                 return
+            if getattr(self.scene, "mode", "") == "anim":
+                self.frame(0.25)  # let the round's animations run
+                continue
             self.press("enter")  # Attack (first menu item), or confirm on the result
         raise AssertionError("combat did not finish")
 
@@ -579,6 +591,7 @@ def test_skill_menu_casts_ember(app):
     assert d.scene.mode == "skill"
     assert "Ember" in d.scene.menu.current.label
     d.press("enter")  # cast
+    d.settle()
     assert run.leader.stats.mp == mp - data.skill("ember").mp
     assert any("casts Ember" in e.text for e in d.scene._log)
     assert foe.stats.hp <= 0 or battle.outcome is Outcome.ONGOING

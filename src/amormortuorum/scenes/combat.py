@@ -33,9 +33,36 @@ ENEMY_SCALE = 4.0       # 32 px art drawn at 128 px on the stage
 PARTY_SCALE = 3.0
 IDLE_FRAME_TIME = 0.5
 HIT_SHAKE_TIME = 0.3    # seconds a struck battler shudders
+LUNGE_PX = 44           # how far an attacker lunges towards its target
+IMPACT_AT = 0.45        # share of a strike's duration before the blow lands
+DEATH_TIME = 0.55       # seconds a fallen foe takes to dissolve
+NUMBER_TIME = 0.8       # seconds a damage number floats
+# Seconds each log event takes to play on the battle screen
+EVENT_TIME = {
+    "round": 0.3, "slash": 0.7, "spell": 0.75, "cast": 0.45, "heal": 0.65,
+    "item": 0.6, "guard": 0.4, "death": DEATH_TIME, "rage": 0.45, "flee": 0.6,
+    "flee_fail": 0.45, "victory": 0.35, "defeat": 0.35, "miss": 0.35, "none": 0.35,
+}
+FX_SPELL = (190, 120, 255)
+FX_HEAL = (120, 240, 150)
+FX_ITEM = (255, 220, 120)
+FX_RAGE = (255, 90, 70)
+FX_SLASH = (255, 255, 255)
+NUM_DAMAGE = (255, 240, 230)
+NUM_PARTY = (255, 110, 110)
+NUM_HEAL = (150, 255, 170)
 MP_FRONT = (90, 120, 220)
 FLASH_TIME = 0.35   # seconds the hit flash takes to fade
 FLASH_ALPHA = 120   # peak alpha of the flash overlay
+
+
+def lunge_offset(progress: float, reach: float = LUNGE_PX) -> float:
+    """Distance an attacker has lunged ``progress`` (0..1) into a strike: a quick
+    dash in, the blow at the apex, and a slower return."""
+    p = max(0.0, min(1.0, progress))
+    if p < IMPACT_AT:
+        return reach * math.sin(math.pi / 2 * p / IMPACT_AT)
+    return reach * math.cos(math.pi / 2 * (p - IMPACT_AT) / (1 - IMPACT_AT))
 
 
 def flash_alpha(remaining: float, total: float = FLASH_TIME, peak: int = FLASH_ALPHA) -> int:
@@ -78,6 +105,15 @@ class CombatScene(BaseScene):
         self._anim = 0.0
         self._hits: Dict[Tuple[str, int], float] = {}  # (side, index) -> shake time left
         self._flipped: Dict[Tuple[str, int], arcade.Texture] = {}
+        # Animation queue: log events play one at a time
+        self._queue: Deque[LogEvent] = deque()
+        self._current: Optional[LogEvent] = None
+        self._cur_t = 0.0
+        self._cur_dur = 0.0
+        self._impact_done = False
+        self._fx: List[dict] = []            # transient effects (slash, burst, glyph)
+        self._numbers: List[dict] = []       # floating damage/heal numbers
+        self._dying: Dict[Tuple[str, int], float] = {}  # (side, idx) -> fade progress
         self._layout: Dict[str, Tuple[float, float, float, float]] = {}
 
     # Lifecycle
@@ -237,22 +273,85 @@ class CombatScene(BaseScene):
                 return
 
     def _submit(self, action: Action) -> None:
-        party_hp = [max(0, p.hp) for p in self.battle.party]
-        foe_hp = [max(0, f.stats.hp) for f in self.battle.foes]
         try:
             events = self.battle.submit(action)
         except AmorError as e:
             self._log.append(LogEvent(str(e), "info"))
             return
-        self._log.extend(events)
-        self._sound_for(events)
-        for i, (before, p) in enumerate(zip(party_hp, self.battle.party)):
-            if max(0, p.hp) < before:
-                self._hits[("party", i)] = HIT_SHAKE_TIME
-                self._flash = FLASH_TIME
-        for i, (before, f) in enumerate(zip(foe_hp, self.battle.foes)):
-            if max(0, f.stats.hp) < before:
-                self._hits[("foe", i)] = HIT_SHAKE_TIME
+        if events:
+            # The round resolved: play it out before anyone acts again
+            self._queue.extend(events)
+            self.mode = "anim"
+            self.menu.set_items([], keep_selection=False)
+            return
+        self._pick_next_actor()
+        self._refresh_target()
+        self._show_command_menu()
+
+    # Animation queue
+
+    def _spot(self, side: Tuple[str, int]) -> Tuple[float, float]:
+        kind, idx = side
+        if kind == "foe":
+            return self._enemy_spot(idx, len(self.battle.foes))
+        return self._party_spot(idx, len(self.battle.players))
+
+    def _add_fx(self, kind: str, side: Tuple[str, int], color, dur: float = 0.45) -> None:
+        x, y = self._spot(side)
+        self._fx.append({"kind": kind, "x": x, "y": y, "t": 0.0, "dur": dur, "color": color})
+
+    def _add_number(self, side: Tuple[str, int], text: str, color) -> None:
+        x, y = self._spot(side)
+        label = arcade.Text(text, x, y + 30, color=color, font_size=fs(20), bold=True,
+                            anchor_x="center", anchor_y="center")
+        self._numbers.append({"text": label, "y": y + 30, "t": 0.0})
+
+    def _start_event(self, ev: LogEvent) -> None:
+        """Begin playing one log event: show its line and set up its visuals."""
+        self._current = ev
+        self._cur_t = 0.0
+        self._cur_dur = EVENT_TIME.get(ev.effect, EVENT_TIME["none"])
+        self._impact_done = False
+        self._log.append(ev)
+        audio = self.app.audio
+        if ev.effect == "cast" and ev.actor is not None:
+            self._add_fx("burst", ev.actor, FX_SPELL, 0.45)
+        elif ev.effect == "heal":
+            audio.play("heal")
+            if ev.target is not None:
+                self._add_fx("heal", ev.target, FX_HEAL, 0.6)
+                self._add_number(ev.target, f"+{ev.amount}", NUM_HEAL)
+        elif ev.effect == "guard" and ev.actor is not None:
+            self._add_fx("guard", ev.actor, FX_ITEM, 0.4)
+        elif ev.effect == "death" and ev.target is not None:
+            self._dying[ev.target] = 0.0
+        elif ev.effect == "rage" and ev.target is not None:
+            self._add_fx("burst", ev.target, FX_RAGE, 0.45)
+            self._hits[ev.target] = HIT_SHAKE_TIME
+        elif ev.effect == "flee":
+            audio.play("flee")
+        elif ev.effect == "victory":
+            audio.play("victory")
+        elif ev.effect == "defeat":
+            audio.play("defeat")
+
+    def _impact(self, ev: LogEvent) -> None:
+        """The blow lands: shake and flash the target, show the number and effect."""
+        self._impact_done = True
+        if ev.target is None:
+            return
+        self._hits[ev.target] = HIT_SHAKE_TIME
+        if ev.target[0] == "party":
+            self._flash = FLASH_TIME
+        self.app.audio.play("hit")
+        color = NUM_PARTY if ev.target[0] == "party" else NUM_DAMAGE
+        self._add_number(ev.target, str(ev.amount), color)
+        if ev.effect == "slash":
+            self._add_fx("slash", ev.target, FX_SLASH, 0.3)
+        else:
+            self._add_fx("burst", ev.target, FX_SPELL if ev.kind == "item" else FX_ITEM, 0.5)
+
+    def _finish_queue(self) -> None:
         if self.battle.outcome is not Outcome.ONGOING:
             self.mode = "done"
             self.menu.set_items([], keep_selection=False)
@@ -261,19 +360,35 @@ class CombatScene(BaseScene):
         self._refresh_target()
         self._show_command_menu()
 
-    def _sound_for(self, events) -> None:
-        audio = self.app.audio
-        kinds = {e.kind for e in events}
-        if self.battle.outcome is Outcome.VICTORY:
-            audio.play("victory")
-        elif self.battle.outcome is Outcome.DEFEAT:
-            audio.play("defeat")
-        elif self.battle.outcome is Outcome.FLED:
-            audio.play("flee")
-        elif "attack" in kinds or "item" in kinds:
-            audio.play("hit")
-        if "heal" in kinds:
-            audio.play("heal")
+    def _advance_queue(self, delta_time: float) -> None:
+        if self._current is None:
+            if not self._queue:
+                if self.mode == "anim":
+                    self._finish_queue()
+                return
+            self._start_event(self._queue.popleft())
+        ev = self._current
+        self._cur_t += delta_time
+        if (ev.effect in ("slash", "spell") and not self._impact_done
+                and self._cur_t >= self._cur_dur * IMPACT_AT):
+            self._impact(ev)
+        if self._cur_t >= self._cur_dur:
+            if ev.effect in ("slash", "spell") and not self._impact_done:
+                self._impact(ev)
+            self._current = None
+
+    def skip_animation(self) -> None:
+        """Fast-forward the event being played (confirm during a round)."""
+        if self._current is not None:
+            self._cur_t = self._cur_dur
+
+    def _lunge(self, side: Tuple[str, int]) -> float:
+        """Horizontal offset of a battler mid-strike (foes lunge right, the party left)."""
+        ev = self._current
+        if ev is None or ev.effect != "slash" or ev.actor != side or self._cur_dur <= 0:
+            return 0.0
+        direction = 1.0 if side[0] == "foe" else -1.0
+        return direction * lunge_offset(self._cur_t / self._cur_dur)
 
     def _attack(self) -> None:
         self._refresh_target()
@@ -321,6 +436,16 @@ class CombatScene(BaseScene):
             self._hits[key] -= delta_time
             if self._hits[key] <= 0:
                 del self._hits[key]
+        if self.mode == "anim":
+            self._advance_queue(delta_time)
+        for fx in self._fx:
+            fx["t"] += delta_time
+        self._fx = [fx for fx in self._fx if fx["t"] < fx["dur"]]
+        for num in self._numbers:
+            num["t"] += delta_time
+        self._numbers = [n for n in self._numbers if n["t"] < NUMBER_TIME]
+        for key in list(self._dying):
+            self._dying[key] = min(1.0, self._dying[key] + delta_time / DEATH_TIME)
 
     def _shake(self, key: Tuple[str, int]) -> float:
         left = self._hits.get(key, 0.0)
@@ -369,16 +494,28 @@ class CombatScene(BaseScene):
         frame = int(self._anim / IDLE_FRAME_TIME) % 2
         foes = self.battle.foes
         for i, b in enumerate(foes):
-            if not b.is_alive:
+            dying = self._dying.get(("foe", i))
+            if not b.is_alive and (dying is None or dying >= 1.0):
                 continue
             x, y = self._enemy_spot(i, len(foes))
-            x += self._shake(("foe", i))
+            x += self._shake(("foe", i)) + self._lunge(("foe", i))
             size = pixelart.RENDER_PX * ENEMY_SCALE
-            arcade.draw_ellipse_filled(x, y - size * 0.46, size * 0.7, size * 0.16, (0, 0, 0, 90))
+            alpha = 255
+            if dying is not None and dying < 1.0:
+                alpha = int(255 * (1 - dying))
+                size *= 1 - 0.3 * dying
+            arcade.draw_ellipse_filled(
+                x, y - size * 0.46, size * 0.7, size * 0.16, (0, 0, 0, 90 * alpha // 255)
+            )
             tex = pixelart.texture(pixelart.enemy_sprite_name(b.ref.def_id), frame)
             rect = arcade.LBWH(x - size / 2, y - size / 2, size, size)
-            arcade.draw_texture_rect(tex, rect, pixelated=True)
-            if b.index == self.target and self.mode != "done":
+            if dying is not None and dying < 1.0:
+                arcade.draw_texture_rect(
+                    tex, rect, pixelated=True, alpha=alpha, color=Color(255, 120, 120, 255)
+                )
+            else:
+                arcade.draw_texture_rect(tex, rect, pixelated=True)
+            if b.index == self.target and self.mode not in ("done", "anim") and b.is_alive:
                 bob = math.sin(self._anim * 6) * 4
                 ty = y + size / 2 + 10 + bob
                 arcade.draw_polygon_filled(
@@ -387,7 +524,7 @@ class CombatScene(BaseScene):
         players = self.battle.players
         for i, b in enumerate(players):
             x, y = self._party_spot(i, len(players))
-            x += self._shake(("party", i))
+            x += self._shake(("party", i)) + self._lunge(("party", i))
             size = pixelart.RENDER_PX * PARTY_SCALE
             art = pixelart.party_sprite_name(getattr(b.ref, "companion_id", None))
             alive = b.is_alive
@@ -400,12 +537,58 @@ class CombatScene(BaseScene):
                 arcade.draw_texture_rect(
                     tex, rect, pixelated=True, angle=90, color=Color(120, 120, 140, 255), alpha=180
                 )
-            if b.index == self.actor and self.mode not in ("done",) and alive:
+            if b.index == self.actor and self.mode not in ("done", "anim") and alive:
                 bob = math.sin(self._anim * 6) * 4
                 ty = y + size / 2 + 8 + bob
                 arcade.draw_polygon_filled(
                     [(x - 8, ty + 12), (x + 8, ty + 12), (x, ty)], (200, 230, 255)
                 )
+
+    def _draw_effects(self) -> None:
+        """Slashes, bursts, heal sparkles, guard glyphs and floating numbers."""
+        for fx in self._fx:
+            p = fx["t"] / fx["dur"]
+            x, y = fx["x"], fx["y"]
+            a = int(255 * (1 - p))
+            color = (*fx["color"], a)
+            if fx["kind"] == "slash":
+                for k in range(3):
+                    off = (k - 1) * 14
+                    sweep = p * 70
+                    arcade.draw_line(
+                        x - 40 + sweep + off, y + 40 - off, x - 10 + sweep + off, y - 30 - off,
+                        color, 4 - k,
+                    )
+            elif fx["kind"] == "burst":
+                r = 12 + 60 * p
+                arcade.draw_circle_outline(x, y, r, color, 3)
+                arcade.draw_circle_outline(x, y, r * 0.6, color, 2)
+                for k in range(6):
+                    ang = k * math.pi / 3 + p * 2
+                    arcade.draw_circle_filled(
+                        x + math.cos(ang) * r, y + math.sin(ang) * r, 3, color
+                    )
+            elif fx["kind"] == "heal":
+                for k in range(7):
+                    ang = k * 0.9
+                    sx = x + math.cos(ang) * 28
+                    sy = y - 30 + (p * 80 + k * 9) % 80
+                    arcade.draw_circle_filled(sx, sy, 3, color)
+                    arcade.draw_line(sx - 5, sy, sx + 5, sy, color, 1)
+                    arcade.draw_line(sx, sy - 5, sx, sy + 5, color, 1)
+            elif fx["kind"] == "guard":
+                top = y + 56 + 6 * math.sin(p * math.pi)
+                shield = [(x - 14, top), (x + 14, top), (x + 14, top - 16),
+                          (x, top - 30), (x - 14, top - 16)]
+                arcade.draw_polygon_filled(shield, (60, 80, 160, a))
+                arcade.draw_polygon_outline(shield, color, 2)
+        for num in self._numbers:
+            p = num["t"] / NUMBER_TIME
+            label = num["text"]
+            label.y = num["y"] + 34 * p
+            r, g, b = label.color[:3]
+            label.color = (r, g, b, int(255 * (1 - p * p)))
+            label.draw()
 
     def draw(self):
         w, h = self.app.width, self.app.height
@@ -413,6 +596,7 @@ class CombatScene(BaseScene):
             self.on_resize(w, h)
         self._draw_stage()
         self._draw_battlers()
+        self._draw_effects()
         alpha = flash_alpha(self._flash) if self.app.state.settings.video.screen_flash else 0
         if alpha > 0:
             arcade.draw_lbwh_rectangle_filled(0, 0, w, h, (*FLASH, alpha))
@@ -470,12 +654,14 @@ class CombatScene(BaseScene):
                 Outcome.DEFEAT: "The party has fallen. Press Enter.",
                 Outcome.FLED: "Escaped. Press Enter to continue.",
             }.get(self.battle.outcome, "")
+        elif self.mode == "anim":
+            prompt = "Enter skips"
         else:
             prompt = f"Round {self.battle.round_number}: choose an action"
         if self._prompt.text != prompt:
             self._prompt.text = prompt
         self._prompt.draw()
-        if self._view is not None and self.mode != "done":
+        if self._view is not None and self.mode not in ("done", "anim"):
             self._view.draw()
 
     # Input
@@ -486,6 +672,10 @@ class CombatScene(BaseScene):
         if self.mode == "done":
             if "confirm" in actions:
                 self._finish()
+            return True
+        if self.mode == "anim":
+            if "confirm" in actions or "cancel" in actions:
+                self.skip_animation()
             return True
         if "move_left" in actions:
             self._cycle_target(-1)
