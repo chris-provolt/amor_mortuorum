@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Tuple
 import arcade
 from PIL import Image, ImageDraw
 
-PX = 32
+PX = 64
 RGBA = Tuple[int, int, int, int]
 RGB = Tuple[int, int, int]
 
@@ -131,44 +131,70 @@ def _speckle(img: Image.Image, base: RGB, seed: int, amount: float = 0.05, stren
                         max(0, min(255, b + d)), a)
 
 
+def _darken(img: Image.Image, x: int, y: int, amount: int) -> None:
+    px = img.load()
+    if 0 <= x < PX and 0 <= y < PX:
+        r, g, b, a = px[x, y]
+        px[x, y] = (max(0, r - amount), max(0, g - amount), max(0, b - amount), a)
+
+
 # --- Floors ------------------------------------------------------------------
 
 def _flagstones(style: Dict[str, RGB], variant: int) -> Image.Image:
+    """Three courses of flagstones with two-pixel grout, a lit top-left edge, a
+    shadowed bottom-right edge, per-stone tone and the odd crack or chip."""
     img = Image.new("RGBA", (PX, PX), _rgba(style["floor"]))
     d = ImageDraw.Draw(img)
     grout = _rgba(style["grout"])
     hi = _rgba(style["floor_hi"])
-    # Two rows of stones; the second row is offset so joints do not line up
-    rows = ((0, 15), (16, 31))
-    for ri, (top, bottom) in enumerate(rows):
-        offset = (variant * 5 + ri * 11) % 12
-        joints = sorted({0, (offset + 13) % PX, (offset + 24) % PX})
-        d.line([(0, bottom), (PX - 1, bottom)], fill=grout)
-        for jx in joints:
-            d.line([(jx, top), (jx, bottom)], fill=grout)
-        # Highlight along the top and left edge of every stone
+    lo = _rgba(shift(style["floor"], -0.08))
+    courses = ((0, 21), (22, 42), (43, PX - 1))
+    for ci, (top, bottom) in enumerate(courses):
+        offset = (variant * 9 + ci * 23) % 26
+        joints = sorted({0, (offset + 19) % PX, (offset + 41) % PX})
         edges = joints + [PX]
         for a, b in zip(edges, edges[1:]):
-            if b - a < 3:
+            if b - a < 4:
                 continue
-            d.line([(a + 1, top), (b - 1, top)], fill=hi)
-            d.line([(a + 1, top), (a + 1, bottom - 1)], fill=hi)
-    _speckle(img, style["floor"], seed=100 + variant)
+            tone = shift(style["floor"], (noise(a, ci, 50 + variant) - 0.5) * 0.10)
+            d.rectangle([a, top, b - 1, bottom], fill=_rgba(tone))
+            # lit edge top/left, shadow edge bottom/right
+            d.line([(a + 2, top + 2), (b - 3, top + 2)], fill=hi)
+            d.line([(a + 2, top + 2), (a + 2, bottom - 2)], fill=hi)
+            d.line([(a + 2, bottom - 2), (b - 3, bottom - 2)], fill=lo)
+            d.line([(b - 3, top + 2), (b - 3, bottom - 2)], fill=lo)
+        # grout: two pixels wide, darker inner line
+        d.rectangle([0, bottom - 1, PX - 1, bottom], fill=grout)
+        for jx in joints:
+            d.rectangle([jx, top, jx + 1, bottom], fill=grout)
+    _speckle(img, style["floor"], seed=100 + variant, amount=0.04, strength=6)
     if variant % 4 == 3:  # a crack across one stone
-        pts = [(4, 20), (9, 24), (13, 23), (17, 27)]
-        d.line(pts, fill=grout)
+        pts = [(8, 40), (14, 46), (19, 45), (26, 52), (31, 54)]
+        d.line(pts, fill=grout, width=1)
+        d.line([(p[0] + 1, p[1]) for p in pts], fill=hi, width=1)
+    if variant % 4 == 1:  # a chipped corner
+        d.polygon([(44, 22), (52, 22), (44, 30)], fill=grout)
     return img
 
 
 def _cavern_floor(style: Dict[str, RGB], variant: int) -> Image.Image:
+    """Packed earth: heavy grain, darker blotches, pebbles with a lit side."""
     img = Image.new("RGBA", (PX, PX), _rgba(style["floor"]))
-    _speckle(img, style["floor"], seed=200 + variant, amount=0.12, strength=10)
+    _speckle(img, style["floor"], seed=200 + variant, amount=0.10, strength=9)
     d = ImageDraw.Draw(img)
-    for i in range(3 + variant % 3):  # pebbles
+    for i in range(2 + variant % 2):  # dark blotches
+        cx, cy = int(noise(i, variant, 33) * 48) + 8, int(noise(variant, i, 34) * 48) + 8
+        r = 6 + int(noise(i, variant, 35) * 8)
+        d.ellipse([cx - r, cy - r // 2, cx + r, cy + r // 2],
+                  fill=_rgba(shift(style["floor"], -0.06), 255))
+    for i in range(4 + variant % 3):  # pebbles
         n = noise(i, variant, 31)
-        x, y = int(n * 28) + 2, int(noise(variant, i, 32) * 28) + 2
-        d.ellipse([x - 1, y - 1, x + 1, y], fill=_rgba(style["grout"]))
-        d.point((x, y - 1), fill=_rgba(style["floor_hi"]))
+        x, y = int(n * 56) + 4, int(noise(variant, i, 32) * 56) + 4
+        r = 2 + int(noise(i, variant, 36) * 2)
+        d.ellipse([x - r, y - r + 1, x + r, y + r], fill=_rgba(style["grout"]))
+        d.ellipse([x - r, y - r, x + r, y + r - 1], fill=_rgba(shift(style["floor"], -0.04)))
+        d.point((x - 1, y - r + 1), fill=_rgba(style["floor_hi"]))
+        d.point((x, y - r + 1), fill=_rgba(style["floor_hi"]))
     return img
 
 
@@ -177,30 +203,39 @@ def _decal(img: Image.Image, kind: int, style: Dict[str, RGB]) -> None:
     d = ImageDraw.Draw(img)
     bone = (214, 208, 190, 255)
     bone_lo = (160, 154, 140, 255)
+    dark = (30, 26, 36, 255)
     if kind == 0:  # crossed bones
-        d.line([(9, 22), (22, 11)], fill=bone, width=2)
-        d.line([(9, 11), (22, 22)], fill=bone, width=2)
-        for x, y in ((8, 10), (23, 10), (8, 23), (23, 23)):
-            d.ellipse([x - 1, y - 1, x + 1, y + 1], fill=bone_lo)
+        d.line([(18, 44), (44, 22)], fill=bone, width=3)
+        d.line([(18, 22), (44, 44)], fill=bone, width=3)
+        for x, y in ((16, 20), (46, 20), (16, 46), (46, 46)):
+            d.ellipse([x - 3, y - 3, x + 3, y + 3], fill=bone_lo)
+            d.ellipse([x - 2, y - 3, x + 1, y], fill=bone)
     elif kind == 1:  # skull
-        d.ellipse([12, 11, 20, 19], fill=bone)
-        d.rectangle([14, 18, 18, 21], fill=bone_lo)
-        d.point((14, 14), fill=(30, 26, 36, 255))
-        d.point((18, 14), fill=(30, 26, 36, 255))
+        d.ellipse([22, 20, 42, 40], fill=bone)
+        d.rectangle([27, 38, 37, 44], fill=bone_lo)
+        for x in (29, 32, 35):
+            d.line([(x, 39), (x, 43)], fill=dark)
+        d.ellipse([26, 27, 30, 31], fill=dark)
+        d.ellipse([34, 27, 38, 31], fill=dark)
+        d.polygon([(32, 33), (30, 36), (34, 36)], fill=bone_lo)
+        d.arc([22, 20, 42, 40], 200, 340, fill=(236, 232, 220, 255))
     elif kind == 2:  # moss
-        moss = (84, 112, 60, 200)
-        for cx, cy, r in ((10, 20, 4), (15, 23, 3), (20, 19, 3), (13, 15, 2)):
+        moss = (84, 112, 60, 210)
+        moss_hi = (112, 142, 80, 210)
+        for cx, cy, r in ((20, 40, 8), (30, 46, 6), (40, 38, 6), (26, 30, 4), (44, 46, 3)):
             d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=moss)
+            d.ellipse([cx - r + 1, cy - r + 1, cx, cy], fill=moss_hi)
     else:  # dark stain
         stain = _rgba(shift(style["floor"], -0.18, 0.1), 220)
-        d.ellipse([8, 12, 24, 24], fill=stain)
-        d.ellipse([14, 8, 22, 16], fill=stain)
+        d.ellipse([16, 24, 48, 48], fill=stain)
+        d.ellipse([28, 16, 44, 32], fill=stain)
+        d.ellipse([12, 36, 24, 46], fill=stain)
 
 
 def _shadow_bands(img: Image.Image, top: bool, left: bool) -> None:
     """Ambient occlusion where a wall stands above (screen-up) or to the left."""
     px = img.load()
-    depth = 7
+    depth = 14
     for i in range(depth):
         a = int(110 * (1 - i / depth) ** 1.4)
         if top:
@@ -234,19 +269,24 @@ def _wall_top(style: Dict[str, RGB], rims: Tuple[bool, bool, bool, bool], seed: 
     d = ImageDraw.Draw(img)
     rim = _rgba(style["rim"])
     rim_lo = _rgba(style["rim_lo"])
+    top_hi = _rgba(style["wall_top_hi"])
     up, right, down, left = rims
     if up:
-        d.line([(0, 0), (PX - 1, 0)], fill=rim)
-        d.line([(0, 1), (PX - 1, 1)], fill=rim_lo)
+        d.rectangle([0, 0, PX - 1, 1], fill=rim)
+        d.rectangle([0, 2, PX - 1, 3], fill=rim_lo)
     if left:
-        d.line([(0, 0), (0, PX - 1)], fill=rim)
-        d.line([(1, 0), (1, PX - 1)], fill=rim_lo)
+        d.rectangle([0, 0, 1, PX - 1], fill=rim)
+        d.rectangle([2, 0, 3, PX - 1], fill=rim_lo)
     if right:
-        d.line([(PX - 1, 0), (PX - 1, PX - 1)], fill=rim_lo)
-        d.line([(PX - 2, 0), (PX - 2, PX - 1)], fill=_rgba(style["wall_top_hi"]))
+        d.rectangle([PX - 2, 0, PX - 1, PX - 1], fill=rim_lo)
+        d.rectangle([PX - 4, 0, PX - 3, PX - 1], fill=top_hi)
     if down:
-        d.line([(0, PX - 1), (PX - 1, PX - 1)], fill=rim_lo)
-        d.line([(0, PX - 2), (PX - 1, PX - 2)], fill=_rgba(style["wall_top_hi"]))
+        d.rectangle([0, PX - 2, PX - 1, PX - 1], fill=rim_lo)
+        d.rectangle([0, PX - 4, PX - 1, PX - 3], fill=top_hi)
+    # faint paving lines across the top so it is not a flat slab
+    for k in range(2):
+        y = 20 + k * 22 + (seed * 5) % 6
+        d.line([(4, y), (PX - 5, y)], fill=_rgba(shift(style["wall_top"], -0.05)))
     return img
 
 
@@ -254,25 +294,29 @@ def _wall_face(style: Dict[str, RGB], seed: int, cavern: bool) -> Image.Image:
     """A wall seen from the front: a lit cap, bricks (or rock strata) and a dark foot."""
     img = Image.new("RGBA", (PX, PX), _rgba(style["mortar"]))
     d = ImageDraw.Draw(img)
-    cap = 4
+    cap = 8
     d.rectangle([0, 0, PX - 1, cap - 1], fill=_rgba(style["rim_lo"]))
-    d.line([(0, 0), (PX - 1, 0)], fill=_rgba(style["rim"]))
+    d.rectangle([0, 0, PX - 1, 1], fill=_rgba(style["rim"]))
+    d.line([(0, cap - 1), (PX - 1, cap - 1)], fill=_rgba(shift(style["rim_lo"], -0.1)))
     if cavern:
         y = cap
         band = 0
         while y < PX:
-            h = 5 + int(noise(band, seed, 41) * 4)
+            h = 10 + int(noise(band, seed, 41) * 8)
             tone = shift(style["brick"], (noise(band, seed, 42) - 0.5) * 0.16)
             d.rectangle([0, y, PX - 1, min(PX - 1, y + h - 1)], fill=_rgba(tone))
-            d.line([(0, y), (PX - 1, y)], fill=_rgba(shift(tone, 0.08)))
+            d.rectangle([0, y, PX - 1, y + 1], fill=_rgba(shift(tone, 0.08)))
             # a wavy crack between strata
             for x in range(PX):
-                if noise(x, band, seed + 43) < 0.25:
-                    d.point((x, min(PX - 1, y + h - 1)), fill=_rgba(style["mortar"]))
+                wob = int(noise(x // 3, band, seed + 43) * 3)
+                yy = min(PX - 1, y + h - 1 - wob)
+                d.point((x, yy), fill=_rgba(style["mortar"]))
+                if noise(x, band, seed + 44) < 0.3:
+                    d.point((x, yy - 1), fill=_rgba(shift(tone, -0.08)))
             y += h
             band += 1
     else:
-        brick_h, brick_w = 7, 16
+        brick_h, brick_w = 14, 32
         row = 0
         y = cap
         while y < PX:
@@ -283,19 +327,29 @@ def _wall_face(style: Dict[str, RGB], seed: int, cavern: bool) -> Image.Image:
                 tone = shift(style["brick"], (noise(col, row, seed) - 0.5) * 0.18)
                 depth_fade = -0.10 * (y - cap) / (PX - cap)  # lower bricks sit in shadow
                 tone = shift(tone, depth_fade)
-                x0, x1 = max(0, x), min(PX - 1, x + brick_w - 2)
-                y1 = min(PX - 1, y + brick_h - 2)
+                x0, x1 = max(0, x), min(PX - 1, x + brick_w - 3)
+                y1 = min(PX - 1, y + brick_h - 3)
                 if x1 >= x0:
                     d.rectangle([x0, y, x1, y1], fill=_rgba(tone))
                     d.line([(x0, y), (x1, y)], fill=_rgba(shift(tone, 0.10)))
-                    d.line([(x0, y1), (x1, y1)], fill=_rgba(shift(tone, -0.10)))
+                    d.line([(x0, y1), (x1, y1)], fill=_rgba(shift(tone, -0.12)))
+                    d.line([(x1, y), (x1, y1)], fill=_rgba(shift(tone, -0.08)))
                     if x >= 0:
                         d.line([(x0, y), (x0, y1)], fill=_rgba(shift(tone, 0.06)))
+                    # weathering: a chipped corner or a hairline crack now and then
+                    n = noise(col, row, seed + 9)
+                    if n < 0.18:
+                        d.polygon([(x1 - 4, y1), (x1, y1), (x1, y1 - 4)],
+                                  fill=_rgba(style["mortar"]))
+                    elif n > 0.86:
+                        cx = x0 + 6 + int(noise(col, row, seed + 10) * (x1 - x0 - 12))
+                        d.line([(cx, y + 2), (cx + 2, y + 6), (cx + 1, y1 - 2)],
+                               fill=_rgba(shift(tone, -0.16)))
                 x += brick_w
                 col += 1
             y += brick_h
             row += 1
-    d.line([(0, PX - 1), (PX - 1, PX - 1)], fill=_rgba(shift(style["mortar"], -0.08)))
+    d.rectangle([0, PX - 2, PX - 1, PX - 1], fill=_rgba(shift(style["mortar"], -0.08)))
     return img
 
 
@@ -315,29 +369,41 @@ def door_image(locked: bool, style_name: str = "rooms") -> Image.Image:
     img = Image.new("RGBA", (PX, PX), _rgba(style["mortar"]))
     d = ImageDraw.Draw(img)
     frame = (70, 48, 30, 255)
-    d.rectangle([0, 0, PX - 1, PX - 1], outline=frame)
-    d.rectangle([1, 1, PX - 2, PX - 2], outline=(96, 68, 42, 255))
+    frame_hi = (96, 68, 42, 255)
+    d.rectangle([0, 0, PX - 1, PX - 1], outline=frame, width=2)
+    d.rectangle([2, 2, PX - 3, PX - 3], outline=frame_hi, width=2)
     if locked:
         wood, wood_hi, wood_lo = (142, 96, 52), (166, 118, 70), (104, 68, 36)
-        d.rectangle([2, 2, PX - 3, PX - 3], fill=_rgba(wood))
-        for px_ in (8, 15, 22):  # planks
-            d.line([(px_, 2), (px_, PX - 3)], fill=_rgba(wood_lo))
-            d.line([(px_ + 1, 2), (px_ + 1, PX - 3)], fill=_rgba(wood_hi))
-        for y in (7, 23):  # iron bands
-            d.rectangle([2, y, PX - 3, y + 2], fill=(70, 70, 82, 255))
-            d.line([(2, y), (PX - 3, y)], fill=(118, 118, 132, 255))
-            for bx in (5, 13, 20, 27):
-                d.point((bx, y + 1), fill=(160, 160, 176, 255))
-        d.rectangle([13, 13, 18, 18], fill=(222, 184, 70, 255))
-        d.rectangle([15, 15, 16, 17], fill=(60, 40, 10, 255))
+        d.rectangle([4, 4, PX - 5, PX - 5], fill=_rgba(wood))
+        for px_ in (16, 30, 44):  # planks
+            d.rectangle([px_, 4, px_ + 1, PX - 5], fill=_rgba(wood_lo))
+            d.line([(px_ + 2, 4), (px_ + 2, PX - 5)], fill=_rgba(wood_hi))
+        for gx in range(6, PX - 6, 5):  # wood grain
+            for gy in range(6, PX - 6, 9):
+                if noise(gx, gy, 61) < 0.5:
+                    d.line([(gx, gy + (gx % 3)), (gx, gy + 3 + (gx % 3))], fill=_rgba(wood_lo))
+        for y in (14, 46):  # iron bands
+            d.rectangle([4, y, PX - 5, y + 5], fill=(70, 70, 82, 255))
+            d.line([(4, y), (PX - 5, y)], fill=(118, 118, 132, 255))
+            d.line([(4, y + 5), (PX - 5, y + 5)], fill=(44, 44, 54, 255))
+            for bx in (10, 26, 40, 55):
+                d.rectangle([bx, y + 2, bx + 1, y + 3], fill=(170, 170, 186, 255))
+                d.point((bx, y + 2), fill=(220, 220, 236, 255))
+        d.rectangle([26, 26, 37, 37], fill=(222, 184, 70, 255))  # lock plate
+        d.rectangle([26, 26, 37, 37], outline=(150, 110, 30, 255))
+        d.ellipse([30, 29, 33, 32], fill=(60, 40, 10, 255))
+        d.rectangle([31, 32, 32, 35], fill=(60, 40, 10, 255))
     else:
         floor = floor_image(style_name, 0)
-        img.paste(floor.crop((2, 2, PX - 2, PX - 2)), (2, 2))
-        d.rectangle([0, 0, PX - 1, PX - 1], outline=frame)
-        d.rectangle([1, 1, PX - 2, PX - 2], outline=(96, 68, 42, 255))
-        # open leaf folded against the left jamb
-        d.rectangle([2, 2, 5, PX - 3], fill=(142, 96, 52, 255))
-        d.line([(3, 2), (3, PX - 3)], fill=(166, 118, 70, 255))
+        img.paste(floor.crop((4, 4, PX - 4, PX - 4)), (4, 4))
+        d.rectangle([0, 0, PX - 1, PX - 1], outline=frame, width=2)
+        d.rectangle([2, 2, PX - 3, PX - 3], outline=frame_hi, width=2)
+        # open leaf folded against the left jamb, with hinges
+        d.rectangle([4, 4, 11, PX - 5], fill=(142, 96, 52, 255))
+        d.line([(6, 4), (6, PX - 5)], fill=(166, 118, 70, 255))
+        d.line([(10, 4), (10, PX - 5)], fill=(104, 68, 36, 255))
+        for hy in (12, 50):
+            d.rectangle([4, hy, 11, hy + 3], fill=(70, 70, 82, 255))
     return img
 
 
@@ -346,37 +412,48 @@ def stairs_image(style_name: str = "rooms") -> Image.Image:
     style = STYLES[style_name]
     img = floor_image(style_name, 1)
     d = ImageDraw.Draw(img)
-    d.rectangle([2, 2, PX - 3, PX - 3], fill=(18, 16, 24, 255))
-    d.rectangle([2, 2, PX - 3, PX - 3], outline=_rgba(style["rim_lo"]))
-    steps = 6
+    pit = (18, 16, 24, 255)
+    d.rectangle([4, 4, PX - 5, PX - 5], fill=pit)
+    d.rectangle([4, 4, PX - 5, PX - 5], outline=_rgba(style["rim_lo"]), width=2)
+    steps = 7
     for i in range(steps):
-        y0 = 4 + i * 4
-        inset = 3 + i
-        tone = shift((150, 146, 160), -0.14 * i)
-        d.rectangle([inset, y0, PX - 1 - inset, y0 + 2], fill=_rgba(tone))
-        d.line([(inset, y0), (PX - 1 - inset, y0)], fill=_rgba(shift(tone, 0.12)))
-        d.line([(inset, y0 + 3), (PX - 1 - inset, y0 + 3)], fill=(18, 16, 24, 255))
+        y0 = 8 + i * 7
+        inset = 6 + i * 2
+        tone = shift((150, 146, 160), -0.12 * i)
+        d.rectangle([inset, y0, PX - 1 - inset, y0 + 4], fill=_rgba(tone))
+        d.line([(inset, y0), (PX - 1 - inset, y0)], fill=_rgba(shift(tone, 0.14)))
+        d.line([(inset, y0 + 4), (PX - 1 - inset, y0 + 4)], fill=_rgba(shift(tone, -0.18)))
+        d.rectangle([inset, y0 + 5, PX - 1 - inset, y0 + 6], fill=pit)
+        # side walls of the well catch a little light
+        d.line([(inset - 1, y0), (inset - 1, y0 + 6)], fill=_rgba(shift(tone, -0.3)))
+        d.line([(PX - inset, y0), (PX - inset, y0 + 6)], fill=_rgba(shift(tone, -0.35)))
     return img
 
 
 def portal_image(frame: int, frames: int = 4) -> Image.Image:
-    """A rotating teal ring with inner swirl; ``frame`` picks the rotation phase."""
+    """A turning teal ring with an inner swirl and rune ticks; ``frame`` picks the phase."""
     img = Image.new("RGBA", (PX, PX), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     cx = cy = PX / 2 - 0.5
     import math
-    for r in range(13, 5, -1):
-        t = (13 - r) / 8
+    for r in range(26, 11, -1):
+        t = (26 - r) / 15
         tone = (int(40 + 60 * t), int(150 + 90 * t), int(150 + 90 * t), 255)
         d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=tone)
-    d.ellipse([cx - 5, cy - 5, cx + 5, cy + 5], fill=(236, 252, 252, 255))
-    d.ellipse([cx - 13, cy - 13, cx + 13, cy + 13], outline=(20, 90, 95, 255))
+    d.ellipse([cx - 11, cy - 11, cx + 11, cy + 11], fill=(236, 252, 252, 255))
+    d.ellipse([cx - 7, cy - 7, cx + 7, cy + 7], fill=(255, 255, 255, 255))
+    d.ellipse([cx - 26, cy - 26, cx + 26, cy + 26], outline=(20, 90, 95, 255), width=2)
     phase = frame / frames * 2 * math.pi
+    for k in range(12):  # rune ticks turning with the ring
+        ang = phase / 3 + k * math.pi / 6
+        x0, y0 = cx + math.cos(ang) * 22, cy + math.sin(ang) * 22
+        x1, y1 = cx + math.cos(ang) * 25, cy + math.sin(ang) * 25
+        d.line([(x0, y0), (x1, y1)], fill=(20, 70, 75, 255), width=2)
     for k in range(4):  # swirl sparks around the ring
         ang = phase + k * math.pi / 2
-        for rr, size in ((11, 2), (8, 1)):
-            x = cx + math.cos(ang + rr * 0.3) * rr
-            y = cy + math.sin(ang + rr * 0.3) * rr
+        for rr, size in ((20, 3), (15, 2), (10, 1)):
+            x = cx + math.cos(ang + rr * 0.15) * rr
+            y = cy + math.sin(ang + rr * 0.15) * rr
             d.ellipse([x - size, y - size, x + size, y + size], fill=(255, 255, 255, 230))
     return img
 

@@ -68,8 +68,8 @@ TINT_CHASE = (255, 170, 170)
 TINT_FLEE = (255, 220, 160)
 TINT_PLAIN = (255, 255, 255)
 BADGE = 7  # px: kind badge drawn in a tile corner
-SPRITE_SCALE = TILE_SIZE / pixelart.RENDER_PX
-WORLD_ZOOM = 2.0          # 32 px art shown at 64 px: chunky 16-bit pixels
+SPRITE_SCALE = 1.0        # one world unit per 32 px of art (textures may be finer)
+WORLD_ZOOM = 2.0          # a tile is 32 world px shown at 64 screen px: HD art is 1:1
 IDLE_FRAME_TIME = 0.5     # seconds per idle animation frame
 MOVE_TIME = 0.16          # seconds a step takes on screen
 STRIDE_PERIOD = 0.32      # seconds for a full walk cycle while moving
@@ -335,8 +335,9 @@ class DungeonScene(BaseScene):
         for y, row in enumerate(fmap.tiles):
             for x, tile in enumerate(row):
                 cx, cy = tile_center((x, y))
+                tex = self._tile_texture(x, y, tile)
                 sprite = arcade.Sprite(
-                    self._tile_texture(x, y, tile), scale=SPRITE_SCALE, center_x=cx, center_y=cy
+                    tex, scale=TILE_SIZE / tex.width, center_x=cx, center_y=cy
                 )
                 sprite.alpha = 0
                 self.tiles.append(sprite)
@@ -371,7 +372,7 @@ class DungeonScene(BaseScene):
         """Place a feature sprite from a pixelart name or a ready texture."""
         cx, cy = tile_center(pos)
         tex = pixelart.texture(art) if isinstance(art, str) else art
-        sprite = arcade.Sprite(tex, scale=SPRITE_SCALE, center_x=cx, center_y=cy)
+        sprite = arcade.Sprite(tex, scale=TILE_SIZE / tex.width, center_x=cx, center_y=cy)
         self._shade(sprite, pos)
         self.features.append(sprite)
         self._feature_sprites[pos] = sprite

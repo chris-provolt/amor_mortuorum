@@ -28,9 +28,9 @@ def test_tiles_are_opaque_and_characters_have_transparent_corners():
 
 
 def test_image_scales_with_nearest_neighbour():
-    img = px.image("chest", 3)
+    img = px.image("chest", 3, native=False)
     assert img.size == (48, 48)
-    small = px.image("chest")
+    small = px.image("chest", native=False)
     assert img.getpixel((7 * 3 + 1, 7 * 3 + 1)) == small.getpixel((7, 7))
 
 
@@ -56,13 +56,15 @@ def test_remaps_only_touch_template_letters_and_floor_variants_vary():
 
 
 def test_native_art_renders_without_upscaling_and_shares_the_16px_fallback():
-    assert px.grid_size("hero") == px.HD_PX and px.grid_size("chest") == px.SIZE
+    assert px.grid_size("hero") == px.HD_PX and px.grid_size("chest") == px.HD_PX
+    assert px.grid_size("gravestone") == px.SIZE  # graveyard props stay small
     data = GameData.load()
     for name in list(data.enemies) + list(px.PARTY):  # every battler renders at 64 px
         assert px.grid_size(name) == px.HD_PX, name
         assert px.render(name).size == (px.HD_PX, px.HD_PX)
         assert px.image(name, native=False).size == (px.SIZE, px.SIZE)
-    assert px.render("chest").size == (px.RENDER_PX, px.RENDER_PX)
+    assert px.render("chest").size == (px.HD_PX, px.HD_PX)
+    assert px.render("gravestone").size == (px.RENDER_PX, px.RENDER_PX)
     # the idle frame bobs the head: a head row of frame 1 is the row below it in
     # frame 0, while the feet stay planted
     a, b = px.render("hero", 0), px.render("hero", 1)
@@ -256,3 +258,23 @@ def test_hd_grids_upscale_cleanly_and_hero_wears_his_gear():
     # a sprite is still one world tile however fine its texture
     import arcade  # noqa: F401
     assert px.texture("hero").width == px.HD_PX
+
+
+def test_hd_tiles_are_64_px_and_opaque():
+    from amormortuorum.ui import tiles
+
+    assert tiles.PX == 64
+    for img in (tiles.floor_image("rooms", 0), tiles.floor_image("cavern", 2, True, True, 1),
+                tiles.wall_image("rooms", True, (False,) * 4),
+                tiles.wall_image("rooms", False, (True,) * 4),
+                tiles.door_image(True), tiles.door_image(False), tiles.stairs_image()):
+        assert img.size == (64, 64)
+        assert all(img.getpixel((x, y))[3] == 255 for x in range(0, 64, 7) for y in range(0, 64, 7))
+    portal = tiles.portal_image(0)
+    assert portal.size == (64, 64) and portal.getpixel((0, 0))[3] == 0
+    assert portal.getpixel((32, 32))[3] == 255
+    # flagstone courses: two-pixel grout lines run across the tile
+    floor = tiles.floor_image("rooms", 0)
+    grout = tiles.STYLES["rooms"]["grout"]
+    for y in (20, 21):  # the grain pass jitters tones a little
+        assert all(abs(a - b) <= 8 for a, b in zip(floor.getpixel((10, y))[:3], grout))
