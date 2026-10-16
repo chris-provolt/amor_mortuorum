@@ -791,8 +791,7 @@ def test_wandering_monster_chases_then_engages(app):
     scene.monsters[:] = [monster]
     scene._mon_rng.random()  # any state is fine; the chase is deterministic
     scene._refresh_monsters()
-    sprite = scene._monster_sprites[99]
-    assert sprite.alpha == 255
+    assert monster in scene._visible_monsters()
 
     old_pos = monster.pos
     # Step somewhere: the monster takes its turn and ends closer to where we now stand.
@@ -821,6 +820,6 @@ def test_wandering_monster_chases_then_engages(app):
     d.fight_until_done()
     if d.scene_name() == "DungeonScene":
         assert monster.id not in {m.id for m in scene.monsters}
-        assert 99 not in scene._monster_sprites
+        assert monster not in scene._visible_monsters()
         # Minimap draws the (now absent) monsters without error
         d.frame()

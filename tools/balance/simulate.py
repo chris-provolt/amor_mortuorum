@@ -296,6 +296,7 @@ def simulate_run(
             battles += 1
             if monster is not None:
                 if battle.outcome is Outcome.VICTORY:
+                    run.leader.add_gold(monster.bounty)
                     remove_monster(monsters, monster)
                 else:
                     daze(monster)

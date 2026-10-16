@@ -125,3 +125,14 @@ def test_bosses_load_and_validate():
     raw["bosses"] = {"50": {"name": "x", "enemies": ["skel_basic"], "final": True}}
     with pytest.raises(DataError, match="final boss must be on floor"):
         GameData.from_raw(**raw)
+
+
+def test_formation_behaviour_validated():
+    raw = _raw()
+    raw["encounters"]["T1"]["formations"][0]["behaviour"] = "guard"
+    data = GameData.from_raw(**raw)
+    assert data.encounters["T1"].formations[0].behaviour == "guard"
+    assert data.encounters["T1"].formations[1].behaviour is None
+    raw["encounters"]["T1"]["formations"][0]["behaviour"] = "berserk"
+    with pytest.raises(DataError, match="behaviour"):
+        GameData.from_raw(**raw)

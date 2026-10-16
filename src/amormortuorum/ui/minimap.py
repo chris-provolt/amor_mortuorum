@@ -6,6 +6,7 @@ from typing import Dict, Iterable, Sequence
 import arcade
 
 from ..systems.fov import Visibility
+from ..systems.monsters import Monster
 from ..systems.procgen import FloorMap, Pos, Tile
 
 SCALE = 4
@@ -28,6 +29,9 @@ ICONS = {
 }
 ALPHA_VISIBLE = 255
 ALPHA_EXPLORED = 120
+
+# (shape, extra size) per monster kind
+MONSTER_ICONS = {"hunter": ("triangle", 3), "guard": ("hollow", 4), "skittish": ("diamond", 2)}
 
 
 class Minimap:
@@ -95,7 +99,8 @@ class Minimap:
     def _icon(self, pos: Pos, color, size: float = SCALE, shape: str = "square") -> None:
         """Draw a feature marker. Shapes differ per feature so colour is never the only cue:
         stairs = hollow square, chest = filled square, portal = ring, key = diamond,
-        trap = cross, player = filled circle, monster = triangle."""
+        trap = cross, player = filled circle, hunter = triangle, guard = hollow
+        square, skittish = small diamond."""
         cx, cy = self._screen(*pos)
         half = size / 2
         if shape == "square":
@@ -118,7 +123,7 @@ class Minimap:
                 [(cx, cy + half), (cx + half, cy - half), (cx - half, cy - half)], color
             )
 
-    def draw(self, player_pos: Pos, monsters: Sequence[Pos] = ()) -> None:
+    def draw(self, player_pos: Pos, monsters: Sequence[Monster] = ()) -> None:
         if not self.enabled:
             return
         arcade.draw_lbwh_rectangle_filled(
@@ -140,6 +145,7 @@ class Minimap:
                 self._icon(pos, ICONS["trap"], SCALE + 2, shape="cross")
         if fmap.portal is not None and fmap.portal in explored:
             self._icon(fmap.portal, ICONS["portal"], SCALE + 4, shape="ring")
-        for pos in monsters:
-            self._icon(pos, ICONS["monster"], SCALE + 3, shape="triangle")
+        for m in monsters:
+            shape, size = MONSTER_ICONS.get(m.kind, MONSTER_ICONS["hunter"])
+            self._icon(m.pos, ICONS["monster"], SCALE + size, shape=shape)
         self._icon(player_pos, ICONS["player"], SCALE + 3, shape="circle")

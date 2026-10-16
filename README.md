@@ -18,7 +18,7 @@ What works today, end to end:
 - **Fog of war and minimap**: shadowcast line of sight (walls and locked doors block), remembered tiles drawn dimmed, and a toggleable minimap (M) with icons for stairs, chests, portals, keys and sprung traps you have seen.
 - **Bosses**: mini-bosses guard the stairs on B20/40/60/80 (each drops a Relic of the Veil), and **The Oblivion Heart** waits on B99; beating it awards the final relic and ends the run in victory. Bosses enrage below half HP.
 - **Relics of the Veil**: the five non-boss relics turn up in chests (2% of chests on T1 up to 8% on T5), the collection screen lives on the title and in the Graveyard, and every relic grants a light passive (ATK/DEF/SPD, sight radius, gold or XP percent) that applies to every future run.
-- **Wandering monsters** roam each floor in plain sight: they wander until they spot the party, then hunt them down corridors with grid pathfinding (slow ones only move every other step, so a quick party can outrun them). Some groups start asleep and only wake when the party comes within two tiles in plain sight, so they can be slipped past or struck first. Bumping into one, or being caught, opens **turn-based combat**: Attack / Skill / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling. Fleeing dazes the monster for a few steps. Rare ambushes still lunge from the dark.
+- **Wandering monsters** roam each floor in plain sight, and each group behaves by its kind. **Hunters** (triangles) wander until they spot the party, then hunt them down corridors with grid pathfinding (slow ones only move every other step, so a quick party can outrun them). **Guards** (squares) stand watch beside a chest, key or the stairs, give chase only when the party comes close, and return to their post after a short pursuit. **Skittish** groups (diamonds) keep their distance and run when seen; corner one and it drops a gold bounty on top of the usual rewards. Some hunters and skittish groups start asleep and only wake when the party comes within two tiles in plain sight, so they can be slipped past or struck first. Bumping into one, or being caught, opens **turn-based combat**: Attack / Skill / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling. Fleeing dazes the monster for a few steps. Rare ambushes still lunge from the dark.
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
 - **Skills**: six spells learned by level (`skills.json`) and cast for MP from the combat Skill menu: single-target, all-enemy, and healing. Resting and the Tonic of Clear Mind restore MP.
 - **Party of up to four**: recruit companions at the Graveyard for gold; they level with you, share the leader's bag and gold, carry their own equipment, act in SPD order, and every survivor earns full XP. Heals target the most wounded ally.
@@ -137,7 +137,7 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
   - **Confirm / interact (stairs, portal):** Enter / Space
   - **Back / pause:** Esc
   - **Bag & Equipment:** Tab (Left / Right switches party member)
-  - **Minimap toggle:** M (red triangles mark monsters currently in sight; on the floor, dull markers sleep, red ones wander, bright red ones are hunting you)
+  - **Minimap toggle:** M (red markers show monsters currently in sight, shaped by kind: triangle hunter, hollow square guard, diamond skittish; on the floor, dull markers sleep, red ones idle, bright red ones are hunting you and amber ones are running away)
   - **Controller:** D-pad / left stick move, A confirm, B back, Y bag, X map, Start pause
   - **Combat target:** Left / Right
 - **Accessibility:** minimap icons are shape-coded as well as coloured (hollow square stairs, filled square chest, ring portal, diamond key, cross trap, dot player); a **UI scale** setting (80-160%) resizes every menu and panel; keys can be **rebound in-game** from Settings. Planned: a screen-shake toggle once effects exist.
@@ -177,7 +177,7 @@ src/amormortuorum/
 │   ├── entities.py        # Stats, Equipment, Inventory, Player, Enemy
 │   ├── combat.py          # Battle: actions, turn order, damage, outcome
 │   ├── encounters.py      # ambush rolls and formations
-│   ├── monsters.py        # wandering groups: spawning, BFS chase, wander, daze
+│   ├── monsters.py        # roaming groups: hunters, guards, skittish; BFS chase, daze
 │   ├── run.py             # Run state, death/resurrection, persistence bridge
 │   ├── progression.py     # XP curve, level-ups
 │   ├── fov.py             # shadowcasting field of view, explored memory
@@ -242,7 +242,7 @@ Weights per **tier** used by chests to pick a quality bucket.
         "formations": [{"enemies": ["skel_basic"], "weight": 6},
                        {"enemies": ["skel_basic", "wraith"], "weight": 2}]}}
 ```
-`step_chance` is the ambush rate; most fights come from the visible wandering monsters, which draw their groups from the same `formations` list. Per step the ambush chance is `min(encounter_cap, step_chance * (1 + encounter_growth_per_step * steps_since_last))`.
+`step_chance` is the ambush rate; most fights come from the visible wandering monsters, which draw their groups from the same `formations` list. A formation's map behaviour defaults to its lead enemy's combat `behavior` (`chase` hunts, `tank` guards, `ranged` is skittish) and can be overridden with `"behaviour": "hunter" | "guard" | "skittish"`. Per step the ambush chance is `min(encounter_cap, step_chance * (1 + encounter_growth_per_step * steps_since_last))`.
 
 ### `relics.json`
 Ten entries `{"id":"veil_1".."veil_9" | "veil_final", "name", "desc", "passive": {...}}`. Passive keys: `atk, df, spd, fov, gold_pct, xp_pct`. Relics referenced by `bosses.json` are boss-only; the rest can drop from chests.
@@ -321,7 +321,7 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 Design notes for each epic live in `docs/epics/`. Every epic now has a first implementation; what remains is polish:
 1. Hand playtesting against the simulator's numbers (see Balance Model); the auto-policy never flees and never misjudges a potion, so real runs end earlier.
 2. Real art and audio assets (sprites, tiles, SFX, music) replacing the placeholders.
-3. Monster variety on the map: per-formation markers, sleeping or stationary guards, and ranged or fleeing behaviours on top of the chase/wander rules.
+3. Monster ecology: packs that coordinate, noise that wakes sleepers, guards that call for help; the three map behaviours (hunter, guard, skittish) are the base to build on.
 
 ---
 

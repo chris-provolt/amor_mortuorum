@@ -18,6 +18,7 @@ QUALITIES: Tuple[str, ...] = ("Common", "Uncommon", "Rare", "Epic")
 EQUIP_TYPES: Tuple[str, ...] = ("weapon", "armor", "helm", "shield", "accessory")
 CONSUMABLE_TYPES: Tuple[str, ...] = ("potion", "scroll", "consumable", "token")
 MAX_FLOOR = 99
+FORMATION_BEHAVIOURS: Tuple[str, ...] = ("hunter", "guard", "skittish")
 
 
 class DataError(AmorError):
@@ -119,6 +120,7 @@ class RelicDef:
 class Formation:
     enemies: Tuple[str, ...]
     weight: int = 1
+    behaviour: Optional[str] = None  # map behaviour; None = from the lead enemy
 
 
 @dataclass(frozen=True)
@@ -403,7 +405,11 @@ class GameData:
         data.encounters = {}
         for name, spec in encounters.items():
             formations = tuple(
-                Formation(enemies=tuple(f.get("enemies", ())), weight=int(f.get("weight", 1)))
+                Formation(
+                    enemies=tuple(f.get("enemies", ())),
+                    weight=int(f.get("weight", 1)),
+                    behaviour=f.get("behaviour"),
+                )
                 for f in spec.get("formations", [])
             )
             data.encounters[name] = TierEncounters(
@@ -467,6 +473,10 @@ class GameData:
                 for eid in f.enemies:
                     if eid not in self.enemies:
                         raise DataError(f"encounters[{name}]: unknown enemy {eid!r}")
+                if f.behaviour is not None and f.behaviour not in FORMATION_BEHAVIOURS:
+                    raise DataError(
+                        f"encounters[{name}]: unknown behaviour {f.behaviour!r}"
+                    )
 
         # Shop
         for item_id, entry in self.shop_pool.items():
@@ -584,6 +594,7 @@ __all__ = [
     "EQUIP_TYPES",
     "PASSIVE_KEYS",
     "MAX_FLOOR",
+    "FORMATION_BEHAVIOURS",
     "DataError",
     "ItemDef",
     "EnemyDef",
