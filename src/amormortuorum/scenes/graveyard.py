@@ -13,10 +13,16 @@ from ..systems.party import MAX_PARTY, available_companions, recruit
 from ..systems.progression import xp_to_next_level
 from ..systems.relics import apply_passives
 from ..ui.hud import Hud
+from ..ui import pixelart
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 from ..ui.theme import fs
 
 logger = logging.getLogger(__name__)
+
+SKY = (14, 12, 24)
+GROUND = (26, 32, 24)
+GROUND_H = 56
+BACKDROP_ALPHA = 170
 
 PANEL_TEXT = (200, 200, 215)
 
@@ -32,6 +38,7 @@ class GraveyardScene(BaseScene):
         self.mode = "main"
         self._view: MenuView | None = None
         self._title: arcade.Text | None = None
+        self._backdrop: arcade.SpriteList | None = None
         self._panel: List[arcade.Text] = []
         self.hud: Hud | None = None
 
@@ -64,7 +71,23 @@ class GraveyardScene(BaseScene):
             logger.info("Smoke mode: entering the dungeon automatically")
             self._enter_dungeon()
 
+    def _build_backdrop(self, width: int, height: int) -> None:
+        """Moon, headstones and a dead tree along the bottom of the screen."""
+        self._backdrop = arcade.SpriteList()
+        self._backdrop.append(pixelart.sprite("moon", (width - 110, height - 150), 5))
+        pattern = ("gravestone", "gravestone_cross", "dead_tree", "gravestone")
+        x, i = 60, 0
+        while x < width - 30:
+            art = pattern[i % len(pattern)]
+            scale = 4 if art == "dead_tree" else 3
+            sprite = pixelart.sprite(art, (x, GROUND_H + 8 * scale - 6), scale)
+            sprite.alpha = BACKDROP_ALPHA  # text stays legible over the stones
+            self._backdrop.append(sprite)
+            x += 120
+            i += 1
+
     def on_resize(self, width: int, height: int):
+        self._build_backdrop(width, height)
         if self._title is not None:
             self._title.position = (width / 2, height - 130)
         if self._view is not None:
@@ -276,6 +299,11 @@ class GraveyardScene(BaseScene):
                 text.text = line
 
     def draw(self):
+        w, h = self.app.width, self.app.height
+        arcade.draw_lbwh_rectangle_filled(0, 0, w, h, SKY)
+        arcade.draw_lbwh_rectangle_filled(0, 0, w, GROUND_H, GROUND)
+        if self._backdrop is not None:
+            self._backdrop.draw(pixelated=True)
         if self._title is not None:
             self._title.draw()
         self._refresh_panel()

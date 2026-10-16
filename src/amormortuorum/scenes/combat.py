@@ -11,6 +11,7 @@ from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.combat import Action, ActionKind, Battle, LogEvent, Outcome
 from ..systems.party import most_wounded
+from ..ui import pixelart
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 from ..ui.theme import fs
 
@@ -24,6 +25,8 @@ HP_PARTY = (70, 170, 110)
 TARGET = (255, 215, 120)
 PANEL = (0, 0, 0, 150)
 FLASH = (200, 40, 40)
+PORTRAIT = 44       # px: battler portrait size beside each row
+PORTRAIT_GAP = 56   # px: text offset to leave room for the portrait
 FLASH_TIME = 0.35   # seconds the hit flash takes to fade
 FLASH_ALPHA = 120   # peak alpha of the flash overlay
 
@@ -99,9 +102,9 @@ class CombatScene(BaseScene):
         if self._prompt is not None:
             self._prompt.position = (width / 2, 22)
         for i, row in enumerate(self._enemy_rows):
-            row.position = (width * 0.08, height * 0.74 - i * fs(46))
+            row.position = (width * 0.08 + PORTRAIT_GAP, height * 0.74 - i * fs(46))
         for i, row in enumerate(self._party_rows):
-            row.position = (width * 0.08, height * 0.26 - i * fs(46))
+            row.position = (width * 0.08 + PORTRAIT_GAP, height * 0.26 - i * fs(46))
         for i, row in enumerate(self._log_rows):
             row.position = (width * 0.52, height * 0.78 - i * fs(20))
         if self._view is not None:
@@ -264,6 +267,12 @@ class CombatScene(BaseScene):
         if self._flash > 0:
             self._flash = max(0.0, self._flash - delta_time)
 
+    def _draw_portrait(self, art: str, row: arcade.Text, alive: bool) -> None:
+        rect = arcade.LBWH(row.x - PORTRAIT_GAP, row.y - PORTRAIT / 2 - 4, PORTRAIT, PORTRAIT)
+        arcade.draw_texture_rect(
+            pixelart.texture(art), rect, pixelated=True, alpha=255 if alive else 70
+        )
+
     def _draw_bar(self, x: float, y: float, frac: float, color, width: float = 180) -> None:
         arcade.draw_lbwh_rectangle_filled(x, y, width, 8, HP_BACK)
         arcade.draw_lbwh_rectangle_filled(x, y, width * max(0.0, min(1.0, frac)), 8, color)
@@ -284,6 +293,7 @@ class CombatScene(BaseScene):
                 row.text = text
             row.color = DIM if not b.is_alive else TARGET if b.index == self.target else TEXT
             row.draw()
+            self._draw_portrait(pixelart.enemy_sprite_name(b.ref.def_id), row, b.is_alive)
             self._draw_bar(row.x + 12, row.y - fs(20), b.stats.hp / b.stats.max_hp, HP_FRONT)
 
         for row, b in zip(self._party_rows, self.battle.players):
@@ -298,6 +308,9 @@ class CombatScene(BaseScene):
                 row.text = text
             row.color = DIM if not b.is_alive else TEXT
             row.draw()
+            self._draw_portrait(
+                pixelart.party_sprite_name(getattr(b.ref, "companion_id", None)), row, b.is_alive
+            )
             self._draw_bar(row.x + 12, row.y - fs(20), b.stats.hp / b.stats.max_hp, HP_PARTY)
 
         for row, event in zip(self._log_rows, list(self._log)[::-1]):

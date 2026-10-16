@@ -78,6 +78,7 @@ class Monster:
     cooldown: int = 0
     post: Optional[Pos] = None  # where a guard stands watch
     bounty: int = 0           # extra gold for catching a skittish group
+    lead: str = ""            # def id of the group's biggest enemy (drawn on the map)
     noticed: bool = False     # the HUD has announced this monster
 
     @property
@@ -175,6 +176,7 @@ def _make_monster(
         state="sleep" if sleeps else "wander",
         post=pos if kind == "guard" else None,
         bounty=sum(e.gold for e in scaled) if kind == "skittish" else 0,
+        lead=lead.def_id,
     )
 
 

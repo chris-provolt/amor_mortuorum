@@ -48,6 +48,7 @@ from ..systems.stats import bump, check_achievements, record_max
 from ..systems.rng import chest_rng
 from ..ui.hud import Hud
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
+from ..ui import pixelart
 from ..ui.minimap import Minimap
 from ..ui.theme import fs
 
@@ -56,23 +57,18 @@ logger = logging.getLogger(__name__)
 ALPHA_VISIBLE = 255
 ALPHA_EXPLORED = 90
 
-COLOR_WALL = (38, 38, 50)
-COLOR_FLOOR = (92, 92, 108)
-COLOR_FLOOR_CAVERN = (96, 86, 74)
-COLOR_STAIRS = (240, 240, 250)
-COLOR_CHEST = (214, 170, 60)
-COLOR_PORTAL = (0, 150, 150)
-COLOR_PLAYER = (248, 248, 255)
-COLOR_DOOR_LOCKED = (140, 90, 40)
-COLOR_DOOR_OPEN = (70, 62, 52)
-COLOR_KEY = (180, 120, 230)
-COLOR_TRAP = (200, 60, 60)
+COLOR_STAIRS = (255, 255, 255)  # tint: plain texture
 COLOR_BOSS_STAIRS = (190, 50, 120)
 COLOR_MONSTER = (170, 60, 70)
 COLOR_MONSTER_CHASE = (235, 80, 80)
 COLOR_MONSTER_SLEEP = (120, 70, 95)
 COLOR_MONSTER_FLEE = (235, 170, 90)
-MONSTER_SIZE = {"hunter": 22, "guard": 26, "skittish": 18}
+TINT_SLEEP = (150, 150, 185)
+TINT_CHASE = (255, 170, 170)
+TINT_FLEE = (255, 220, 160)
+TINT_PLAIN = (255, 255, 255)
+BADGE = 7  # px: kind badge drawn in a tile corner
+SPRITE_SCALE = TILE_SIZE / pixelart.SIZE
 NOTICE_VERB = {"hunter": "prowls", "guard": "stands watch", "skittish": "skulks"}
 ENGAGE_VERB = {"hunter": "engage", "guard": "challenge", "skittish": "corner"}
 
@@ -100,22 +96,28 @@ def monster_color(m: Monster):
     return COLOR_MONSTER
 
 
+def monster_tint(m: Monster):
+    """Sprite tint by state: dull asleep, reddish hunting, warm while fleeing."""
+    if m.chasing:
+        return TINT_CHASE
+    if m.fleeing:
+        return TINT_FLEE
+    if m.asleep:
+        return TINT_SLEEP
+    return TINT_PLAIN
+
+
 def monster_points(m: Monster) -> list[tuple[float, float]]:
-    """Marker outline by kind, so colour is never the only cue:
+    """Kind badge in the tile's top-right corner, so colour is never the only cue:
     hunter = triangle, guard = square, skittish = diamond."""
-    cx, cy = tile_center(m.pos)
-    h = MONSTER_SIZE.get(m.kind, 22) / 2
+    tx, ty = tile_center(m.pos)
+    cx, cy = tx + TILE_SIZE / 2 - BADGE, ty + TILE_SIZE / 2 - BADGE
+    h = BADGE / 2
     if m.kind == "guard":
         return [(cx - h, cy - h), (cx + h, cy - h), (cx + h, cy + h), (cx - h, cy + h)]
     if m.kind == "skittish":
         return [(cx, cy + h), (cx + h, cy), (cx, cy - h), (cx - h, cy)]
     return [(cx, cy + h), (cx + h, cy - h), (cx - h, cy - h)]
-
-
-def floor_shade(base, x: int, y: int):
-    """Vary a floor colour by position so large open areas read as flagstones."""
-    shade = ((x * 7 + y * 13) % 4) * 3
-    return tuple(min(255, c + shade) for c in base)
 
 
 class DungeonScene(BaseScene):
@@ -130,6 +132,8 @@ class DungeonScene(BaseScene):
         self.features = arcade.SpriteList()
         self.player = arcade.SpriteList()
         self.monsters: list[Monster] = []
+        self.monster_sprites = arcade.SpriteList()
+        self._monster_sprites: Dict[int, arcade.Sprite] = {}
         self._engaged: Optional[Monster] = None
         self._floor_steps = 0
         self._feature_sprites: Dict[Pos, arcade.Sprite] = {}
@@ -264,19 +268,29 @@ class DungeonScene(BaseScene):
 
     # World building
 
+    def _tile_art(self, x: int, y: int, tile: Tile) -> str:
+        """Which texture a map cell gets: flagstone variants, wall tops and faces,
+        cavern rock, doors."""
+        fmap = self.fmap
+        cavern = fmap.style == "cavern"
+        if tile == Tile.DOOR:
+            return "door_locked" if fmap.doors.get((x, y)) else "door_open"
+        if tile == Tile.FLOOR:
+            return "cave_floor" if cavern else pixelart.floor_variant(x, y)
+        if cavern:
+            return "cave_wall"
+        below = fmap.tile(x, y - 1) if y > 0 else Tile.WALL
+        return "wall_face" if below != Tile.WALL else "wall"
+
     def _build_sprites(self) -> None:
         fmap = self.fmap
-        base_floor = COLOR_FLOOR_CAVERN if fmap.style == "cavern" else COLOR_FLOOR
         self.tiles = arcade.SpriteList(capacity=fmap.width * fmap.height)
         self._door_sprites = {}
         for y, row in enumerate(fmap.tiles):
             for x, tile in enumerate(row):
-                if tile == Tile.DOOR:
-                    color = COLOR_DOOR_LOCKED if fmap.doors.get((x, y)) else COLOR_DOOR_OPEN
-                else:
-                    color = floor_shade(base_floor, x, y) if tile == Tile.FLOOR else COLOR_WALL
-                cx, cy = tile_center((x, y))
-                sprite = arcade.SpriteSolidColor(TILE_SIZE, TILE_SIZE, cx, cy, color)
+                sprite = pixelart.sprite(
+                    self._tile_art(x, y, tile), tile_center((x, y)), SPRITE_SCALE
+                )
                 sprite.alpha = 0
                 self.tiles.append(sprite)
                 self._tile_sprites[(x, y)] = sprite
@@ -284,28 +298,33 @@ class DungeonScene(BaseScene):
                     self._door_sprites[(x, y)] = sprite
         self.features = arcade.SpriteList()
         self._feature_sprites = {}
-        stairs_color = COLOR_BOSS_STAIRS if fmap.stairs_locked else COLOR_STAIRS
-        self._add_feature(fmap.stairs, stairs_color, 22)
+        stairs = self._add_feature(fmap.stairs, "stairs")
+        if fmap.stairs_locked:
+            stairs.color = COLOR_BOSS_STAIRS
         for pos in fmap.chests:
-            self._add_feature(pos, COLOR_CHEST, 18)
+            self._add_feature(pos, "chest")
         for pos in fmap.keys:
-            self._add_feature(pos, COLOR_KEY, 14)
+            self._add_feature(pos, "key")
         for pos, trap in fmap.traps.items():
             if trap.revealed:
-                self._add_feature(pos, COLOR_TRAP, 12)
+                self._add_feature(pos, "trap")
         if fmap.portal is not None:
-            self._add_feature(fmap.portal, COLOR_PORTAL, 26)
+            self._add_feature(fmap.portal, "portal")
         self.player = arcade.SpriteList()
-        cx, cy = tile_center(self.pos)
-        self._player_sprite = arcade.SpriteSolidColor(20, 20, cx, cy, COLOR_PLAYER)
+        self._player_sprite = pixelart.sprite(
+            pixelart.party_sprite_name(self.run.leader.companion_id),
+            tile_center(self.pos), SPRITE_SCALE,
+        )
         self.player.append(self._player_sprite)
+        self.monster_sprites = arcade.SpriteList()
+        self._monster_sprites = {}
 
-    def _add_feature(self, pos: Pos, color, size: int) -> None:
-        cx, cy = tile_center(pos)
-        sprite = arcade.SpriteSolidColor(size, size, cx, cy, color)
+    def _add_feature(self, pos: Pos, art: str) -> arcade.Sprite:
+        sprite = pixelart.sprite(art, tile_center(pos), SPRITE_SCALE)
         sprite.alpha = self._alpha_for(pos)
         self.features.append(sprite)
         self._feature_sprites[pos] = sprite
+        return sprite
 
     # Statistics
 
@@ -323,9 +342,22 @@ class DungeonScene(BaseScene):
     # Monsters
 
     def _refresh_monsters(self) -> None:
-        """Announce monsters the party sees for the first time."""
+        """Sync monster portraits with the model and announce first sightings."""
+        alive = {m.id for m in self.monsters}
+        for mid in [mid for mid in self._monster_sprites if mid not in alive]:
+            self._monster_sprites.pop(mid).remove_from_sprite_lists()
         for m in self.monsters:
-            if m.pos in self.vis.visible and not m.noticed:
+            sprite = self._monster_sprites.get(m.id)
+            if sprite is None:
+                art = pixelart.enemy_sprite_name(m.lead or m.enemies[0])
+                sprite = pixelart.sprite(art, tile_center(m.pos), SPRITE_SCALE)
+                self.monster_sprites.append(sprite)
+                self._monster_sprites[m.id] = sprite
+            sprite.position = tile_center(m.pos)
+            sprite.color = monster_tint(m)
+            seen = m.pos in self.vis.visible
+            sprite.alpha = ALPHA_VISIBLE if seen else 0
+            if seen and not m.noticed:
                 m.noticed = True
                 verb = "sleeps" if m.asleep else NOTICE_VERB.get(m.kind, "prowls")
                 self.hud.push(f"A {m.name} {verb} nearby.")
@@ -334,7 +366,8 @@ class DungeonScene(BaseScene):
         return [m for m in self.monsters if m.pos in self.vis.visible]
 
     def _draw_monsters(self) -> None:
-        """Markers are plain shapes drawn each frame: few monsters, many states."""
+        """Portraits from the sprite list, then a kind badge per visible monster."""
+        self.monster_sprites.draw(pixelated=True)
         for m in self._visible_monsters():
             arcade.draw_polygon_filled(monster_points(m), monster_color(m))
 
@@ -435,7 +468,7 @@ class DungeonScene(BaseScene):
         self.fmap.unlock_door(pos)
         sprite = self._door_sprites.get(pos)
         if sprite is not None:
-            sprite.color = COLOR_DOOR_OPEN
+            sprite.texture = pixelart.texture("door_open")
         self._refresh_visibility()  # an open door no longer blocks sight
         if self.minimap is not None:
             self.minimap.refresh([pos])
@@ -452,12 +485,12 @@ class DungeonScene(BaseScene):
                 self.hud.push("Found a Catacomb Key.")
             except AmorError:
                 self.fmap.keys.add(self.pos)
-                self._add_feature(self.pos, COLOR_KEY, 14)
+                self._add_feature(self.pos, "key")
                 self.hud.push("A key, but you cannot carry more.")
         trap = self.fmap.trigger_trap(self.pos)
         if trap is not None:
             self.app.audio.play("trap")
-            self._add_feature(self.pos, COLOR_TRAP, 12)
+            self._add_feature(self.pos, "trap")
             dmg = self.run.leader.take_damage(trap_damage(trap.kind, self.run.floor))
             noun = "Spikes shoot up" if trap.kind == "spikes" else "Darts hiss from the wall"
             self.hud.push(f"{noun}! You take {dmg} damage.")
@@ -656,10 +689,10 @@ class DungeonScene(BaseScene):
         if self.camera is not None:
             self.camera.position = self._player_sprite.position
             self.camera.use()
-        self.tiles.draw()
-        self.features.draw()
+        self.tiles.draw(pixelated=True)
+        self.features.draw(pixelated=True)
         self._draw_monsters()
-        self.player.draw()
+        self.player.draw(pixelated=True)
         self.app.default_camera.use()
         if self.hud is not None:
             self.hud.draw(self.run, extra=f"Steps {self.run.steps_since_encounter}   [M] map")

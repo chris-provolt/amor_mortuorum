@@ -25,6 +25,7 @@ What works today, end to end:
 - **Audio**: named sound hooks (menus, steps, chests, combat, level-ups, relics, bosses) and ambient loops for the Graveyard, dungeon and combat. Placeholder tones are synthesized with the standard library on first run; drop real `.wav` files into `resources/audio/` to replace them.
 - **Settings screen** (title menu and pause menu): fullscreen, music and SFX volume, VSync, a view of the key bindings, and Save to a per-user `settings.json` that the game loads automatically.
 - **Controller support**: any pyglet-recognised gamepad, hot-pluggable. D-pad or left stick moves, A confirms, B cancels, Y opens the bag, X toggles the map, Start pauses.
+- **Pixel art**: every tile, feature, party member, monster and boss has its own 16x16 sprite, drawn as plain text grids in `ui/pixelart.py` and palette-swapped where characters share a body plan. Dungeon walls show a brick face where they meet the floor, flagstones vary by position, caverns use rock, and combat shows portraits beside every battler.
 - **Records and achievements**: lifetime counters (runs, deaths, floors, battles, chests, gold, steps, bounties, sleepers slain) with sixteen data-driven achievements (`achievements.json`) announced on the HUD when unlocked.
 - **Profiles**: switch or create save profiles from the title menu; the choice is remembered in `settings.json` and `--profile` still overrides it.
 - **Save & Quit** from the pause menu: a one-shot mid-run save that resumes at the start of the current floor and is consumed on load.
@@ -145,7 +146,7 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
 ## Tech Stack
 - **Language:** Python **3.10+** (tested on 3.11 and 3.13)
 - **Renderer/UI:** [Arcade 3.3+](https://api.arcade.academy/)
-- **Assets:** Placeholder solid-colour sprites and synthesized placeholder audio; real art and sound can be dropped in under `resources/`
+- **Assets:** Pixel art is authored in code as 16x16 character grids (`ui/pixelart.py`) and rendered to textures at startup, so the game ships no binary art; audio is synthesized on first run and real `.wav` files can be dropped in under `resources/audio/`
 - **Packaging:** PyInstaller via `tools/ci/build_binary.py` (tagged releases)
 
 ---
@@ -187,6 +188,7 @@ src/amormortuorum/
 │   ├── hub.py  shop.py  crypt.py
 ├── persistence/           # SaveManager, SaveGame/MetaState/RunState, atomic writes
 ├── ui/                    # VerticalMenu model + MenuView, Hud, Minimap
+│   └── pixelart.py        # 16x16 sprite grids (tiles, party, monsters, bosses, decor) rendered at runtime
 ├── resources/audio/       # optional real .wav assets (override placeholders)
 └── scenes/                # boot, main_menu, graveyard, dungeon, combat, inventory, relics,
                            #   records, profiles, settings, run_summary
@@ -320,7 +322,7 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 ## Roadmap
 Design notes for each epic live in `docs/epics/`. Every epic now has a first implementation; what remains is polish:
 1. Hand playtesting against the simulator's numbers (see Balance Model); the auto-policy only flees when the maths says a fight is lost and never misjudges a potion, so real runs still end a little earlier.
-2. Real art and audio assets (sprites, tiles, SFX, music) replacing the placeholders.
+2. Real audio (SFX, music) replacing the synthesised placeholders, and more art: animation frames, floor-tier tile sets, item icons.
 3. Deeper monster ecology on top of the current kinds, calls and noise: flanking packs, monsters that use doors, and ranged harassment on the map.
 
 ---
