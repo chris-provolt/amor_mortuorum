@@ -48,15 +48,30 @@ class Action:
     skill_id: Optional[str] = None
 
 
+Side = Tuple[str, int]  # ("party" | "foe", index)
+
+
 @dataclass
 class LogEvent:
-    """One line of the combat log.
+    """One line of the combat log, with enough structure to animate it.
 
-    ``kind`` is one of: attack, heal, item, defend, flee, defeat, victory, info.
+    ``kind`` colours the line: attack, heal, item, defend, flee, defeat, victory, info.
+    ``effect`` names what happened for the battle screen: round, slash, cast, spell,
+    heal, item, guard, death, rage, flee, flee_fail, victory, defeat, miss or none.
+    ``actor``/``target`` identify battlers by side and index; ``amount`` is the HP
+    dealt or restored.
     """
 
     text: str
     kind: str = "info"
+    effect: str = "none"
+    actor: Optional[Side] = None
+    target: Optional[Side] = None
+    amount: int = 0
+
+
+def side_of(battler: "Battler") -> Side:
+    return ("party" if battler.is_player else "foe", battler.index)
 
 
 @dataclass
@@ -276,7 +291,7 @@ class Battle:
         """Resolve the round with whatever actions are pending and return its events."""
         if self.outcome is not Outcome.ONGOING:
             raise InvalidOperation("Battle is already over")
-        events: List[LogEvent] = [LogEvent(f"Round {self.round_number}", "info")]
+        events: List[LogEvent] = [LogEvent(f"Round {self.round_number}", "info", "round")]
 
         if self._resolve_flee(events):
             self._end_round(events)
@@ -304,10 +319,10 @@ class Battle:
         enemy_spd = max(b.spd for b in self.living_enemies)
         chance = flee_chance(party_spd, enemy_spd)
         if self.rng.random() < chance:
-            events.append(LogEvent("The party slips away into the dark.", "flee"))
+            events.append(LogEvent("The party slips away into the dark.", "flee", "flee"))
             self.outcome = Outcome.FLED
             return True
-        events.append(LogEvent("The party fails to escape!", "flee"))
+        events.append(LogEvent("The party fails to escape!", "flee", "flee_fail"))
         return False
 
     def _player_turn(self, battler: Battler, events: List[LogEvent]) -> None:
@@ -316,12 +331,16 @@ class Battle:
             return
         if action.kind is ActionKind.DEFEND:
             battler.defending = True
-            events.append(LogEvent(f"{battler.name} braces for the blow.", "defend"))
+            events.append(
+                LogEvent(f"{battler.name} braces for the blow.", "defend", "guard",
+                         actor=side_of(battler))
+            )
             return
         if action.kind is ActionKind.ATTACK:
             target = self._live_enemy_target(action.target)
             if target is None:
-                events.append(LogEvent(f"{battler.name} finds no foe to strike.", "info"))
+                events.append(LogEvent(f"{battler.name} finds no foe to strike.", "info", "miss",
+                                       actor=side_of(battler)))
                 return
             amount = damage(battler.atk, target.df, self.rng)
             if target.defending:
@@ -349,7 +368,8 @@ class Battle:
             player.spend_mp(skill.mp)
             healed = target.ref.heal(skill.heal)  # type: ignore[union-attr]
             text = f"{battler.name} casts {skill.name}: {target.name} recovers {healed} HP."
-            events.append(LogEvent(text, "heal"))
+            events.append(LogEvent(text, "heal", "heal", actor=side_of(battler),
+                                   target=side_of(target), amount=healed))
             return
         if skill.target == "all_enemies":
             targets = list(self.living_enemies)
@@ -360,12 +380,14 @@ class Battle:
             events.append(LogEvent(f"{battler.name} finds no foe for {skill.name}.", "info"))
             return
         player.spend_mp(skill.mp)
-        events.append(LogEvent(f"{battler.name} casts {skill.name}!", "item"))
+        events.append(LogEvent(f"{battler.name} casts {skill.name}!", "item", "cast",
+                               actor=side_of(battler)))
         for target in targets:
             amount = skill.damage + player.level
             if target.defending:
                 amount = _halved(amount)
-            self._hit(battler, target, amount, events, kind="item", source=skill.name)
+            self._hit(battler, target, amount, events, kind="item", source=skill.name,
+                      effect="spell")
 
     def _use_item(self, battler: Battler, action: Action, events: List[LogEvent]) -> None:
         item = self.data.item(action.item_id or "")
@@ -379,7 +401,8 @@ class Battle:
                 events.append(LogEvent(f"{battler.name} finds no foe for {item.name}.", "info"))
                 return
             bag.remove(item, 1)
-            self._hit(battler, target, item.damage, events, kind="item", source=item.name)
+            self._hit(battler, target, item.damage, events, kind="item", source=item.name,
+                      effect="spell")
             return
         target_idx = battler.index if action.target is None else action.target
         target = self.players[target_idx]
@@ -395,7 +418,8 @@ class Battle:
         if restored or item.mp_restore:
             parts.append(f"regains {restored} MP")
         text = f"{battler.name} uses {item.name}: {target.name} " + " and ".join(parts) + "."
-        events.append(LogEvent(text, "heal"))
+        events.append(LogEvent(text, "heal", "heal", actor=side_of(battler),
+                               target=side_of(target), amount=healed + restored))
 
     def _enemy_turn(self, battler: Battler, events: List[LogEvent]) -> None:
         living = self.living_players
@@ -416,15 +440,21 @@ class Battle:
         *,
         kind: str,
         source: Optional[str] = None,
+        effect: str = "slash",
     ) -> None:
         was_enraged = bool(getattr(target.ref, "is_enraged", False))
         dealt = target.ref.take_damage(amount)
         verb = f"uses {source} on" if source else "hits"
-        events.append(LogEvent(f"{attacker.name} {verb} {target.name} for {dealt}.", kind))
+        events.append(LogEvent(
+            f"{attacker.name} {verb} {target.name} for {dealt}.", kind, effect,
+            actor=side_of(attacker), target=side_of(target), amount=dealt,
+        ))
         if not target.is_alive:
-            events.append(LogEvent(f"{target.name} is defeated.", "defeat"))
+            events.append(LogEvent(f"{target.name} is defeated.", "defeat", "death",
+                                   target=side_of(target)))
         elif not was_enraged and getattr(target.ref, "is_enraged", False):
-            events.append(LogEvent(f"{target.name} shudders and rages!", "info"))
+            events.append(LogEvent(f"{target.name} shudders and rages!", "info", "rage",
+                                   target=side_of(target)))
 
     def _live_enemy_target(self, index: Optional[int]) -> Optional[Battler]:
         if index is not None and 0 <= index < len(self.foes) and self.foes[index].is_alive:
@@ -447,9 +477,9 @@ class Battle:
         self.round_number += 1
         self._update_outcome()
         if self.outcome is Outcome.VICTORY:
-            events.append(LogEvent("Victory! The dead lie still once more.", "victory"))
+            events.append(LogEvent("Victory! The dead lie still once more.", "victory", "victory"))
         elif self.outcome is Outcome.DEFEAT:
-            events.append(LogEvent("The party has fallen.", "defeat"))
+            events.append(LogEvent("The party has fallen.", "defeat", "defeat"))
         self.log.extend(events)
 
 
@@ -458,6 +488,8 @@ __all__ = [
     "Action",
     "Battler",
     "LogEvent",
+    "Side",
+    "side_of",
     "Outcome",
     "Battle",
     "damage",

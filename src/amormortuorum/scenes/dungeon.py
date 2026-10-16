@@ -70,6 +70,9 @@ BADGE = 7  # px: kind badge drawn in a tile corner
 SPRITE_SCALE = TILE_SIZE / pixelart.RENDER_PX
 WORLD_ZOOM = 2.0          # 32 px art shown at 64 px: chunky 16-bit pixels
 IDLE_FRAME_TIME = 0.5     # seconds per idle animation frame
+MOVE_TIME = 0.16          # seconds a step takes on screen
+STRIDE_PERIOD = 0.32      # seconds for a full walk cycle while moving
+HOLD_DELAY = 0.22         # seconds a direction must be held before auto-walking
 PORTAL_FRAME_TIME = 0.12
 TORCH = (255, 244, 224)   # light colour next to the party
 TORCH_FAR = (190, 200, 235)  # light colour at the edge of sight
@@ -160,6 +163,13 @@ class DungeonScene(BaseScene):
         self._lit: set = set()
         self._anim = 0.0
         self._idle_frame = 0
+        self._facing = "down"
+        self._move_from: Optional[tuple] = None  # screen position a step started from
+        self._move_t = 0.0                       # seconds into the current step
+        self._stride = 0.0                       # seconds spent walking (cycle clock)
+        self._hold = 0.0                         # seconds a direction key has been held
+        self._monster_from: Dict[int, tuple] = {}  # monster id -> (from, t)
+        self._monster_facing: Dict[int, str] = {}
         self._portal_frames: list = []
         self._portal_sprite: Optional[arcade.Sprite] = None
         self._door_sprites: Dict[Pos, arcade.Sprite] = {}
@@ -390,7 +400,17 @@ class DungeonScene(BaseScene):
                 sprite = pixelart.sprite(art, tile_center(m.pos), SPRITE_SCALE)
                 self.monster_sprites.append(sprite)
                 self._monster_sprites[m.id] = sprite
-            sprite.position = tile_center(m.pos)
+            target = tile_center(m.pos)
+            if tuple(sprite.position) != target:
+                if sprite.alpha and abs(sprite.center_x - target[0]) <= TILE_SIZE * 1.5 \
+                        and abs(sprite.center_y - target[1]) <= TILE_SIZE * 1.5:
+                    self._monster_from[m.id] = (tuple(sprite.position), 0.0)
+                    if target[0] != sprite.center_x:
+                        left = target[0] < sprite.center_x
+                        self._monster_facing[m.id] = "left" if left else "right"
+                else:
+                    sprite.position = target
+                    self._monster_from.pop(m.id, None)
             seen = m.pos in self.vis.visible
             sprite.color = blend(monster_tint(m), self._light(m.pos)) if seen else TINT_PLAIN
             sprite.alpha = ALPHA_VISIBLE if seen else 0
@@ -481,6 +501,7 @@ class DungeonScene(BaseScene):
     # Movement and interaction
 
     def _try_move(self, dx: int, dy: int) -> None:
+        self._facing = pixelart.facing_from(dx, dy, self._facing)
         nx, ny = self.pos[0] + dx, self.pos[1] + dy
         if self.fmap.is_locked_door(nx, ny):
             self._try_unlock((nx, ny))
@@ -496,8 +517,9 @@ class DungeonScene(BaseScene):
                 self.hud.push(f"You {verb} the {target.name}.")
             self._start_encounter(target)
             return
+        self._move_from = tuple(self._player_sprite.position)
+        self._move_t = 0.0
         self.pos = (nx, ny)
-        self._player_sprite.position = tile_center(self.pos)
         self.app.audio.play("step")
         self._refresh_visibility()
         self._stat("steps")
@@ -737,20 +759,92 @@ class DungeonScene(BaseScene):
 
     # Rendering and input
 
+    def _held_direction(self) -> Optional[tuple]:
+        """The (dx, dy) of a movement key currently held, if any."""
+        inp = getattr(self.app, "input", None)
+        if inp is None:
+            return None
+        for action, delta in MOVES.items():
+            if inp.is_pressed(action):
+                return delta
+        return None
+
+    def _animate_walkers(self, delta_time: float) -> None:
+        """Slide the party and monsters between tiles; pick stride or idle frames."""
+        sprite = self._player_sprite
+        moving = self._move_from is not None
+        if moving and sprite is not None:
+            self._move_t += delta_time
+            self._stride += delta_time
+            t = min(1.0, self._move_t / MOVE_TIME)
+            fx, fy = self._move_from
+            tx, ty = tile_center(self.pos)
+            sprite.position = (fx + (tx - fx) * t, fy + (ty - fy) * t)
+            if t >= 1.0:
+                self._move_from = None
+        if sprite is not None:
+            art = pixelart.party_sprite_name(self.run.leader.companion_id)
+            frame = pixelart.walk_frame(self._stride, STRIDE_PERIOD) if moving else self._idle_frame
+            tex = pixelart.texture(art, frame, self._facing)
+            if sprite.texture is not tex:
+                sprite.texture = tex
+        for m in self.monsters:
+            ms = self._monster_sprites.get(m.id)
+            if ms is None:
+                continue
+            tween = self._monster_from.get(m.id)
+            if tween is not None:
+                start, t = tween
+                t += delta_time
+                k = min(1.0, t / MOVE_TIME)
+                tx, ty = tile_center(m.pos)
+                ms.position = (start[0] + (tx - start[0]) * k, start[1] + (ty - start[1]) * k)
+                if k >= 1.0:
+                    self._monster_from.pop(m.id, None)
+                else:
+                    self._monster_from[m.id] = (start, t)
+            art = pixelart.enemy_sprite_name(m.lead or m.enemies[0])
+            if m.asleep:
+                frame = 0
+            elif tween is not None:
+                frame = pixelart.walk_frame(self._anim, STRIDE_PERIOD)
+            else:
+                frame = self._idle_frame
+            tex = pixelart.texture(art, frame)
+            if self._monster_facing.get(m.id) == "left":
+                tex = self._flipped(tex)
+            if ms.texture is not tex:
+                ms.texture = tex
+
+    _flip_cache: Dict[int, arcade.Texture] = {}
+
+    def _flipped(self, tex: arcade.Texture) -> arcade.Texture:
+        key = id(tex)
+        out = self._flip_cache.get(key)
+        if out is None:
+            out = tex.flip_left_right()
+            self._flip_cache[key] = out
+        return out
+
     def update(self, delta_time: float):
-        """Idle animation: the party and awake monsters breathe, the portal turns."""
+        """Walk tweens and stride frames, idle breathing, the turning portal, and
+        auto-walk while a direction key is held."""
         self._anim += delta_time
-        frame = int(self._anim / IDLE_FRAME_TIME) % 2
-        if frame != self._idle_frame:
-            self._idle_frame = frame
-            if self._player_sprite is not None:
-                art = pixelart.party_sprite_name(self.run.leader.companion_id)
-                self._player_sprite.texture = pixelart.texture(art, frame)
-            for m in self.monsters:
-                sprite = self._monster_sprites.get(m.id)
-                if sprite is not None:
-                    art = pixelart.enemy_sprite_name(m.lead or m.enemies[0])
-                    sprite.texture = pixelart.texture(art, 0 if m.asleep else frame)
+        self._idle_frame = int(self._anim / IDLE_FRAME_TIME) % 2
+        self._animate_walkers(delta_time)
+        held = self._held_direction() if not self.paused else None
+        if held is None:
+            self._hold = 0.0
+            if self._move_from is None:
+                self._stride = 0.0
+        else:
+            self._hold += delta_time
+            can_step = (
+                self._move_from is None and self.active_battle is None
+                and self.manager.current is self and self._hold >= HOLD_DELAY
+            )
+            if can_step:
+                self._try_move(*held)
         if self._portal_sprite is not None and self._portal_frames:
             idx = int(self._anim / PORTAL_FRAME_TIME) % len(self._portal_frames)
             self._portal_sprite.texture = self._portal_frames[idx]

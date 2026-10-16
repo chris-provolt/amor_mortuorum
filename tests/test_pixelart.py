@@ -2,6 +2,8 @@
 from amormortuorum.data import GameData
 from amormortuorum.ui import pixelart as px
 
+px.Image = px.Image  # PIL module re-exported for the mirror check
+
 
 def test_every_sprite_is_a_square_grid_of_palette_colours():
     assert len(px.names()) >= 40
@@ -64,3 +66,30 @@ def test_native_art_renders_without_upscaling_and_shares_the_16px_fallback():
     assert a.getpixel((16, 3)) == b.getpixel((16, 1))
     variants = {px.floor_variant(x, y) for x in range(8) for y in range(8)}
     assert variants == set(px.FLOOR_VARIANTS)
+
+
+def test_party_sprites_turn_and_walk():
+    for name in px.PARTY:
+        assert px.has_facings(name)
+        down, up, left, right = (px.image(name, facing=f) for f in px.FACINGS)
+        assert down.tobytes() != up.tobytes() != left.tobytes()
+        assert right.tobytes() == left.transpose(px.Image.FLIP_LEFT_RIGHT).tobytes()
+        for facing in px.FACINGS:
+            stand = px.render(name, 0, facing)
+            a, b = px.render(name, 2, facing), px.render(name, 3, facing)
+            assert stand.size == a.size == (px.RENDER_PX, px.RENDER_PX)
+            assert a.tobytes() != stand.tobytes() and b.tobytes() != a.tobytes()
+            # the lifted foot leaves the bottom row of its half empty
+            top, bottom = px.LEG_ROWS
+            assert any(a.getpixel((x, bottom - 1))[3] for x in range(px.RENDER_PX))
+    assert not px.has_facings("ghoul")
+    assert px.render("ghoul", 2).tobytes() != px.render("ghoul", 0).tobytes()  # a walker
+    assert px.render("wraith", 2).tobytes() == px.render("wraith", 0).tobytes()  # floats
+
+
+def test_walk_cycle_and_facing_helpers():
+    assert [px.walk_frame(t) for t in (0.0, 0.1, 0.2, 0.3)] == list(px.WALK_CYCLE)
+    assert px.walk_frame(0.4) == px.WALK_CYCLE[0]
+    assert px.facing_from(1, 0) == "right" and px.facing_from(-1, 0) == "left"
+    assert px.facing_from(0, 1) == "up" and px.facing_from(0, -1) == "down"
+    assert px.facing_from(0, 0, "left") == "left"

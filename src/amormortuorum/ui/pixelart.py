@@ -805,6 +805,76 @@ _add32("humanoid", """
 ................................
 """)
 
+_add32("humanoid_up", """
+................................
+............########............
+..........##HHHHHHHH##..........
+.........#HHHHHHHHHHHH#.........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#HsHHHHHHHHHHsH#........
+.........#HHHHHHHHHHHH#.........
+.........#HHHHHHHHHHHH#.........
+..........##HHHHHHHH##..........
+............#ssssss#............
+.........####BBBBBB####.........
+.......##BBBBBBBBBBBBBB##.......
+......#RR#BBBBBBBBBBBB#LL#......
+.....#RRR#BBBBBBBBBBBB#LLL#.....
+.....#RR#BBBBBBBBBBBBBB#LL#.....
+.....#RR#BBBBBBBBBBBBBB#LL#.....
+.....#RR#BBBBBBBBBBBBBB#LL#.....
+.....#RR##BBBBAAAABBBB##LL#.....
+.....####.#BBBAAAABBB#.#LL#.....
+..........#KKKKKKKKKK#.#LL#.....
+..........#KKKK##KKKK#.#LL#.....
+..........#KKKK##KKKK#.#LL#.....
+..........#KKKK##KKKK#.####.....
+..........####..####............
+................................
+""")
+
+_add32("humanoid_side", """
+................................
+............########............
+..........##HHHHHHHH##..........
+.........#HHHHHHHHHHHH#.........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#ssssHHHHHHHHHH#........
+........#sssssHHHHHHHHH#........
+........#ssssssHHHHHHHH#........
+........#s##sssHHHHHHHH#........
+........#s#WsssHHHHHHHH#........
+........#sssssssHHHHHHH#........
+.........#ssssssHHHHHH#.........
+.........#sSsssssHHHHH#.........
+..........##ssssHHHH##..........
+............#ssssss#............
+..........####BBBBBB###.........
+.........#LL#BBBBBBBBBB#........
+........#LLL#BBBBBBBBBB#........
+........#LL#BBBBBBBBBBB#........
+........#LL#BBBBBBBBBBB#........
+........#LL#BBBBBBBBBBB#........
+........#LL#BBBBBBBBBBB#........
+........#LL##BBBBBBBBB##........
+........#LL#.#BBBBBBBB#.........
+........#LL#.#KKKKKKKK#.........
+........#LL#.#KKK##KKK#.........
+........#LL#.#KKK##KKK#.........
+........####.#KKK##KKK#.........
+.............####.###...........
+................................
+""")
+
 _add32("skel_basic", """
 ................................
 ............########............
@@ -1341,19 +1411,54 @@ def names() -> Tuple[str, ...]:
     return tuple(sorted(set(ART) - {"humanoid"} | set(REMAPS)))
 
 
-def grid(name: str, native: bool = True) -> str:
+FACINGS = ("down", "up", "left", "right")
+# Walk cycle: stand, left foot up, stand, right foot up (frame ids into render())
+WALK_CYCLE = (2, 0, 3, 0)
+STEP_FRAMES = (2, 3)
+# Where the legs live in the 32 px templates: rows, and the column that splits them
+LEG_ROWS = (26, 31)
+LEG_SPLIT = {"humanoid_side": 17}
+LEG_SPLIT_DEFAULT = 16
+# Monsters with legs on rows 26-30 that stride on the map; the rest only bob
+WALKERS = ("skel_basic", "ghoul", "bone_guard", "revenant", "lich_acolyte", "grave_titan",
+           "bone_colossus", "ossuary_king", "warden_of_ash")
+
+
+def _facing_template(base: str, facing: str) -> str:
+    """The template variant for a facing: ``_up``/``_side`` when drawn, else the base."""
+    if facing == "up" and f"{base}_up" in ART32:
+        return f"{base}_up"
+    if facing in ("left", "right") and f"{base}_side" in ART32:
+        return f"{base}_side"
+    return base
+
+
+def grid(name: str, native: bool = True, facing: str = "down") -> str:
     """The resolved character grid for ``name`` (palette swaps applied).
 
     With ``native`` the 32x32 table is preferred when it has the sprite or the
     template a remap is built on; otherwise the 16x16 grid is returned.
+    ``facing`` picks a back or side view where the template has one (right is
+    drawn from the side view by mirroring in :func:`image`).
     """
     if name in REMAPS:
         base, mapping = REMAPS[name]
-        table = ART32 if native and base in ART32 else ART
-        return "".join(mapping.get(ch, ch) for ch in table[base])
+        if native and base in ART32:
+            return "".join(mapping.get(ch, ch) for ch in ART32[_facing_template(base, facing)])
+        return "".join(mapping.get(ch, ch) for ch in ART[base])
     if native and name in ART32:
-        return ART32[name]
+        return ART32[_facing_template(name, facing)]
     return ART[name]
+
+
+def has_facings(name: str) -> bool:
+    """Does this sprite turn (has back and side views)?"""
+    base = REMAPS[name][0] if name in REMAPS else name
+    return f"{base}_up" in ART32 and f"{base}_side" in ART32
+
+
+def template_of(name: str) -> str:
+    return REMAPS[name][0] if name in REMAPS else name
 
 
 def grid_size(name: str) -> int:
@@ -1361,18 +1466,50 @@ def grid_size(name: str) -> int:
     return len(grid(name).split("\n"))
 
 
-def image(name: str, scale: int = 1, native: bool = True) -> Image.Image:
-    """Render ``name`` to an RGBA image, ``scale`` pixels per cell (nearest neighbour)."""
-    rows = grid(name, native).split("\n")
+def image(
+    name: str, scale: int = 1, native: bool = True, facing: str = "down"
+) -> Image.Image:
+    """Render ``name`` to an RGBA image, ``scale`` pixels per cell (nearest neighbour).
+
+    ``facing="right"`` mirrors the side view so the sprite looks right.
+    """
+    rows = grid(name, native, facing).split("\n")
     size = len(rows)
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     px = img.load()
     for y, row in enumerate(rows):
         for x, ch in enumerate(row):
             px[x, y] = PALETTE[ch]
+    if facing == "right" and has_facings(name):
+        img = img.transpose(Image.FLIP_LEFT_RIGHT)
     if scale != 1:
         img = img.resize((size * scale, size * scale), Image.NEAREST)
     return img
+
+
+def step(img: Image.Image, name: str, which: int, facing: str = "down") -> Image.Image:
+    """A walking pose: lift one leg two pixels (``which`` 0 = left half, 1 = right).
+
+    Works on the native 32 px source: the leg rows are shifted up within their
+    half of the sprite and the vacated pixels cleared, so the foot visibly
+    rises and the stride reads at a glance.
+    """
+    size = img.size[0]
+    if size != RENDER_PX or not (has_facings(name) or name in WALKERS):
+        return img
+    tmpl = _facing_template(template_of(name), facing)
+    split = LEG_SPLIT.get(tmpl, LEG_SPLIT_DEFAULT)
+    if facing == "right" and has_facings(name):
+        split = size - split
+        which = 1 - which
+    x0, x1 = (0, split) if which == 0 else (split, size)
+    top, bottom = LEG_ROWS
+    lift = 2
+    out = img.copy()
+    region = img.crop((x0, top + lift, x1, bottom))
+    out.paste(Image.new("RGBA", (x1 - x0, bottom - top), (0, 0, 0, 0)), (x0, top))
+    out.paste(region, (x0, top))
+    return out
 
 
 # --- Rendering pipeline: 16x16 source -> 32x32 shaded sprite -----------------
@@ -1454,38 +1591,64 @@ def shade(img: Image.Image) -> Image.Image:
     return out
 
 
-def render(name: str, frame: int = 0) -> Image.Image:
-    """The finished 32x32 sprite. Frame 1 is the idle bob: the body lifted one
-    source pixel, which reads as breathing when the two frames alternate."""
-    src = image(name)
+def render(name: str, frame: int = 0, facing: str = "down") -> Image.Image:
+    """The finished 32x32 sprite.
+
+    Frames: 0 standing, 1 idle bob (the body lifted one source pixel, which
+    reads as breathing), 2 and 3 the two walking poses (left or right leg
+    raised; sprites without native legs fall back to the standing pose).
+    """
+    src = image(name, facing=facing)
     size = src.size[0]
     if frame == 1:
         lift = size // SIZE  # one source pixel of the 16 px grid
         lifted = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         lifted.paste(src.crop((0, lift, size, size)), (0, 0))
         src = lifted
+    elif frame in STEP_FRAMES:
+        src = step(src, name, frame - STEP_FRAMES[0], facing)
     out = epx(src) if size < RENDER_PX else src
     if name not in TILES:
         out = shade(out)
     return out
 
 
-_textures: Dict[Tuple[str, int], arcade.Texture] = {}
+_textures: Dict[Tuple[str, int, str], arcade.Texture] = {}
 
 
-def texture(name: str, frame: int = 0) -> arcade.Texture:
-    """The cached 32x32 arcade texture for ``name`` (``frame`` 0 or 1)."""
-    key = (name, frame)
+def texture(name: str, frame: int = 0, facing: str = "down") -> arcade.Texture:
+    """The cached 32x32 arcade texture for ``name`` (see :func:`render` for frames)."""
+    if not has_facings(name):
+        facing = "down"
+    key = (name, frame, facing)
     tex = _textures.get(key)
     if tex is None:
-        tex = arcade.Texture(render(name, frame), hash=f"pixelart:{name}:{frame}")
+        tex = arcade.Texture(render(name, frame, facing), hash=f"pixelart:{name}:{frame}:{facing}")
         _textures[key] = tex
     return tex
 
 
-def frames(name: str) -> List[arcade.Texture]:
+def frames(name: str, facing: str = "down") -> List[arcade.Texture]:
     """Both idle frames for ``name``."""
-    return [texture(name, 0), texture(name, 1)]
+    return [texture(name, 0, facing), texture(name, 1, facing)]
+
+
+def walk_frame(t: float, period: float = 0.4) -> int:
+    """Which render frame a walker shows ``t`` seconds into its stride cycle."""
+    return WALK_CYCLE[int(t / period * len(WALK_CYCLE) + 1e-6) % len(WALK_CYCLE)]
+
+
+def facing_from(dx: int, dy: int, current: str = "down") -> str:
+    """The facing for a step of (dx, dy) on the map (dy > 0 is up on screen)."""
+    if dx > 0:
+        return "right"
+    if dx < 0:
+        return "left"
+    if dy > 0:
+        return "up"
+    if dy < 0:
+        return "down"
+    return current
 
 
 def sprite(name: str, center: Tuple[float, float], scale: float = 1.0) -> arcade.Sprite:
@@ -1521,6 +1684,13 @@ __all__ = [
     "names",
     "grid",
     "grid_size",
+    "FACINGS",
+    "WALK_CYCLE",
+    "has_facings",
+    "WALKERS",
+    "step",
+    "walk_frame",
+    "facing_from",
     "image",
     "RENDER_PX",
     "epx",

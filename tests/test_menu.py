@@ -64,3 +64,13 @@ def test_combat_flash_fades_linearly_to_zero():
     assert flash_alpha(FLASH_TIME / 2) == round(FLASH_ALPHA / 2)
     assert flash_alpha(0.0) == 0 and flash_alpha(-1.0) == 0
     assert flash_alpha(FLASH_TIME * 3) == FLASH_ALPHA  # never brighter than the peak
+
+
+def test_lunge_offset_dashes_in_and_returns():
+    from amormortuorum.scenes.combat import IMPACT_AT, LUNGE_PX, lunge_offset
+
+    assert lunge_offset(0.0) == 0.0
+    assert abs(lunge_offset(IMPACT_AT) - LUNGE_PX) < 1e-6  # the blow lands at full reach
+    assert 0 < lunge_offset(IMPACT_AT / 2) < LUNGE_PX
+    assert abs(lunge_offset(1.0)) < 1e-6
+    assert lunge_offset(-1) == 0.0 and abs(lunge_offset(2.0)) < 1e-6
