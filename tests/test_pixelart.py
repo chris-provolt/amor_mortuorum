@@ -11,7 +11,7 @@ def test_every_sprite_is_a_square_grid_of_palette_colours():
         for native in (False, True):
             rows = px.grid(name, native).split("\n")
             size = len(rows)
-            assert size == px.SIZE or (native and size == px.RENDER_PX), (name, size)
+            assert size == px.SIZE or (native and size in (px.RENDER_PX, px.HD_PX)), (name, size)
             assert all(len(r) == size for r in rows), name
         rows = px.grid(name).split("\n")
         used = {ch for r in rows for ch in r}
@@ -45,22 +45,22 @@ def test_every_enemy_companion_and_boss_has_its_own_art():
 
 
 def test_remaps_only_touch_template_letters_and_floor_variants_vary():
-    for native, table in ((False, px.ART), (True, px.ART32)):
-        base = table["humanoid"]
+    for native in (False, True):
+        base = px.hd_grid("humanoid") if native else px.ART["humanoid"]
         for name in px.PARTY:
             g = px.grid(name, native)
             assert len(g) == len(base)
-            if name in px.OVERLAYS and native:
+            if native and (name in px.OVERLAYS or name in px.OVERLAY_PATCHES64):
                 continue  # a hood or beard is drawn over the body by design
             assert all(a == b or a in px.TEMPLATE_KEYS for a, b in zip(base, g)), name
 
 
 def test_native_art_renders_without_upscaling_and_shares_the_16px_fallback():
-    assert px.grid_size("hero") == px.RENDER_PX and px.grid_size("chest") == px.SIZE
+    assert px.grid_size("hero") == px.HD_PX and px.grid_size("chest") == px.SIZE
     data = GameData.load()
-    for name in list(data.enemies) + list(px.PARTY):  # every battler is native 32 px
-        assert px.grid_size(name) == px.RENDER_PX, name
-        assert px.render(name).size == (px.RENDER_PX, px.RENDER_PX)
+    for name in list(data.enemies) + list(px.PARTY):  # every battler renders at 64 px
+        assert px.grid_size(name) == px.HD_PX, name
+        assert px.render(name).size == (px.HD_PX, px.HD_PX)
         assert px.image(name, native=False).size == (px.SIZE, px.SIZE)
     assert px.render("chest").size == (px.RENDER_PX, px.RENDER_PX)
     # the idle frame bobs the head: a head row of frame 1 is the row below it in
@@ -70,11 +70,11 @@ def test_native_art_renders_without_upscaling_and_shares_the_16px_fallback():
     def close(p, q):  # the volume gradient shifts tones a touch between rows
         return all(abs(i - j) <= 8 for i, j in zip(p, q))
 
-    assert close(a.getpixel((16, 3)), b.getpixel((16, 2)))
-    assert a.getpixel((12, 29)) == b.getpixel((12, 29))
+    assert close(a.getpixel((32, 6)), b.getpixel((32, 4)))
+    assert a.getpixel((24, 58)) == b.getpixel((24, 58))
     # floaters rise whole
     a, b = px.render("wraith", 0), px.render("wraith", 1)
-    assert close(a.getpixel((16, 3)), b.getpixel((16, 1)))
+    assert close(a.getpixel((32, 6)), b.getpixel((32, 2)))
     variants = {px.floor_variant(x, y) for x in range(8) for y in range(8)}
     assert variants == set(px.FLOOR_VARIANTS)
 
@@ -84,17 +84,17 @@ def test_companions_wear_their_own_overlays():
         assert who in px.OVERLAYS
         for facing in px.FACINGS:
             g = px.grid(who, facing=facing)
-            assert len(g.split("\n")) == px.RENDER_PX
+            assert len(g.split("\n")) == px.HD_PX
         # the overlay changes the head region beyond a palette swap of the hero
         hero = px.image("hero")
         them = px.image(who)
-        differs = sum(1 for x in range(32) for y in range(2, 17)
+        differs = sum(1 for x in range(64) for y in range(4, 34)
                       if (hero.getpixel((x, y))[3] == 0) != (them.getpixel((x, y))[3] == 0)
                       or hero.getpixel((x, y)) != them.getpixel((x, y)))
-        assert differs > 20, who
+        assert differs > 80, who
     # overlays follow the strike pose's body shift
     strike = px.image("pale_cassia", frame=5, facing="left")
-    assert strike.getpixel((7 + 12, 2))[3] == 255 and strike.getpixel((7 + 12 - 7, 2))[3] == 0
+    assert strike.getpixel((40, 4))[3] == 255 and strike.getpixel((26, 4))[3] == 0
 
 
 def test_party_sprites_turn_and_walk():
@@ -106,11 +106,12 @@ def test_party_sprites_turn_and_walk():
         for facing in px.FACINGS:
             stand = px.render(name, 0, facing)
             a, b = px.render(name, 2, facing), px.render(name, 3, facing)
-            assert stand.size == a.size == (px.RENDER_PX, px.RENDER_PX)
+            assert stand.size == a.size == (px.HD_PX, px.HD_PX)
             assert a.tobytes() != stand.tobytes() and b.tobytes() != a.tobytes()
             # the lifted foot leaves the bottom row of its half empty
-            top, bottom = px.LEG_ROWS
-            assert any(a.getpixel((x, bottom - 1))[3] for x in range(px.RENDER_PX))
+            k = px.HD_PX // px.RENDER_PX
+            bottom = px.LEG_ROWS[1] * k
+            assert any(a.getpixel((x, bottom - 1))[3] for x in range(px.HD_PX))
     assert not px.has_facings("ghoul")
     assert px.render("ghoul", 2).tobytes() != px.render("ghoul", 0).tobytes()  # a walker
     assert px.render("wraith", 2).tobytes() == px.render("wraith", 0).tobytes()  # floats
@@ -135,9 +136,9 @@ def test_battle_poses_and_weapons():
         # an equipped blade appears in the hand; unarmed hands stay empty
         armed = px.render(name, 4, "left", weapon="sword_bone")
         assert armed.tobytes() != raised.tobytes()
-        assert armed.getpixel((5, 7))[3] == 255 and raised.getpixel((5, 7))[3] == 0
+        assert armed.getpixel((10, 14))[3] == 255 and raised.getpixel((10, 14))[3] == 0
         thrust = px.render(name, 5, "left", weapon="dagger")
-        assert thrust.getpixel((4, 19))[3] == 255 and strike.getpixel((4, 19))[3] == 0
+        assert thrust.getpixel((8, 38))[3] == 255 and strike.getpixel((8, 38))[3] == 0
         # mirrored for the right facing, weapon and all
         right = px.image(name, facing="right", frame=5, weapon="dagger")
         assert right.tobytes() == px.image(
@@ -201,18 +202,20 @@ def test_death_dissolve_crumbles_from_the_top_down():
     base = px.render("ghoul")
     early, late = px.dissolve(base, 0.25), px.dissolve(base, 0.8)
 
+    n = base.size[0]
+
     def alive(img):
-        return sum(1 for x in range(32) for y in range(32) if img.getpixel((x, y))[3])
+        return sum(1 for x in range(n) for y in range(n) if img.getpixel((x, y))[3])
 
     assert alive(base) > alive(early) > alive(late) > 0
     assert alive(px.dissolve(base, 1.0)) == 0
     # the top rows go first: nothing left in the top quarter at 80 %
-    assert all(late.getpixel((x, y))[3] == 0 for x in range(32) for y in range(8))
+    assert all(late.getpixel((x, y))[3] == 0 for x in range(n) for y in range(n // 4))
     # what remains has drained towards grey
-    px_late = [late.getpixel((x, y))[:3] for x in range(32) for y in range(32)
+    px_late = [late.getpixel((x, y))[:3] for x in range(n) for y in range(n)
                if late.getpixel((x, y))[3]]
     spread = sum(max(c) - min(c) for c in px_late) / len(px_late)
-    px_base = [base.getpixel((x, y))[:3] for x in range(32) for y in range(32)
+    px_base = [base.getpixel((x, y))[:3] for x in range(n) for y in range(n)
                if base.getpixel((x, y))[3]]
     assert spread < sum(max(c) - min(c) for c in px_base) / len(px_base)
     assert px.dissolve(base, 0.5).tobytes() == px.dissolve(base, 0.5).tobytes()  # deterministic
@@ -220,10 +223,10 @@ def test_death_dissolve_crumbles_from_the_top_down():
 
 def test_ghost_hems_are_translucent_and_shading_darkens_downwards():
     wraith = px.render("wraith")
-    alphas = {wraith.getpixel((x, y))[3] for x in range(32) for y in range(24, 32)}
+    alphas = {wraith.getpixel((x, y))[3] for x in range(64) for y in range(48, 64)}
     assert any(0 < a < 255 for a in alphas)  # the tattered hem
     skel = px.render("skel_basic")
-    assert skel.getpixel((12, 8))[0] > 150  # the eye glows red
+    assert skel.getpixel((24, 16))[0] > 150  # the eye glows red
     # the same fill colour ends up darker lower down the sprite (volume gradient)
     img = px.Image.new("RGBA", (32, 32), (0, 0, 0, 0))
     for y in range(4, 28):
@@ -231,3 +234,25 @@ def test_ghost_hems_are_translucent_and_shading_darkens_downwards():
             img.putpixel((x, y), px.PALETTE["e"])
     shaded = px.shade(img)
     assert sum(shaded.getpixel((16, 6))[:3]) > sum(shaded.getpixel((16, 24))[:3])
+
+
+def test_hd_grids_upscale_cleanly_and_hero_wears_his_gear():
+    rows = px.hd_grid("skel_basic").split("\n")
+    assert len(rows) == px.HD_PX and all(len(r) == px.HD_PX for r in rows)
+    # EPX keeps the letters of the source: nothing new is invented
+    source = {ch for r in px.ART32["skel_basic"].split("\n") for ch in r}
+    assert {ch for r in rows for ch in r} <= source
+    grown = px.epx_rows(["aaaa"] * 3)  # a straight edge stays straight, corners round
+    assert len(grown) == 6 and grown[2] == "a" * 8 and grown[0] == ".aaaaaa."
+    assert px.apply_patches(["....", "...."], [(1, 0, ("x_",))]) == [".x..", "...."]
+    hero = px.image("hero")
+    red = px.PALETTE["r"]
+    # headband across the brow, cape at the sides, steel plate on the chest
+    assert hero.getpixel((30, 14)) == red
+    assert hero.getpixel((7, 40)) == red or hero.getpixel((7, 40)) == px.PALETTE["R"]
+    assert hero.getpixel((30, 38)) == px.PALETTE["l"]
+    back = px.image("hero", facing="up")
+    assert back.getpixel((30, 46)) in (red, px.PALETTE["R"])
+    # a sprite is still one world tile however fine its texture
+    import arcade  # noqa: F401
+    assert px.texture("hero").width == px.HD_PX

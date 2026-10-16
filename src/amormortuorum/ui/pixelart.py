@@ -12,7 +12,7 @@ it; :func:`image` returns the PIL image for tests and tooling.
 from __future__ import annotations
 
 import colorsys
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Dict, List, Mapping, Optional, Tuple, Sequence
 
 import arcade
 from PIL import Image
@@ -567,8 +567,8 @@ REMAPS: Dict[str, Tuple[str, Mapping[str, str]]] = {
     "icon_antidote": ("icon_flask", {"R": "e", "K": "E"}),
     # H hair, I hair shade, B tunic, J tunic shade, A trim, L/R sleeves, M sleeve shade,
     # K trousers, U boots
-    "hero": ("humanoid", {"H": "l", "I": "g", "B": "b", "J": "B", "A": "Y", "L": "l",
-                          "R": "l", "M": "g", "K": "N", "U": "d"}),
+    "hero": ("humanoid", {"H": "n", "I": "N", "B": "b", "J": "B", "A": "y", "L": "b",
+                          "R": "b", "M": "B", "K": "G", "U": "N"}),
     "ossian": ("humanoid", {"H": "n", "I": "N", "B": "n", "J": "N", "A": "Y", "L": "N",
                             "R": "N", "M": "d", "K": "G", "U": "N"}),
     "sister_vel": ("humanoid", {"H": "w", "I": "l", "B": "w", "J": "l", "A": "y", "L": "w",
@@ -1001,6 +1001,522 @@ OVERLAYS: Dict[str, Dict[str, str]] = {
 """,
     },
 }
+
+# --- HD (64 px) battlers -----------------------------------------------------
+# Every 32 px battler is upscaled to a 64 px letter grid (EPX on the letters, so
+# diagonals smooth out while remaps and overlays still apply) and then hand
+# patches add detail at the finer scale: (x, y, rows) placed on the 64 px grid,
+# where '.' keeps what is under it and '_' clears a cell.
+HD_PX = 64
+Patch = Tuple[int, int, Tuple[str, ...]]
+
+# Detail patches on the shared templates / monster grids, by 32 px name
+PATCHES64: Dict[str, List[Patch]] = {}
+
+# Detail patches on a party member's overlay, by name and view
+OVERLAY_PATCHES64: Dict[str, Dict[str, List[Patch]]] = {
+    "hero": {
+        "down": [
+            (18, 14, (
+                "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+                "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
+            )),
+            (47, 15, (
+                "#r#.",
+                "#rr#",
+                ".#rr#",
+                "..#r#",
+                "...##",
+            )),
+            (22, 19, (
+                "NNNN",
+            )),
+            (38, 19, (
+                "NNNN",
+            )),
+            (22, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (38, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (28, 28, (
+                "dddd",
+                ".SS.",
+            )),
+            (6, 38, (
+                "#rr#",
+                "#rr#",
+                "#rr#",
+                "#rr#",
+                "#rr#",
+                "#rr#",
+                "#rr#",
+                "#rr#",
+                "#rr#",
+                "#rr#",
+                "#rR#",
+                "#rR#",
+                "#rR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "####",
+            )),
+            (54, 38, (
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "#RR#",
+                "####",
+            )),
+            (22, 36, (
+                "#llllllllllllllllll#",
+                "#lllllllllllllllllg#",
+                "#llllllllllllllllgg#",
+                "#lllllllllllllllggg#",
+                "#llllllgllllllggggg#",
+                "#lllllgggllllgggggg#",
+                "#lggggggggggggggggg#",
+                ".##################.",
+            )),
+            (12, 34, (
+                "..######..",
+                ".#llllllg#",
+                "#llllllggg#",
+                "#lllllgggg#",
+                "#lgggggggg#",
+                ".##########",
+            )),
+            (42, 34, (
+                "..######..",
+                ".#llllllg#",
+                "#llllllggg#",
+                "#lllllgggg#",
+                "#lgggggggg#",
+                ".##########",
+            )),
+            (18, 42, (
+                "#yy#",
+                "#yy#",
+                "#NN#",
+                "#Nn#",
+                "#Nn#",
+                "#Nn#",
+                "#Nn#",
+                "#Nn#",
+                "#Nn#",
+                "#Nn#",
+                "#Nn#",
+                "#NN#",
+                "#NN#",
+                "#NN#",
+                ".##.",
+                "....",
+            )),
+        ],
+        "up": [
+            (18, 36, (
+                "#rrrrrrrrrrrrrrrrrrrrrrrrrr#",
+                "#rrrrrrrrrrrrrrrrrrrrrrrrRR#",
+                "#rrrrrrrrrrrrrrrrrrrrrrrrRR#",
+                "#rrrrrrrrrrrrrrrrrrrrrrrrRR#",
+                "#rrrrRrrrrrrrrrrrrrRrrrrrRR#",
+                "#rrrrRrrrrrrrrrrrrrRrrrrrRR#",
+                "#rrrrRrrrrrrrrrrrrrRrrrrrRR#",
+                "#rrrrRrrrrrrrrrrrrrRrrrrrRR#",
+                "#rrrrRrrrrrrrrrrrrrRrrrrrRR#",
+                "#rrrrRrrrrrrrrrrrrrRrrrrrRR#",
+                "#rrrrRrrrrrrrrrrrrrRrrrrrRR#",
+                "#rrrRRrrrrrrrrrrrrrRRrrrrRR#",
+                "#rrrRRrrrrrrRrrrrrrRRrrrrRR#",
+                "#rrrRRrrrrrrRrrrrrrRRrrrrRR#",
+                "#rrrRRrrrrrrRrrrrrrRRrrrrRR#",
+                "#rrrRRrrrrrrRrrrrrrRRrrrRRR#",
+                "#rrrRRrrrrrrRrrrrrrRRrrrRRR#",
+                "#rrRRRrrrrrrRrrrrrRRRrrrRRR#",
+                "#rrRRRrrrrrRRrrrrrRRRrrRRRR#",
+                "#rRRRRrrrrrRRrrrrrRRRRrRRRR#",
+                "#RRRRRRRRRRRRRRRRRRRRRRRRRR#",
+                "#RRRRRRRRRRRRRRRRRRRRRRRRRR#",
+                "############################",
+            )),
+            (29, 14, (
+                "rrrrrr",
+                "RRRRRR",
+                ".#rr#.",
+                ".#rr#.",
+                ".#rr#.",
+                "#rr#r#",
+                "#rr#r#",
+                "#r#.##",
+                "##....",
+            )),
+        ],
+        "side": [
+            (18, 14, (
+                "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+                "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
+            )),
+            (46, 16, (
+                "#r#..",
+                "#rr#.",
+                "#rr#.",
+                ".#rr#",
+                ".#rr#",
+                "..#r#",
+                "..#r#",
+                "...##",
+            )),
+            (18, 19, (
+                "NNNN",
+            )),
+            (18, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (20, 28, (
+                "ddd",
+                ".SS",
+            )),
+            (46, 36, (
+                "#rrrrrr#",
+                "#rrrrrr#",
+                "#rrrrrr#",
+                "#rrrrrR#",
+                "#rrrrrR#",
+                "#rrrrRR#",
+                "#rrrrRR#",
+                "#rrrrRR#",
+                "#rrrrRR#",
+                "#rrrRRR#",
+                "#rrrRRR#",
+                "#rrrRRR#",
+                "#rrrRRR#",
+                "#rrRRRR#",
+                "#rrRRRR#",
+                "#rrRRRR#",
+                "#rRRRRR#",
+                "#rRRRRR#",
+                "#RRRRRR#",
+                "#RRRRRR#",
+                "#RRRRRR#",
+                "#RRRRRR#",
+                "########",
+            )),
+            (26, 36, (
+                "#llllllllllllllllll#",
+                "#llllllllllllllllgg#",
+                "#lllllllllllllllggg#",
+                "#llllllllllllllgggg#",
+                "#llllllgllllllggggg#",
+                "#lllllgggllllgggggg#",
+                "#lggggggggggggggggg#",
+                ".##################.",
+            )),
+            (24, 34, (
+                "..######..",
+                ".#llllllg#",
+                "#llllllggg#",
+                "#lllllgggg#",
+                "#lgggggggg#",
+                ".##########",
+            )),
+            (24, 42, (
+                "#yy#",
+                "#yy#",
+                "#NN#",
+                "#Nn#",
+                "#Nn#",
+                "#Nn#",
+                "#Nn#",
+                "#Nn#",
+                "#Nn#",
+                "#Nn#",
+                "#Nn#",
+                "#NN#",
+                "#NN#",
+                "#NN#",
+                ".##.",
+                "....",
+            )),
+        ],
+    },
+    "ossian": {
+        "down": [
+            (22, 19, (
+                "NNNN",
+            )),
+            (38, 19, (
+                "NNNN",
+            )),
+            (22, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (38, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (28, 28, (
+                "dddd",
+                ".SS.",
+            )),
+        ],
+        "side": [
+            (18, 19, (
+                "NNNN",
+            )),
+            (18, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (20, 28, (
+                "ddd",
+                ".SS",
+            )),
+        ],
+        "up": [],
+    },
+    "sister_vel": {
+        "down": [
+            (22, 19, (
+                "NNNN",
+            )),
+            (38, 19, (
+                "NNNN",
+            )),
+            (22, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (38, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (28, 28, (
+                "dddd",
+                ".SS.",
+            )),
+        ],
+        "side": [
+            (18, 19, (
+                "NNNN",
+            )),
+            (18, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (20, 28, (
+                "ddd",
+                ".SS",
+            )),
+        ],
+        "up": [],
+    },
+    "pale_cassia": {
+        "down": [
+            (22, 19, (
+                "NNNN",
+            )),
+            (38, 19, (
+                "NNNN",
+            )),
+            (22, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (38, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (28, 28, (
+                "dddd",
+                ".SS.",
+            )),
+        ],
+        "side": [
+            (18, 19, (
+                "NNNN",
+            )),
+            (18, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (20, 28, (
+                "ddd",
+                ".SS",
+            )),
+        ],
+        "up": [],
+    },
+    "brother_moss": {
+        "down": [
+            (22, 19, (
+                "NNNN",
+            )),
+            (38, 19, (
+                "NNNN",
+            )),
+            (22, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (38, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (28, 28, (
+                "dddd",
+                ".SS.",
+            )),
+        ],
+        "side": [
+            (18, 19, (
+                "NNNN",
+            )),
+            (18, 20, (
+                "dddd",
+                "dWbd",
+                "dbbd",
+                ".dd.",
+            )),
+            (20, 28, (
+                "ddd",
+                ".SS",
+            )),
+        ],
+        "up": [],
+    },
+}
+
+
+def epx_rows(rows: Sequence[str]) -> List[str]:
+    """Scale2x/EPX on a letter grid: double the size, smoothing diagonal steps."""
+    h = len(rows)
+    w = len(rows[0]) if rows else 0
+
+    def at(x: int, y: int) -> str:
+        return rows[y][x] if 0 <= x < w and 0 <= y < h else "."
+
+    out = [["."] * (w * 2) for _ in range(h * 2)]
+    for y in range(h):
+        for x in range(w):
+            p = rows[y][x]
+            a, b, c, d = at(x, y - 1), at(x + 1, y), at(x - 1, y), at(x, y + 1)
+            p1 = p2 = p3 = p4 = p
+            if c == a and c != d and a != b:
+                p1 = a
+            if a == b and a != c and b != d:
+                p2 = b
+            if d == c and d != b and c != a:
+                p3 = c
+            if b == d and b != a and d != c:
+                p4 = d
+            out[2 * y][2 * x] = p1
+            out[2 * y][2 * x + 1] = p2
+            out[2 * y + 1][2 * x] = p3
+            out[2 * y + 1][2 * x + 1] = p4
+    return ["".join(r) for r in out]
+
+
+def apply_patches(rows: Sequence[str], patches: Sequence[Patch], dx: int = 0) -> List[str]:
+    """Stamp detail patches onto a letter grid (``dx`` shifts them, for poses)."""
+    grid_ = [list(r) for r in rows]
+    h = len(grid_)
+    for px_, py_, prows in patches:
+        for j, prow in enumerate(prows):
+            y = py_ + j
+            if not 0 <= y < h:
+                continue
+            for i, ch in enumerate(prow):
+                x = px_ + dx + i
+                if ch == "." or not 0 <= x < len(grid_[y]):
+                    continue
+                grid_[y][x] = "." if ch == "_" else ch
+    return ["".join(r) for r in grid_]
+
+
+_hd_cache: Dict[str, str] = {}
+
+
+def hd_grid(name: str) -> str:
+    """The 64 px letter grid for a 32 px art or template name."""
+    out = _hd_cache.get(name)
+    if out is None:
+        rows = epx_rows(ART32[name].split("\n"))
+        rows = apply_patches(rows, PATCHES64.get(name, ()))
+        out = "\n".join(rows)
+        _hd_cache[name] = out
+    return out
+
+
+_hd_overlay_cache: Dict[Tuple[str, str], str] = {}
+
+
+def hd_overlay(name: str, view: str) -> Optional[str]:
+    """A party member's 64 px overlay for ``view`` (None when there is none)."""
+    key = (name, view)
+    if key in _hd_overlay_cache:
+        return _hd_overlay_cache[key]
+    base = OVERLAYS.get(name, {}).get(view)
+    patches = OVERLAY_PATCHES64.get(name, {}).get(view, ())
+    if base is None and not patches:
+        _hd_overlay_cache[key] = None
+        return None
+    rows = epx_rows(base.strip("\n").split("\n")) if base else ["." * HD_PX] * HD_PX
+    out = "\n".join(apply_patches(rows, patches))
+    _hd_overlay_cache[key] = out
+    return out
+
 
 # --- Monsters ----------------------------------------------------------------
 
@@ -2231,16 +2747,17 @@ def lean(img: Image.Image, name: str, frame: int) -> Image.Image:
     """Battle poses for sprites without drawn ones: rear back for the wind-up,
     lunge the upper body forward (right) for the strike, rise to cast."""
     size = img.size[0]
+    k = max(1, size // RENDER_PX)
     out = Image.new("RGBA", img.size, (0, 0, 0, 0))
     if frame == ATTACK_FRAMES[1]:
         split = LEG_ROWS[0] * size // RENDER_PX if name in WALKERS else size
-        out.paste(img.crop((0, 0, size - 3, split)), (3, 0))
+        out.paste(img.crop((0, 0, size - 3 * k, split)), (3 * k, 0))
         if split < size:
             out.paste(img.crop((0, split, size, size)), (0, split))
     elif frame == ATTACK_FRAMES[0]:
-        out.paste(img.crop((1, 1, size, size)), (0, 0))
+        out.paste(img.crop((k, k, size, size)), (0, 0))
     else:
-        out.paste(img.crop((0, 1, size, size)), (0, 0))
+        out.paste(img.crop((0, k, size, size)), (0, 0))
     return out
 
 
@@ -2274,32 +2791,32 @@ def grid(name: str, native: bool = True, facing: str = "down", frame: int = 0) -
         base, mapping = REMAPS[name]
         if native and base in ART32:
             tmpl = _template(base, facing, frame)
-            body = "".join(mapping.get(ch, ch) for ch in ART32[tmpl])
+            body = "".join(mapping.get(ch, ch) for ch in hd_grid(tmpl))
             return _overlay(body, name, tmpl, facing)
         return "".join(mapping.get(ch, ch) for ch in ART[base])
     if native and name in ART32:
-        return ART32[_template(name, facing, frame)]
+        return hd_grid(_template(name, facing, frame))
     return ART[name]
 
 
 def _overlay(body: str, name: str, tmpl: str, facing: str) -> str:
     """Draw a companion's overlay (hood, veil, beard) over its remapped body."""
-    views = OVERLAYS.get(name)
-    if not views:
-        return body
     if tmpl.endswith("_up"):
         view = "up"
     elif tmpl.endswith("_side") or any(tmpl.endswith("_" + p) for p in POSES.values()):
         view = "side"
     else:
         view = "down"
-    overlay = views[view]
+    overlay = hd_overlay(name, view)
+    if overlay is None:
+        return body
+    rows = body.split("\n")
+    k = len(rows) // RENDER_PX  # 2 for HD grids
     shift = 0
     for pose, dx in POSE_SHIFT.items():
         if tmpl.endswith("_" + pose):
-            shift = dx
-    rows = body.split("\n")
-    orows = overlay.strip("\n").split("\n")
+            shift = dx * k
+    orows = overlay.split("\n")
     out = []
     for row, orow in zip(rows, orows):
         if shift:
@@ -2343,10 +2860,13 @@ def image(
     anchor = WEAPON_ANCHORS.get(POSES.get(frame, ""))
     if weapon is not None and anchor is not None and native and has_poses(name):
         (hx, hy), direction = anchor
+        k = size // RENDER_PX  # weapon specs are in 32 px units
         for (ox, oy), ch in weapon_pixels(weapon, direction).items():
-            x, y = hx + ox, hy + oy
-            if 0 <= x < size and 0 <= y < size:
-                px[x, y] = PALETTE[ch]
+            for sy in range(k):
+                for sx in range(k):
+                    x, y = (hx + ox) * k + sx, (hy + oy) * k + sy
+                    if 0 <= x < size and 0 <= y < size:
+                        px[x, y] = PALETTE[ch]
     if facing == "right" and has_facings(name):
         img = img.transpose(Image.FLIP_LEFT_RIGHT)
     if scale != 1:
@@ -2362,16 +2882,17 @@ def step(img: Image.Image, name: str, which: int, facing: str = "down") -> Image
     rises and the stride reads at a glance.
     """
     size = img.size[0]
-    if size != RENDER_PX or not (has_facings(name) or name in WALKERS):
+    if size % RENDER_PX or not (has_facings(name) or name in WALKERS):
         return img
+    k = size // RENDER_PX
     tmpl = _facing_template(template_of(name), facing)
-    split = LEG_SPLIT.get(tmpl, LEG_SPLIT_DEFAULT)
+    split = LEG_SPLIT.get(tmpl, LEG_SPLIT_DEFAULT) * k
     if facing == "right" and has_facings(name):
         split = size - split
         which = 1 - which
     x0, x1 = (0, split) if which == 0 else (split, size)
-    top, bottom = LEG_ROWS
-    lift = 2
+    top, bottom = LEG_ROWS[0] * k, LEG_ROWS[1] * k
+    lift = 2 * k
     out = img.copy()
     region = img.crop((x0, top + lift, x1, bottom))
     out.paste(Image.new("RGBA", (x1 - x0, bottom - top), (0, 0, 0, 0)), (x0, top))
@@ -2510,9 +3031,10 @@ def bob(img: Image.Image, name: str) -> Image.Image:
     planted; everything else (floaters, blobs) rises whole."""
     size = img.size[0]
     out = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    if size == RENDER_PX and (has_facings(name) or name in WALKERS):
+    if size % RENDER_PX == 0 and (has_facings(name) or name in WALKERS):
+        k = size // RENDER_PX
         out.paste(img.crop((0, 0, size, size)), (0, 0))
-        out.paste(img.crop((0, 1, size, NECK_ROW + 1)), (0, 0))
+        out.paste(img.crop((0, k, size, NECK_ROW * k + k)), (0, 0))
         return out
     lift = size // SIZE
     out.paste(img.crop((0, lift, size, size)), (0, 0))
@@ -2643,8 +3165,11 @@ def facing_from(dx: int, dy: int, current: str = "down") -> str:
 
 
 def sprite(name: str, center: Tuple[float, float], scale: float = 1.0) -> arcade.Sprite:
-    """A sprite showing ``name`` centred at ``center`` (32 px at scale 1)."""
-    return arcade.Sprite(texture(name), scale=scale, center_x=center[0], center_y=center[1])
+    """A sprite showing ``name`` centred at ``center`` (32 world px at scale 1,
+    whatever the texture's own resolution)."""
+    tex = texture(name)
+    return arcade.Sprite(tex, scale=scale * RENDER_PX / tex.width,
+                         center_x=center[0], center_y=center[1])
 
 
 def enemy_sprite_name(def_id: str) -> str:
@@ -2721,6 +3246,13 @@ __all__ = [
     "facing_from",
     "image",
     "RENDER_PX",
+    "HD_PX",
+    "PATCHES64",
+    "OVERLAY_PATCHES64",
+    "epx_rows",
+    "apply_patches",
+    "hd_grid",
+    "hd_overlay",
     "epx",
     "shade",
     "render",
