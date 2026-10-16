@@ -60,7 +60,7 @@ class MainMenuScene(BaseScene):
 
     def on_resize(self, width: int, height: int):
         self._emblem = arcade.SpriteList()
-        self._emblem.append(pixelart.sprite("skull", (width / 2, height * 0.72 + 110), 6))
+        self._emblem.append(pixelart.sprite("skull", (width / 2, height * 0.72 + 110), 3))
         if self._title is not None:
             self._title.position = (width / 2, height * 0.72)
         if self._subtitle is not None:

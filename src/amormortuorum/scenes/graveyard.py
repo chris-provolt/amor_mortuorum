@@ -74,13 +74,13 @@ class GraveyardScene(BaseScene):
     def _build_backdrop(self, width: int, height: int) -> None:
         """Moon, headstones and a dead tree along the bottom of the screen."""
         self._backdrop = arcade.SpriteList()
-        self._backdrop.append(pixelart.sprite("moon", (width - 110, height - 150), 5))
+        self._backdrop.append(pixelart.sprite("moon", (width - 110, height - 150), 2.5))
         pattern = ("gravestone", "gravestone_cross", "dead_tree", "gravestone")
         x, i = 60, 0
         while x < width - 30:
             art = pattern[i % len(pattern)]
-            scale = 4 if art == "dead_tree" else 3
-            sprite = pixelart.sprite(art, (x, GROUND_H + 8 * scale - 6), scale)
+            scale = 2 if art == "dead_tree" else 1.5
+            sprite = pixelart.sprite(art, (x, GROUND_H + 16 * scale - 6), scale)
             sprite.alpha = BACKDROP_ALPHA  # text stays legible over the stones
             self._backdrop.append(sprite)
             x += 120

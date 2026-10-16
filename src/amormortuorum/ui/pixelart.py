@@ -11,7 +11,8 @@ it; :func:`image` returns the PIL image for tests and tooling.
 """
 from __future__ import annotations
 
-from typing import Dict, Mapping, Optional, Tuple
+import colorsys
+from typing import Dict, List, Mapping, Optional, Tuple
 
 import arcade
 from PIL import Image
@@ -790,20 +791,119 @@ def image(name: str, scale: int = 1) -> Image.Image:
     return img
 
 
-_textures: Dict[str, arcade.Texture] = {}
+# --- Rendering pipeline: 16x16 source -> 32x32 shaded sprite -----------------
+
+RENDER_PX = SIZE * 2
+OUTLINE = PALETTE["#"]
+LIGHT = (-1, -1)  # light comes from the top-left
 
 
-def texture(name: str) -> arcade.Texture:
-    """The cached arcade texture for ``name``."""
-    tex = _textures.get(name)
+def epx(img: Image.Image) -> Image.Image:
+    """Scale2x/EPX: double the size while smoothing diagonal steps, no blur."""
+    w, h = img.size
+    src = img.load()
+    out = Image.new("RGBA", (w * 2, h * 2), (0, 0, 0, 0))
+    dst = out.load()
+    clear = (0, 0, 0, 0)
+
+    def at(x: int, y: int):
+        return src[x, y] if 0 <= x < w and 0 <= y < h else clear
+
+    for y in range(h):
+        for x in range(w):
+            p = src[x, y]
+            a, b, c, d = at(x, y - 1), at(x + 1, y), at(x - 1, y), at(x, y + 1)
+            p1 = p2 = p3 = p4 = p
+            if c == a and c != d and a != b:
+                p1 = a
+            if a == b and a != c and b != d:
+                p2 = b
+            if d == c and d != b and c != a:
+                p3 = c
+            if b == d and b != a and d != c:
+                p4 = d
+            dst[2 * x, 2 * y] = p1
+            dst[2 * x + 1, 2 * y] = p2
+            dst[2 * x, 2 * y + 1] = p3
+            dst[2 * x + 1, 2 * y + 1] = p4
+    return out
+
+
+def _adjust(c, dv: float, ds: float = 0.0):
+    r, g, b, a = c
+    h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+    v = max(0.0, min(1.0, v + dv))
+    s = max(0.0, min(1.0, s + ds))
+    r, g, b = colorsys.hsv_to_rgb(h, s, v)
+    return (int(r * 255), int(g * 255), int(b * 255), a)
+
+
+def shade(img: Image.Image) -> Image.Image:
+    """Give flat fills volume: a highlight on edges facing the light, a shadow
+    on edges facing away, and a dithered half-shadow one pixel further in."""
+    w, h = img.size
+    src = img.load()
+    out = img.copy()
+    dst = out.load()
+
+    def solid(x: int, y: int) -> bool:
+        if 0 <= x < w and 0 <= y < h:
+            c = src[x, y]
+            return c[3] == 255 and c != OUTLINE
+        return False
+
+    lx, ly = LIGHT
+    for y in range(h):
+        for x in range(w):
+            c = src[x, y]
+            if c[3] == 0 or c == OUTLINE:
+                continue
+            lit = not solid(x + lx, y + ly)
+            dark = not solid(x - lx, y - ly)
+            dark2 = not solid(x - 2 * lx, y - 2 * ly) and (x + y) % 2 == 0
+            if lit and not dark:
+                dst[x, y] = _adjust(c, 0.18, -0.08)
+            elif dark:
+                dst[x, y] = _adjust(c, -0.22, 0.08)
+            elif dark2:
+                dst[x, y] = _adjust(c, -0.11, 0.04)
+    return out
+
+
+def render(name: str, frame: int = 0) -> Image.Image:
+    """The finished 32x32 sprite. Frame 1 is the idle bob: the body lifted one
+    source pixel, which reads as breathing when the two frames alternate."""
+    src = image(name)
+    if frame == 1:
+        lifted = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+        lifted.paste(src.crop((0, 1, SIZE, SIZE)), (0, 0))
+        src = lifted
+    out = epx(src)
+    if name not in TILES:
+        out = shade(out)
+    return out
+
+
+_textures: Dict[Tuple[str, int], arcade.Texture] = {}
+
+
+def texture(name: str, frame: int = 0) -> arcade.Texture:
+    """The cached 32x32 arcade texture for ``name`` (``frame`` 0 or 1)."""
+    key = (name, frame)
+    tex = _textures.get(key)
     if tex is None:
-        tex = arcade.Texture(image(name), hash=f"pixelart:{name}")
-        _textures[name] = tex
+        tex = arcade.Texture(render(name, frame), hash=f"pixelart:{name}:{frame}")
+        _textures[key] = tex
     return tex
 
 
-def sprite(name: str, center: Tuple[float, float], scale: float = 2.0) -> arcade.Sprite:
-    """A sprite showing ``name`` centred at ``center``."""
+def frames(name: str) -> List[arcade.Texture]:
+    """Both idle frames for ``name``."""
+    return [texture(name, 0), texture(name, 1)]
+
+
+def sprite(name: str, center: Tuple[float, float], scale: float = 1.0) -> arcade.Sprite:
+    """A sprite showing ``name`` centred at ``center`` (32 px at scale 1)."""
     return arcade.Sprite(texture(name), scale=scale, center_x=center[0], center_y=center[1])
 
 
@@ -834,7 +934,12 @@ __all__ = [
     "names",
     "grid",
     "image",
+    "RENDER_PX",
+    "epx",
+    "shade",
+    "render",
     "texture",
+    "frames",
     "sprite",
     "enemy_sprite_name",
     "party_sprite_name",
