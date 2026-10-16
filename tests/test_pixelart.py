@@ -3,12 +3,15 @@ from amormortuorum.data import GameData
 from amormortuorum.ui import pixelart as px
 
 
-def test_every_sprite_is_a_16x16_grid_of_palette_colours():
+def test_every_sprite_is_a_square_grid_of_palette_colours():
     assert len(px.names()) >= 40
     for name in px.names():
+        for native in (False, True):
+            rows = px.grid(name, native).split("\n")
+            size = len(rows)
+            assert size == px.SIZE or (native and size == px.RENDER_PX), (name, size)
+            assert all(len(r) == size for r in rows), name
         rows = px.grid(name).split("\n")
-        assert len(rows) == px.SIZE, name
-        assert all(len(r) == px.SIZE for r in rows), name
         used = {ch for r in rows for ch in r}
         assert used <= set(px.PALETTE), name
         assert not (used & (set(px.TEMPLATE_KEYS) - set(px.PALETTE))), name
@@ -40,10 +43,24 @@ def test_every_enemy_companion_and_boss_has_its_own_art():
 
 
 def test_remaps_only_touch_template_letters_and_floor_variants_vary():
-    base = px.ART["humanoid"]
-    for name in px.PARTY:
-        g = px.grid(name)
-        assert len(g) == len(base)
-        assert all(a == b or a in px.TEMPLATE_KEYS for a, b in zip(base, g)), name
+    for native, table in ((False, px.ART), (True, px.ART32)):
+        base = table["humanoid"]
+        for name in px.PARTY:
+            g = px.grid(name, native)
+            assert len(g) == len(base)
+            assert all(a == b or a in px.TEMPLATE_KEYS for a, b in zip(base, g)), name
+
+
+def test_native_art_renders_without_upscaling_and_shares_the_16px_fallback():
+    assert px.grid_size("hero") == px.RENDER_PX and px.grid_size("chest") == px.SIZE
+    data = GameData.load()
+    for name in list(data.enemies) + list(px.PARTY):  # every battler is native 32 px
+        assert px.grid_size(name) == px.RENDER_PX, name
+        assert px.render(name).size == (px.RENDER_PX, px.RENDER_PX)
+        assert px.image(name, native=False).size == (px.SIZE, px.SIZE)
+    assert px.render("chest").size == (px.RENDER_PX, px.RENDER_PX)
+    # the idle frame lifts the body: the top row of frame 1 is what was below it
+    a, b = px.render("hero", 0), px.render("hero", 1)
+    assert a.getpixel((16, 3)) == b.getpixel((16, 1))
     variants = {px.floor_variant(x, y) for x in range(8) for y in range(8)}
     assert variants == set(px.FLOOR_VARIANTS)
