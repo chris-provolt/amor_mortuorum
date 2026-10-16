@@ -875,6 +875,114 @@ _add32("humanoid_side", """
 ................................
 """)
 
+# Battle poses (side view, facing left): the blade raised, the strike, and casting.
+# The strike template keeps the body 7 px further right so the blade has room;
+# ``pose_shift`` tells the battle screen how far to pull the sprite back.
+_add32("humanoid_attack_a", """
+................................
+............########............
+..........##HHHHHHHH##..........
+.........#HHHHHHHHHHHH#.........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#ssssHHHHHHHHHH#........
+........#sssssHHHHHHHHH#........
+........#ssssssHHHHHHHH#........
+........#s##sssHHHHHHHH#........
+....###.#s#WsssHHHHHHHH#........
+...#LLL##sssssssHHHHHHH#........
+...#LLLL##ssssssHHHHHH#.........
+....#LLL##sSsssssHHHHH#.........
+.....#LLL###ssssHHHH##..........
+......#LLL###ssssss#............
+.......#LLL###BBBBBB###.........
+........#LLL#BBBBBBBBBB#........
+........#####BBBBBBBBBB#........
+...........#BBBBBBBBBBB#........
+...........#BBBBBBBBBBB#........
+...........#BBBBBBBBBBB#........
+...........#BBBBBBBBBBB#........
+............#BBBBBBBBB##........
+.............#BBBBBBBB#.........
+.............#KKKKKKKK#.........
+.............#KKK##KKK#.........
+.............#KKK##KKK#.........
+.............#KKK##KKK#.........
+.............####.###...........
+................................
+""")
+
+_add32("humanoid_attack_b", """
+................................
+...................########.....
+.................##HHHHHHHH##...
+................#HHHHHHHHHHHH#..
+...............#HHHHHHHHHHHHHH#.
+...............#HHHHHHHHHHHHHH#.
+...............#HHHHHHHHHHHHHH#.
+...............#ssssHHHHHHHHHH#.
+...............#sssssHHHHHHHHH#.
+...............#ssssssHHHHHHHH#.
+...............#s##sssHHHHHHHH#.
+...............#s#WsssHHHHHHHH#.
+...............#sssssssHHHHHHH#.
+................#ssssssHHHHHH#..
+................#sSsssssHHHHH#..
+.................##ssssHHHH##...
+...................#ssssss#.....
+.................####BBBBBB###..
+.......#############BBBBBBBBBB#.
+.......#LLLLLLLLLLLLBBBBBBBBBB#.
+.......#LLLLLLLLLLLLBBBBBBBBBB#.
+.......############BBBBBBBBBBB#.
+..................#BBBBBBBBBBB#.
+..................#BBBBBBBBBBB#.
+...................#BBBBBBBBB##.
+....................#BBBBBBBB#..
+....................#KKKKKKKK#..
+....................#KKK##KKK#..
+....................#KKK##KKK#..
+....................#KKK##KKK#..
+....................####.###....
+................................
+""")
+
+_add32("humanoid_cast", """
+................................
+............########............
+..........##HHHHHHHH##..........
+.........#HHHHHHHHHHHH#.........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#HHHHHHHHHHHHHH#........
+........#ssssHHHHHHHHHH#........
+........#sssssHHHHHHHHH#........
+........#ssssssHHHHHHHH#........
+........#s##sssHHHHHHHH#........
+........#s#WsssHHHHHHHH#........
+........#sssssssHHHHHHH#........
+.........#ssssssHHHHHH#.........
+.........#sSsssssHHHHH#.........
+..........##ssssHHHH##..........
+............#ssssss#............
+..........####BBBBBB###.........
+...##########BBBBBBBBBB#........
+...#LLLLLLLLLBBBBBBBBBB#........
+...#LLLLLLLLBBBBBBBBBBB#........
+...#########BBBBBBBBBBB#........
+...#RRRRRRRRBBBBBBBBBBB#........
+...#RRRRRRRRBBBBBBBBBBB#........
+...##########BBBBBBBBB##........
+.............#BBBBBBBB#.........
+.............#KKKKKKKK#.........
+.............#KKK##KKK#.........
+.............#KKK##KKK#.........
+.............#KKK##KKK#.........
+.............####.###...........
+................................
+""")
+
 _add32("skel_basic", """
 ................................
 ............########............
@@ -1423,6 +1531,89 @@ LEG_SPLIT_DEFAULT = 16
 WALKERS = ("skel_basic", "ghoul", "bone_guard", "revenant", "lich_acolyte", "grave_titan",
            "bone_colossus", "ossuary_king", "warden_of_ash")
 
+# Battle poses (render frames) and the template suffix that draws each one
+POSES = {4: "attack_a", 5: "attack_b", 6: "cast"}
+ATTACK_FRAMES = (4, 5)   # blade raised, then the strike
+CAST_FRAME = 6
+# Source pixels the body is moved right (away from the foe) inside a pose template
+POSE_SHIFT = {"attack_b": 7}
+# Where the weapon hand sits in a pose (source px, side view facing left) and the
+# direction the blade points from it
+WEAPON_ANCHORS = {"attack_a": ((5, 12), "up"), "attack_b": ((8, 19), "left")}
+
+# Weapons are drawn procedurally from a short spec so one spec serves both the
+# raised (vertical) and the striking (horizontal) blade. ``blade`` runs from the
+# tip to the guard; ``edge`` is the highlight along one side.
+WEAPONS: Dict[str, Dict[str, str]] = {
+    "dagger": {"blade": "llgo", "edge": "w", "guard": "y"},
+    "sword_bone": {"blade": "wwlwlw", "edge": "W", "guard": "Y"},
+    "sword_dark": {"blade": "GdGGdG", "edge": "l", "guard": "g"},
+    "sword_void": {"blade": "pPpPpd", "edge": "k", "guard": "P"},
+}
+# Weapon item id -> weapon art; other weapon items get a plain sword
+WEAPON_ART = {
+    "dagger_rust": "dagger", "blade_bone": "sword_bone",
+    "blade_mourning": "sword_dark", "blade_oblivion": "sword_void",
+}
+
+
+def weapon_art(item_id: Optional[str]) -> Optional[str]:
+    """The weapon art for an equipped weapon item (``None`` when unarmed)."""
+    if not item_id:
+        return None
+    return WEAPON_ART.get(item_id, "sword_bone")
+
+
+def weapon_pixels(kind: str, direction: str) -> Dict[Tuple[int, int], str]:
+    """Palette letters of a weapon, keyed by offset from the hand, blade along
+    ``direction`` ("up" or "left"). The grip is left to the hand itself."""
+    spec = WEAPONS[kind]
+    dx, dy = (0, -1) if direction == "up" else (-1, 0)
+    nx, ny = (1, 0) if direction == "up" else (0, 1)  # across the blade
+    px: Dict[Tuple[int, int], str] = {}
+    for k in (-2, -1, 0, 1, 2):  # the guard, one pixel past the hand
+        px[(dx + nx * k, dy + ny * k)] = spec["guard"] if abs(k) < 2 else "#"
+    for i, colour in enumerate(reversed(spec["blade"]), start=2):
+        bx, by = dx * i, dy * i
+        px[(bx, by)] = colour
+        px[(bx + nx, by + ny)] = spec["edge"]
+        px[(bx - nx, by - ny)] = "#"
+        px[(bx + 2 * nx, by + 2 * ny)] = "#"
+    tip = len(spec["blade"]) + 2
+    px[(dx * tip, dy * tip)] = "#"
+    px[(dx * tip + nx, dy * tip + ny)] = "#"
+    return px
+
+
+def has_poses(name: str) -> bool:
+    """Does this sprite have drawn battle poses (attack and cast templates)?"""
+    base = template_of(name)
+    return all(f"{base}_{pose}" in ART32 for pose in POSES.values())
+
+
+def pose_shift(name: str, frame: int) -> int:
+    """Source pixels the body sits right of its usual place in this frame's template."""
+    if not has_poses(name):
+        return 0
+    return POSE_SHIFT.get(POSES.get(frame, ""), 0)
+
+
+def lean(img: Image.Image, name: str, frame: int) -> Image.Image:
+    """Battle poses for sprites without drawn ones: rear back for the wind-up,
+    lunge the upper body forward (right) for the strike, rise to cast."""
+    size = img.size[0]
+    out = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    if frame == ATTACK_FRAMES[1]:
+        split = LEG_ROWS[0] * size // RENDER_PX if name in WALKERS else size
+        out.paste(img.crop((0, 0, size - 3, split)), (3, 0))
+        if split < size:
+            out.paste(img.crop((0, split, size, size)), (0, split))
+    elif frame == ATTACK_FRAMES[0]:
+        out.paste(img.crop((1, 1, size, size)), (0, 0))
+    else:
+        out.paste(img.crop((0, 1, size, size)), (0, 0))
+    return out
+
 
 def _facing_template(base: str, facing: str) -> str:
     """The template variant for a facing: ``_up``/``_side`` when drawn, else the base."""
@@ -1433,21 +1624,30 @@ def _facing_template(base: str, facing: str) -> str:
     return base
 
 
-def grid(name: str, native: bool = True, facing: str = "down") -> str:
+def _template(base: str, facing: str, frame: int) -> str:
+    """A drawn battle pose when the frame asks for one, else the facing's template."""
+    pose = POSES.get(frame)
+    if pose is not None and f"{base}_{pose}" in ART32:
+        return f"{base}_{pose}"
+    return _facing_template(base, facing)
+
+
+def grid(name: str, native: bool = True, facing: str = "down", frame: int = 0) -> str:
     """The resolved character grid for ``name`` (palette swaps applied).
 
     With ``native`` the 32x32 table is preferred when it has the sprite or the
     template a remap is built on; otherwise the 16x16 grid is returned.
     ``facing`` picks a back or side view where the template has one (right is
-    drawn from the side view by mirroring in :func:`image`).
+    drawn from the side view by mirroring in :func:`image`); a battle-pose
+    ``frame`` picks the drawn pose instead where the template has it.
     """
     if name in REMAPS:
         base, mapping = REMAPS[name]
         if native and base in ART32:
-            return "".join(mapping.get(ch, ch) for ch in ART32[_facing_template(base, facing)])
+            return "".join(mapping.get(ch, ch) for ch in ART32[_template(base, facing, frame)])
         return "".join(mapping.get(ch, ch) for ch in ART[base])
     if native and name in ART32:
-        return ART32[_facing_template(name, facing)]
+        return ART32[_template(name, facing, frame)]
     return ART[name]
 
 
@@ -1467,19 +1667,29 @@ def grid_size(name: str) -> int:
 
 
 def image(
-    name: str, scale: int = 1, native: bool = True, facing: str = "down"
+    name: str, scale: int = 1, native: bool = True, facing: str = "down",
+    frame: int = 0, weapon: Optional[str] = None,
 ) -> Image.Image:
     """Render ``name`` to an RGBA image, ``scale`` pixels per cell (nearest neighbour).
 
-    ``facing="right"`` mirrors the side view so the sprite looks right.
+    ``facing="right"`` mirrors the side view so the sprite looks right. A battle
+    pose ``frame`` with a ``weapon`` (see :data:`WEAPONS`) draws the blade in the
+    sprite's hand.
     """
-    rows = grid(name, native, facing).split("\n")
+    rows = grid(name, native, facing, frame).split("\n")
     size = len(rows)
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     px = img.load()
     for y, row in enumerate(rows):
         for x, ch in enumerate(row):
             px[x, y] = PALETTE[ch]
+    anchor = WEAPON_ANCHORS.get(POSES.get(frame, ""))
+    if weapon is not None and anchor is not None and native and has_poses(name):
+        (hx, hy), direction = anchor
+        for (ox, oy), ch in weapon_pixels(weapon, direction).items():
+            x, y = hx + ox, hy + oy
+            if 0 <= x < size and 0 <= y < size:
+                px[x, y] = PALETTE[ch]
     if facing == "right" and has_facings(name):
         img = img.transpose(Image.FLIP_LEFT_RIGHT)
     if scale != 1:
@@ -1591,14 +1801,18 @@ def shade(img: Image.Image) -> Image.Image:
     return out
 
 
-def render(name: str, frame: int = 0, facing: str = "down") -> Image.Image:
+def render(
+    name: str, frame: int = 0, facing: str = "down", weapon: Optional[str] = None
+) -> Image.Image:
     """The finished 32x32 sprite.
 
     Frames: 0 standing, 1 idle bob (the body lifted one source pixel, which
     reads as breathing), 2 and 3 the two walking poses (left or right leg
-    raised; sprites without native legs fall back to the standing pose).
+    raised; sprites without native legs fall back to the standing pose),
+    4 and 5 the attack (blade raised, then the strike) and 6 casting. Sprites
+    without drawn poses rear back, lunge and rise instead (:func:`lean`).
     """
-    src = image(name, facing=facing)
+    src = image(name, facing=facing, frame=frame, weapon=weapon)
     size = src.size[0]
     if frame == 1:
         lift = size // SIZE  # one source pixel of the 16 px grid
@@ -1607,23 +1821,32 @@ def render(name: str, frame: int = 0, facing: str = "down") -> Image.Image:
         src = lifted
     elif frame in STEP_FRAMES:
         src = step(src, name, frame - STEP_FRAMES[0], facing)
+    elif frame in POSES and not has_poses(name):
+        src = lean(src, name, frame)
     out = epx(src) if size < RENDER_PX else src
     if name not in TILES:
         out = shade(out)
     return out
 
 
-_textures: Dict[Tuple[str, int, str], arcade.Texture] = {}
+_textures: Dict[Tuple[str, int, str, Optional[str]], arcade.Texture] = {}
 
 
-def texture(name: str, frame: int = 0, facing: str = "down") -> arcade.Texture:
+def texture(
+    name: str, frame: int = 0, facing: str = "down", weapon: Optional[str] = None
+) -> arcade.Texture:
     """The cached 32x32 arcade texture for ``name`` (see :func:`render` for frames)."""
     if not has_facings(name):
         facing = "down"
-    key = (name, frame, facing)
+    if frame not in POSES or not has_poses(name):
+        weapon = None
+    key = (name, frame, facing, weapon)
     tex = _textures.get(key)
     if tex is None:
-        tex = arcade.Texture(render(name, frame, facing), hash=f"pixelart:{name}:{frame}:{facing}")
+        tex = arcade.Texture(
+            render(name, frame, facing, weapon),
+            hash=f"pixelart:{name}:{frame}:{facing}:{weapon}",
+        )
         _textures[key] = tex
     return tex
 
@@ -1688,6 +1911,16 @@ __all__ = [
     "WALK_CYCLE",
     "has_facings",
     "WALKERS",
+    "POSES",
+    "ATTACK_FRAMES",
+    "CAST_FRAME",
+    "WEAPONS",
+    "WEAPON_ART",
+    "weapon_art",
+    "weapon_pixels",
+    "has_poses",
+    "pose_shift",
+    "lean",
     "step",
     "walk_frame",
     "facing_from",

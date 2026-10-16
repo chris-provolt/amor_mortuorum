@@ -93,3 +93,36 @@ def test_walk_cycle_and_facing_helpers():
     assert px.facing_from(1, 0) == "right" and px.facing_from(-1, 0) == "left"
     assert px.facing_from(0, 1) == "up" and px.facing_from(0, -1) == "down"
     assert px.facing_from(0, 0, "left") == "left"
+
+
+def test_battle_poses_and_weapons():
+    for name in px.PARTY:
+        assert px.has_poses(name)
+        stand = px.render(name, 0, "left")
+        raised, strike, cast = (px.render(name, f, "left") for f in (4, 5, 6))
+        assert len({img.tobytes() for img in (stand, raised, strike, cast)}) == 4
+        # the strike template holds the body back so the blade has room
+        assert px.pose_shift(name, 5) == 7 and px.pose_shift(name, 4) == 0
+        # an equipped blade appears in the hand; unarmed hands stay empty
+        armed = px.render(name, 4, "left", weapon="sword_bone")
+        assert armed.tobytes() != raised.tobytes()
+        assert armed.getpixel((5, 7))[3] == 255 and raised.getpixel((5, 7))[3] == 0
+        thrust = px.render(name, 5, "left", weapon="dagger")
+        assert thrust.getpixel((4, 19))[3] == 255 and strike.getpixel((4, 19))[3] == 0
+        # mirrored for the right facing, weapon and all
+        right = px.image(name, facing="right", frame=5, weapon="dagger")
+        assert right.tobytes() == px.image(
+            name, facing="left", frame=5, weapon="dagger"
+        ).transpose(px.Image.FLIP_LEFT_RIGHT).tobytes()
+    assert px.weapon_art(None) is None and px.weapon_art("dagger_rust") == "dagger"
+    assert px.weapon_art("blade_mystery") == "sword_bone"
+    for kind in px.WEAPONS:
+        for direction in ("up", "left"):
+            pixels = px.weapon_pixels(kind, direction)
+            assert set(pixels.values()) <= set(px.PALETTE)
+            assert (0, 0) not in pixels  # the grip is the hand's own
+    # monsters lean instead: the strike shifts the upper body right
+    assert not px.has_poses("ghoul") and px.pose_shift("ghoul", 5) == 0
+    stand, strike = px.render("ghoul", 0), px.render("ghoul", 5)
+    assert strike.tobytes() != stand.tobytes()
+    assert px.render("ghoul", 4).tobytes() != stand.tobytes()

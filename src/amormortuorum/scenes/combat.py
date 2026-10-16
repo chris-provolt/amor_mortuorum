@@ -33,13 +33,14 @@ ENEMY_SCALE = 4.0       # 32 px art drawn at 128 px on the stage
 PARTY_SCALE = 3.0
 IDLE_FRAME_TIME = 0.5
 HIT_SHAKE_TIME = 0.3    # seconds a struck battler shudders
-LUNGE_PX = 44           # how far an attacker lunges towards its target
+LUNGE_PX = 44           # the shortest dash an attacker makes towards its target
+STANDOFF = 0.55         # share of the two sprites' mean size kept between them
 IMPACT_AT = 0.45        # share of a strike's duration before the blow lands
 DEATH_TIME = 0.55       # seconds a fallen foe takes to dissolve
 NUMBER_TIME = 0.8       # seconds a damage number floats
 # Seconds each log event takes to play on the battle screen
 EVENT_TIME = {
-    "round": 0.3, "slash": 0.7, "spell": 0.75, "cast": 0.45, "heal": 0.65,
+    "round": 0.3, "slash": 0.75, "spell": 0.75, "cast": 0.45, "heal": 0.65,
     "item": 0.6, "guard": 0.4, "death": DEATH_TIME, "rage": 0.45, "flee": 0.6,
     "flee_fail": 0.45, "victory": 0.35, "defeat": 0.35, "miss": 0.35, "none": 0.35,
 }
@@ -104,7 +105,6 @@ class CombatScene(BaseScene):
         self._flash = 0.0  # seconds of hit flash left
         self._anim = 0.0
         self._hits: Dict[Tuple[str, int], float] = {}  # (side, index) -> shake time left
-        self._flipped: Dict[Tuple[str, int], arcade.Texture] = {}
         # Animation queue: log events play one at a time
         self._queue: Deque[LogEvent] = deque()
         self._current: Optional[LogEvent] = None
@@ -298,9 +298,13 @@ class CombatScene(BaseScene):
             return self._enemy_spot(idx, len(self.battle.foes))
         return self._party_spot(idx, len(self.battle.players))
 
-    def _add_fx(self, kind: str, side: Tuple[str, int], color, dur: float = 0.45) -> None:
+    def _add_fx(
+        self, kind: str, side: Tuple[str, int], color, dur: float = 0.45, **extra
+    ) -> None:
         x, y = self._spot(side)
-        self._fx.append({"kind": kind, "x": x, "y": y, "t": 0.0, "dur": dur, "color": color})
+        fx = {"kind": kind, "x": x, "y": y, "t": 0.0, "dur": dur, "color": color}
+        fx.update(extra)
+        self._fx.append(fx)
 
     def _add_number(self, side: Tuple[str, int], text: str, color) -> None:
         x, y = self._spot(side)
@@ -363,7 +367,8 @@ class CombatScene(BaseScene):
         color = NUM_PARTY if ev.target[0] == "party" else NUM_DAMAGE
         self._add_number(ev.target, str(ev.amount), color)
         if ev.effect == "slash":
-            self._add_fx("slash", ev.target, FX_SLASH, 0.3)
+            from_right = ev.actor is not None and ev.actor[0] == "party"
+            self._add_fx("slash", ev.target, FX_SLASH, 0.35, direction=1 if from_right else -1)
         else:
             self._add_fx("burst", ev.target, FX_SPELL if ev.kind == "item" else FX_ITEM, 0.5)
 
@@ -398,13 +403,23 @@ class CombatScene(BaseScene):
         if self._current is not None:
             self._cur_t = self._cur_dur
 
-    def _lunge(self, side: Tuple[str, int]) -> float:
-        """Horizontal offset of a battler mid-strike (foes lunge right, the party left)."""
+    def _lunge(self, side: Tuple[str, int]) -> Tuple[float, float]:
+        """Offset of a battler mid-strike: it dashes up to its target, strikes at
+        arm's length and returns (foes rush right, the party left)."""
         ev = self._current
         if ev is None or ev.effect != "slash" or ev.actor != side or self._cur_dur <= 0:
-            return 0.0
-        direction = 1.0 if side[0] == "foe" else -1.0
-        return direction * lunge_offset(self._cur_t / self._cur_dur)
+            return 0.0, 0.0
+        ax, ay = self._spot(side)
+        if ev.target is not None:
+            tx, ty = self._spot(ev.target)
+        else:
+            tx, ty = ax + (LUNGE_PX if side[0] == "foe" else -LUNGE_PX), ay
+        standoff = pixelart.RENDER_PX * (ENEMY_SCALE + PARTY_SCALE) / 2 * STANDOFF
+        reach = max(LUNGE_PX, abs(tx - ax) - standoff)
+        progress = self._cur_t / self._cur_dur
+        dx = math.copysign(lunge_offset(progress, reach), tx - ax or 1.0)
+        dy = lunge_offset(progress, ty - ay) if ty != ay else 0.0
+        return dx, dy
 
     def _attack(self) -> None:
         self._refresh_target()
@@ -467,14 +482,23 @@ class CombatScene(BaseScene):
         left = self._hits.get(key, 0.0)
         return math.sin(self._anim * 70) * 6 * (left / HIT_SHAKE_TIME) if left > 0 else 0.0
 
-    def _party_texture(self, art: str, frame: int, i: int) -> arcade.Texture:
-        """Party sprites face left towards the foes; flipped textures are cached."""
-        key = (f"{art}:{frame}", i)
-        tex = self._flipped.get(key)
-        if tex is None:
-            tex = pixelart.texture(art, frame).flip_left_right()
-            self._flipped[key] = tex
-        return tex
+    def _pose(self, side: Tuple[str, int], idle: int) -> int:
+        """The render frame for a battler: its attack or cast pose while it acts."""
+        ev = self._current
+        if ev is None or self.mode != "anim" or ev.actor != side:
+            return idle
+        if ev.effect == "slash":
+            progress = self._cur_t / self._cur_dur if self._cur_dur > 0 else 1.0
+            return pixelart.ATTACK_FRAMES[0 if progress < IMPACT_AT else 1]
+        if ev.effect in ("cast", "spell", "heal", "item"):
+            return pixelart.CAST_FRAME
+        return idle
+
+    @staticmethod
+    def _weapon_of(battler) -> Optional[str]:
+        equipment = getattr(battler.ref, "equipment", None)
+        slots = getattr(equipment, "slots", None) or {}
+        return pixelart.weapon_art(slots.get("weapon"))
 
     def _draw_stage(self) -> None:
         """A dungeon backdrop: wall top, brick face, then floor receding into shadow."""
@@ -514,7 +538,9 @@ class CombatScene(BaseScene):
             if not b.is_alive and (dying is None or dying >= 1.0):
                 continue
             x, y = self._enemy_spot(i, len(foes))
-            x += self._shake(("foe", i)) + self._lunge(("foe", i))
+            lx, ly = self._lunge(("foe", i))
+            x += self._shake(("foe", i)) + lx
+            y += ly
             size = pixelart.RENDER_PX * ENEMY_SCALE
             alpha = 255
             if dying is not None and dying < 1.0:
@@ -523,7 +549,8 @@ class CombatScene(BaseScene):
             arcade.draw_ellipse_filled(
                 x, y - size * 0.46, size * 0.7, size * 0.16, (0, 0, 0, 90 * alpha // 255)
             )
-            tex = pixelart.texture(pixelart.enemy_sprite_name(b.ref.def_id), frame)
+            art = pixelart.enemy_sprite_name(b.ref.def_id)
+            tex = pixelart.texture(art, self._pose(("foe", i), frame))
             rect = arcade.LBWH(x - size / 2, y - size / 2, size, size)
             if dying is not None and dying < 1.0:
                 arcade.draw_texture_rect(
@@ -540,12 +567,17 @@ class CombatScene(BaseScene):
         players = self.battle.players
         for i, b in enumerate(players):
             x, y = self._party_spot(i, len(players))
-            x += self._shake(("party", i)) + self._lunge(("party", i))
+            lx, ly = self._lunge(("party", i))
+            x += self._shake(("party", i)) + lx
+            y += ly
             size = pixelart.RENDER_PX * PARTY_SCALE
             art = pixelart.party_sprite_name(getattr(b.ref, "companion_id", None))
             alive = b.is_alive
             arcade.draw_ellipse_filled(x, y - size * 0.46, size * 0.7, size * 0.16, (0, 0, 0, 90))
-            tex = self._party_texture(art, frame if alive else 0, i)
+            pose = self._pose(("party", i), frame) if alive else 0
+            tex = pixelart.texture(art, pose, "left", self._weapon_of(b))
+            # a pose template may hold the body back to make room for the blade
+            x -= pixelart.pose_shift(art, pose) * PARTY_SCALE
             rect = arcade.LBWH(x - size / 2, y - size / 2, size, size)
             if alive:
                 arcade.draw_texture_rect(tex, rect, pixelated=True)
@@ -568,13 +600,29 @@ class CombatScene(BaseScene):
             a = int(255 * (1 - p))
             color = (*fx["color"], a)
             if fx["kind"] == "slash":
-                for k in range(3):
-                    off = (k - 1) * 14
-                    sweep = p * 70
-                    arcade.draw_line(
-                        x - 40 + sweep + off, y + 40 - off, x - 10 + sweep + off, y - 30 - off,
-                        color, 4 - k,
+                # a crescent swung from the attacker's side, sweeping down across the
+                # target, with a flash at the point of impact
+                d = fx.get("direction", 1)
+                cx, cy = x + d * 70, y + 30
+                head = (180 if d > 0 else 0) - d * (-45 + 110 * p)
+                tail = head + d * 55
+                for k, (radius, width) in enumerate(((84, 9), (74, 5), (66, 3))):
+                    fade = int(a * (1 - k * 0.3))
+                    arcade.draw_arc_outline(
+                        cx, cy, radius * 2, radius * 2, (*fx["color"], fade),
+                        min(head, tail), max(head, tail), width,
                     )
+                if p < 0.4:
+                    flash = int(220 * (1 - p / 0.4))
+                    arcade.draw_circle_filled(x, y + 6, 10 + 30 * p, (255, 255, 255, flash))
+                    for k in range(5):
+                        ang = -0.6 + k * 0.55 + (0.0 if d > 0 else math.pi)
+                        r0, r1 = 14 + 40 * p, 26 + 60 * p
+                        arcade.draw_line(
+                            x + math.cos(ang) * r0, y + 6 + math.sin(ang) * r0,
+                            x + math.cos(ang) * r1, y + 6 + math.sin(ang) * r1,
+                            (255, 255, 230, flash), 2,
+                        )
             elif fx["kind"] == "burst":
                 r = 12 + 60 * p
                 arcade.draw_circle_outline(x, y, r, color, 3)
