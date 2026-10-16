@@ -318,3 +318,29 @@ def test_boss_enrages_below_half_hp():
 
     events = battle.submit(Action(ActionKind.ATTACK, 0))
     assert any("rages" in e.text for e in events)
+
+
+def test_events_carry_structure_for_animation(data):
+    from amormortuorum.systems.combat import side_of
+
+    player = new_player()
+    player.stats.max_hp = player.stats.hp = 200
+    party = [player]
+    enemies = [enemy(data, "skel_basic")]
+    battle = Battle(party, enemies, Random(1), data)
+    events = battle.submit(Action(ActionKind.ATTACK, 0, target=0))
+    assert events[0].effect == "round"
+    slash = [e for e in events if e.effect == "slash"]
+    assert slash, [e.effect for e in events]
+    first = slash[0]
+    assert first.actor in (("party", 0), ("foe", 0)) and first.target is not None
+    assert first.amount >= 1 and first.actor[0] != first.target[0]
+    assert side_of(battle.players[0]) == ("party", 0) and side_of(battle.foes[0]) == ("foe", 0)
+    # fight to the end: a death event names the fallen foe, victory closes the log
+    for _ in range(40):
+        if battle.outcome is not Outcome.ONGOING:
+            break
+        events = battle.submit(Action(ActionKind.ATTACK, 0, target=0))
+    deaths = [e for e in battle.log if e.effect == "death"]
+    assert deaths and deaths[-1].target is not None
+    assert battle.log[-1].effect in ("victory", "defeat")
