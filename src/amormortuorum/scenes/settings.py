@@ -132,6 +132,10 @@ class SettingsScene(BaseScene):
                     hint="Left / Right adjust; applies when a screen is reopened",
                     payload="scale",
                 ),
+                MenuItem(
+                    f"Hit flash       {'On' if s.video.screen_flash else 'Off'}",
+                    self._toggle_flash, hint="Red flash when the party is hit; Enter toggles",
+                ),
                 MenuItem("Rebind keys", self._build_keys_menu, hint="Change one key per action"),
                 MenuItem(
                     f"Controller      {pad or 'none detected'}", None,
@@ -150,6 +154,12 @@ class SettingsScene(BaseScene):
         self.app.toggle_fullscreen()
         self.settings.video.fullscreen = bool(self.app.fullscreen)
         self._build_menu()
+
+    def _toggle_flash(self) -> None:
+        self.settings.video.screen_flash = not self.settings.video.screen_flash
+        selected = self.menu.selected
+        self._build_menu()
+        self.menu.selected = selected
 
     def _toggle_vsync(self) -> None:
         self.settings.video.vsync = not self.settings.video.vsync

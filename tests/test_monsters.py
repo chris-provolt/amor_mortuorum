@@ -2,9 +2,12 @@ from random import Random
 
 import pytest
 
-from amormortuorum.data import GameData
+from amormortuorum.data import Formation, GameData
 from amormortuorum.systems.monsters import (
     FLEE_COOLDOWN,
+    GUARD_LEASH,
+    GUARD_RANGE,
+    KINDS,
     MONSTER_MEMORY,
     SLEEP_CHANCE,
     SPAWN_MIN_DIST,
@@ -12,6 +15,8 @@ from amormortuorum.systems.monsters import (
     Monster,
     daze,
     distance_field,
+    guard_posts,
+    kind_for,
     maybe_respawn,
     monster_at,
     monster_count,
@@ -20,6 +25,7 @@ from amormortuorum.systems.monsters import (
     spawn_monsters,
     step_monsters,
 )
+from amormortuorum.systems.entities import Enemy
 from amormortuorum.systems.procgen import FloorMap, Tile, bfs_reachable, generate_floor
 
 
@@ -201,3 +207,91 @@ def test_some_spawns_sleep_and_respawns_never_do(data):
             break
     else:
         raise AssertionError("no respawn in 3000 tries")
+
+
+def _mon(pos, kind, **kw):
+    base = dict(id=0, pos=pos, enemies=("skel_basic",), name="Skeleton", spd=9, kind=kind)
+    base.update(kw)
+    return Monster(**base)
+
+
+def test_guards_hold_their_post_until_the_party_is_near():
+    fmap = corridor(14)
+    g = _mon((10, 1), "guard", post=(10, 1))
+    visible = {(x, 1) for x in range(1, 15)}
+    rng = Random(0)
+    for _ in range(10):
+        step_monsters([g], fmap, (1, 1), visible, rng)
+        assert g.pos == (10, 1) and not g.chasing  # seen, but 9 steps away: ignored
+    step_monsters([g], fmap, (10 - GUARD_RANGE, 1), visible, rng)
+    assert g.chasing and g.pos == (9, 1)
+
+
+def test_guard_leash_and_return_to_post():
+    fmap = corridor(30)
+    g = _mon((20, 1), "guard", post=(20, 1), state="chase", memory=MONSTER_MEMORY)
+    rng = Random(0)
+    # The party keeps retreating out of sight; memory alone would carry the guard 6 steps,
+    # but the leash turns it back once it is GUARD_LEASH steps from its post.
+    player = 5
+    farthest = 20
+    for _ in range(12):
+        step_monsters([g], fmap, (player, 1), set(), rng, step=0, player_spd=1)
+        farthest = min(farthest, g.pos[0])
+        player = max(1, player - 1)
+    assert 20 - farthest <= GUARD_LEASH + 1
+    assert g.state in ("return", "wander")
+    for _ in range(12):
+        step_monsters([g], fmap, (1, 1), set(), rng, step=0, player_spd=1)
+    assert g.pos == (20, 1) and g.state == "wander"
+
+
+def test_skittish_runs_from_the_party_and_stops_when_cornered():
+    fmap = corridor(10)
+    s = _mon((5, 1), "skittish")
+    visible = {(x, 1) for x in range(1, 11)}
+    rng = Random(0)
+    step_monsters([s], fmap, (2, 1), visible, rng, step=0, player_spd=1)
+    assert s.fleeing and s.pos == (6, 1)
+    for _ in range(10):
+        assert step_monsters([s], fmap, (2, 1), visible, rng, step=0, player_spd=1) is None
+    assert s.pos == (9, 1)  # cornered against the stairs tile, which it never enters
+    assert monster_at([s], (9, 1)) is s
+    # A slow skittish group only runs every other step
+    slow = _mon((5, 1), "skittish", spd=1)
+    step_monsters([slow], fmap, (2, 1), visible, rng, step=1, player_spd=5)
+    assert slow.fleeing and slow.pos == (5, 1)
+    step_monsters([slow], fmap, (2, 1), visible, rng, step=2, player_spd=5)
+    assert slow.pos == (6, 1)
+
+
+def test_kinds_come_from_formations_and_guards_stand_by_features(data):
+    kinds = set()
+    guards = posts = 0
+    for seed in range(30):
+        fmap = generate_floor(seed, 2)
+        for m in spawn_monsters(fmap, 2, data, monster_rng(seed, 2)):
+            kinds.add(m.kind)
+            assert m.kind in KINDS
+            if m.kind == "guard":
+                guards += 1
+                assert m.post == m.pos and not m.asleep and m.bounty == 0
+                if m.pos in guard_posts(fmap, [m.pos]):
+                    posts += 1
+            elif m.kind == "skittish":
+                assert m.bounty > 0 and m.post is None
+            else:
+                assert m.bounty == 0 and m.post is None
+    assert kinds == set(KINDS)
+    assert guards and posts / guards > 0.8, (posts, guards)
+    # Explicit override in the data wins over the lead enemy's style
+    t5 = data.encounters["T5"].formations[2]
+    scaled = [Enemy.from_def(data.enemy(eid), 90, data.balance) for eid in t5.enemies]
+    assert t5.behaviour == "hunter" and kind_for(t5, scaled, data) == "hunter"
+    assert kind_for(Formation(enemies=("wraith",)), scaled[:1], data) == "skittish"
+
+
+def test_daze_sends_guards_home():
+    g = _mon((12, 1), "guard", post=(10, 1), state="chase", memory=3)
+    daze(g)
+    assert g.state == "return" and g.cooldown == FLEE_COOLDOWN

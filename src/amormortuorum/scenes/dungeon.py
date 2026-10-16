@@ -68,6 +68,10 @@ COLOR_BOSS_STAIRS = (190, 50, 120)
 COLOR_MONSTER = (170, 60, 70)
 COLOR_MONSTER_CHASE = (235, 80, 80)
 COLOR_MONSTER_SLEEP = (120, 70, 95)
+COLOR_MONSTER_FLEE = (235, 170, 90)
+MONSTER_SIZE = {"hunter": 22, "guard": 26, "skittish": 18}
+NOTICE_VERB = {"hunter": "prowls", "guard": "stands watch", "skittish": "skulks"}
+ENGAGE_VERB = {"hunter": "engage", "guard": "challenge", "skittish": "corner"}
 
 MOVES: Dict[str, Pos] = {
     "move_up": (0, 1),
@@ -80,6 +84,29 @@ MOVES: Dict[str, Pos] = {
 def tile_center(pos: Pos) -> tuple[float, float]:
     x, y = pos
     return (x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2)
+
+
+def monster_color(m: Monster):
+    """Marker colour by state: dull asleep, red idle, bright red hunting, amber fleeing."""
+    if m.chasing:
+        return COLOR_MONSTER_CHASE
+    if m.fleeing:
+        return COLOR_MONSTER_FLEE
+    if m.asleep:
+        return COLOR_MONSTER_SLEEP
+    return COLOR_MONSTER
+
+
+def monster_points(m: Monster) -> list[tuple[float, float]]:
+    """Marker outline by kind, so colour is never the only cue:
+    hunter = triangle, guard = square, skittish = diamond."""
+    cx, cy = tile_center(m.pos)
+    h = MONSTER_SIZE.get(m.kind, 22) / 2
+    if m.kind == "guard":
+        return [(cx - h, cy - h), (cx + h, cy - h), (cx + h, cy + h), (cx - h, cy + h)]
+    if m.kind == "skittish":
+        return [(cx, cy + h), (cx + h, cy), (cx, cy - h), (cx - h, cy)]
+    return [(cx, cy + h), (cx + h, cy - h), (cx - h, cy - h)]
 
 
 def floor_shade(base, x: int, y: int):
@@ -99,9 +126,7 @@ class DungeonScene(BaseScene):
         self.tiles = arcade.SpriteList()
         self.features = arcade.SpriteList()
         self.player = arcade.SpriteList()
-        self.monster_sprites = arcade.SpriteList()
         self.monsters: list[Monster] = []
-        self._monster_sprites: Dict[int, arcade.Sprite] = {}
         self._engaged: Optional[Monster] = None
         self._floor_steps = 0
         self._feature_sprites: Dict[Pos, arcade.Sprite] = {}
@@ -118,6 +143,7 @@ class DungeonScene(BaseScene):
         self.pause_menu = VerticalMenu()
         self._pause_view: Optional[MenuView] = None
         self._pause_title: Optional[arcade.Text] = None
+        self._pause_legend: Optional[arcade.Text] = None
 
     # Lifecycle
 
@@ -151,6 +177,12 @@ class DungeonScene(BaseScene):
             "Paused", 0, 0, color=arcade.color.GHOST_WHITE, font_size=fs(28),
             anchor_x="center", anchor_y="center",
         )
+        self._pause_legend = arcade.Text(
+            "Markers: triangle hunts you, square guards its post, diamond runs away.  "
+            "Dull = asleep, bright red = hunting, amber = fleeing.",
+            0, 0, color=(150, 150, 165), font_size=fs(12), anchor_x="center", anchor_y="center",
+            multiline=True, width=620, align="center",
+        )
         self.pause_menu.set_items(
             [
                 MenuItem("Resume", self._toggle_pause),
@@ -183,6 +215,8 @@ class DungeonScene(BaseScene):
             self._pause_title.position = (width / 2, height / 2 + 60)
         if self._pause_view is not None:
             self._pause_view.set_position(width / 2, height / 2)
+        if self._pause_legend is not None:
+            self._pause_legend.position = (width / 2, height / 2 - fs(170))
 
     def on_resume(self):
         super().on_resume()
@@ -206,6 +240,10 @@ class DungeonScene(BaseScene):
             if was_boss:
                 self._on_boss_defeated()
             if engaged is not None:
+                if engaged.bounty > 0:
+                    self.run.leader.add_gold(engaged.bounty)
+                    self._stat("gold_earned", engaged.bounty)
+                    self.hud.push(f"The {engaged.name} drops its hoard: +{engaged.bounty} gold.")
                 remove_monster(self.monsters, engaged)
                 self._refresh_monsters()
         elif battle.outcome is Outcome.FLED:
@@ -253,8 +291,6 @@ class DungeonScene(BaseScene):
         cx, cy = tile_center(self.pos)
         self._player_sprite = arcade.SpriteSolidColor(20, 20, cx, cy, COLOR_PLAYER)
         self.player.append(self._player_sprite)
-        self.monster_sprites = arcade.SpriteList()
-        self._monster_sprites = {}
 
     def _add_feature(self, pos: Pos, color, size: int) -> None:
         cx, cy = tile_center(pos)
@@ -279,32 +315,20 @@ class DungeonScene(BaseScene):
     # Monsters
 
     def _refresh_monsters(self) -> None:
-        """Sync monster markers with the model: position, colour, and visibility."""
-        alive = {m.id for m in self.monsters}
-        for mid in [mid for mid in self._monster_sprites if mid not in alive]:
-            self._monster_sprites.pop(mid).remove_from_sprite_lists()
+        """Announce monsters the party sees for the first time."""
         for m in self.monsters:
-            sprite = self._monster_sprites.get(m.id)
-            if sprite is None:
-                cx, cy = tile_center(m.pos)
-                sprite = arcade.SpriteSolidColor(22, 22, cx, cy, COLOR_MONSTER)
-                self.monster_sprites.append(sprite)
-                self._monster_sprites[m.id] = sprite
-            sprite.position = tile_center(m.pos)
-            sprite.color = (
-                COLOR_MONSTER_CHASE if m.chasing
-                else COLOR_MONSTER_SLEEP if m.asleep
-                else COLOR_MONSTER
-            )
-            seen = m.pos in self.vis.visible
-            sprite.alpha = ALPHA_VISIBLE if seen else 0
-            if seen and not m.noticed:
+            if m.pos in self.vis.visible and not m.noticed:
                 m.noticed = True
-                verb = "sleeps" if m.asleep else "prowls"
+                verb = "sleeps" if m.asleep else NOTICE_VERB.get(m.kind, "prowls")
                 self.hud.push(f"A {m.name} {verb} nearby.")
 
-    def _visible_monsters(self) -> list[Pos]:
-        return [m.pos for m in self.monsters if m.pos in self.vis.visible]
+    def _visible_monsters(self) -> list[Monster]:
+        return [m for m in self.monsters if m.pos in self.vis.visible]
+
+    def _draw_monsters(self) -> None:
+        """Markers are plain shapes drawn each frame: few monsters, many states."""
+        for m in self._visible_monsters():
+            arcade.draw_polygon_filled(monster_points(m), monster_color(m))
 
     def _step_monsters(self) -> None:
         """Monsters take their turn after the party's step; one may catch the party."""
@@ -359,7 +383,8 @@ class DungeonScene(BaseScene):
             if target.asleep:
                 self.hud.push(f"You fall upon the sleeping {target.name}.")
             else:
-                self.hud.push(f"You engage the {target.name}.")
+                verb = ENGAGE_VERB.get(target.kind, "engage")
+                self.hud.push(f"You {verb} the {target.name}.")
             self._start_encounter(target)
             return
         self.pos = (nx, ny)
@@ -607,7 +632,7 @@ class DungeonScene(BaseScene):
             self.camera.use()
         self.tiles.draw()
         self.features.draw()
-        self.monster_sprites.draw()
+        self._draw_monsters()
         self.player.draw()
         self.app.default_camera.use()
         if self.hud is not None:
@@ -618,6 +643,7 @@ class DungeonScene(BaseScene):
             arcade.draw_lbwh_rectangle_filled(0, 0, self.app.width, self.app.height, (0, 0, 0, 170))
             self._pause_title.draw()
             self._pause_view.draw()
+            self._pause_legend.draw()
 
     def on_key_actions(self, actions: list[str], pressed: bool) -> bool:
         if not pressed:

@@ -140,7 +140,8 @@
           "shade",
           "revenant"
         ],
-        "weight": 3
+        "weight": 3,
+        "behaviour": "hunter"
       }
     ]
   }

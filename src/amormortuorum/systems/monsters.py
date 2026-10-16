@@ -1,16 +1,28 @@
 """Wandering monsters: visible enemy groups that roam a floor and hunt the party.
 
 Pure Python. The dungeon is turn-based, so monsters take one move each time
-the player takes a step. A monster whose tile is inside the party's field of
-view notices them and chases by walking down a BFS distance field centred on
-the player; it keeps hunting for ``MONSTER_MEMORY`` steps after losing sight,
-then goes back to wandering. Walking into a monster, or being caught by one,
-starts a battle with the monster's formation.
+the player takes a step. Every group has a *kind* that decides how it behaves
+on the map; the kind comes from the formation data (``behaviour``) or, by
+default, from the lead enemy's combat ``behavior``:
 
-Slow monsters (lower SPD than the party leader) only move every other step
-while chasing, so a quick party can outrun them. Some groups start asleep:
+* ``hunter`` (lead ``chase``): wanders until the party's field of view reaches
+  it, then chases by walking down a BFS distance field centred on the player,
+  and keeps hunting for ``MONSTER_MEMORY`` steps after losing sight.
+* ``guard`` (lead ``tank``): stands at a post next to a chest, key or the
+  stairs and never roams. It gives chase only when the party is in sight within
+  ``GUARD_RANGE`` steps, follows for at most ``GUARD_LEASH`` steps from its
+  post, then walks back and resumes its watch.
+* ``skittish`` (lead ``ranged``): keeps its distance. When the party is in
+  sight it moves *up* the distance field, away from them, and only stands its
+  ground when cornered. Catching one pays a gold ``bounty`` on top of the
+  battle's normal rewards.
+
+Walking into a monster, or being caught by one, starts a battle with the
+monster's formation. Slow monsters (lower SPD than the party leader) only move
+every other step while chasing or fleeing, so a quick party can outrun hunters
+and run down skittish groups. Some hunters and skittish groups start asleep:
 they never move until the party comes within ``WAKE_DIST`` tiles in plain
-sight, so a careful party can slip past them.
+sight, so a careful party can slip past them or strike first.
 """
 from __future__ import annotations
 
@@ -19,19 +31,26 @@ from dataclasses import dataclass
 from random import Random
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-from ..data import Balance, GameData
+from ..data import FORMATION_BEHAVIOURS, Balance, Formation, GameData
 from .entities import Enemy
 from .procgen import FloorMap, Pos, bfs_reachable
 from .rng import stream_rng
 
-MONSTER_MEMORY = 6        # steps a chasing monster keeps hunting after losing sight
+MONSTER_MEMORY = 6        # steps a chasing/fleeing monster keeps it up after losing sight
 WANDER_PAUSE = 0.4        # chance a wandering monster stands still on a given step
 SPAWN_MIN_DIST = 10       # BFS distance from the party's start for initial spawns
 RESPAWN_MIN_DIST = 12     # BFS distance from the party for later spawns
 FLEE_COOLDOWN = 5         # steps a monster stands dazed after the party flees it
-SLEEP_CHANCE = 0.3        # share of spawned groups that start asleep
+SLEEP_CHANCE = 0.3        # share of spawned hunters/skittish groups that start asleep
 WAKE_DIST = 2             # Manhattan distance at which a visible sleeper wakes
+GUARD_RANGE = 4           # BFS steps within which a visible party rouses a guard
+GUARD_LEASH = 6           # BFS steps from its post a guard will chase before turning back
+GUARD_POST_DIST = 2       # guards spawn within this many steps of a chest, key or the stairs
+CHASE_LIMIT = MONSTER_MEMORY + 14  # radius of the distance field chasers walk down
 NEIGHBOURS: Tuple[Pos, ...] = ((1, 0), (-1, 0), (0, 1), (0, -1))
+
+KINDS: Tuple[str, ...] = FORMATION_BEHAVIOURS
+KIND_FOR_BEHAVIOR = {"chase": "hunter", "tank": "guard", "ranged": "skittish"}
 
 
 @dataclass
@@ -43,18 +62,30 @@ class Monster:
     enemies: Tuple[str, ...]
     name: str
     spd: int
-    state: str = "wander"  # "sleep" | "wander" | "chase"
+    kind: str = "hunter"      # "hunter" | "guard" | "skittish"
+    state: str = "wander"     # "sleep" | "wander" | "chase" | "flee" | "return"
     memory: int = 0
     cooldown: int = 0
-    noticed: bool = False  # the HUD has announced this monster
+    post: Optional[Pos] = None  # where a guard stands watch
+    bounty: int = 0           # extra gold for catching a skittish group
+    noticed: bool = False     # the HUD has announced this monster
 
     @property
     def chasing(self) -> bool:
         return self.state == "chase"
 
     @property
+    def fleeing(self) -> bool:
+        return self.state == "flee"
+
+    @property
     def asleep(self) -> bool:
         return self.state == "sleep"
+
+    @property
+    def alert(self) -> bool:
+        """The monster knows where the party is (hunting or running from them)."""
+        return self.state in ("chase", "flee")
 
 
 def monster_rng(seed: int, floor: int) -> Random:
@@ -93,23 +124,47 @@ def distance_field(
     return dist
 
 
-def _make_monster(
-    mid: int, pos: Pos, floor: int, data: GameData, rng: Random, *, may_sleep: bool = True
-) -> Monster:
+def kind_for(formation: Formation, scaled: List[Enemy], data: GameData) -> str:
+    """The map behaviour of a formation: explicit ``behaviour`` or the lead enemy's style."""
+    if formation.behaviour:
+        return formation.behaviour
+    lead = max(scaled, key=lambda e: e.stats.max_hp)
+    return KIND_FOR_BEHAVIOR.get(data.enemy(lead.def_id).behavior, "hunter")
+
+
+def _pick_formation(floor: int, data: GameData, rng: Random):
     tier = data.tier_for_floor(floor)
     formations = data.encounters[tier.name].formations
     weights = [max(0, f.weight) for f in formations]
     chosen = rng.choices(formations, weights=weights, k=1)[0]
     scaled = [Enemy.from_def(data.enemy(eid), floor, data.balance) for eid in chosen.enemies]
+    return chosen, scaled
+
+
+def _make_monster(
+    mid: int,
+    pos: Pos,
+    chosen: Formation,
+    scaled: List[Enemy],
+    data: GameData,
+    rng: Random,
+    *,
+    may_sleep: bool = True,
+) -> Monster:
+    kind = kind_for(chosen, scaled, data)
     lead = max(scaled, key=lambda e: e.stats.max_hp)
     name = lead.name if len(scaled) == 1 else f"{lead.name} pack"
+    sleeps = kind != "guard" and may_sleep and rng.random() < SLEEP_CHANCE
     return Monster(
         id=mid,
         pos=pos,
         enemies=tuple(chosen.enemies),
         name=name,
         spd=max(e.stats.spd for e in scaled),
-        state="sleep" if may_sleep and rng.random() < SLEEP_CHANCE else "wander",
+        kind=kind,
+        state="sleep" if sleeps else "wander",
+        post=pos if kind == "guard" else None,
+        bounty=sum(e.gold for e in scaled) if kind == "skittish" else 0,
     )
 
 
@@ -120,6 +175,26 @@ def _spawn_cells(fmap: FloorMap, origin: Pos, min_dist: int, taken: Set[Pos]) ->
     reachable = bfs_reachable(fmap, fmap.start)
     near = distance_field(fmap, origin, min_dist - 1)
     return sorted(c for c in reachable if c not in reserved and c not in near)
+
+
+def guard_posts(fmap: FloorMap, cells: Iterable[Pos]) -> List[Pos]:
+    """The subset of ``cells`` close enough to a chest, key or the stairs to stand guard at."""
+    allowed = set(cells)
+    posts: Set[Pos] = set()
+    for feature in list(fmap.chests) + list(fmap.keys) + [fmap.stairs]:
+        posts.update(p for p in distance_field(fmap, feature, GUARD_POST_DIST) if p in allowed)
+    return sorted(posts)
+
+
+def _place(
+    cells: List[Pos], kind: str, fmap: FloorMap, rng: Random
+) -> Pos:
+    """Pick a spawn tile from ``cells`` (guards prefer a post by something worth guarding)."""
+    if kind == "guard":
+        posts = guard_posts(fmap, cells)
+        if posts:
+            return rng.choice(posts)
+    return rng.choice(cells)
 
 
 def spawn_monsters(fmap: FloorMap, floor: int, data: GameData, rng: Random) -> List[Monster]:
@@ -133,10 +208,11 @@ def spawn_monsters(fmap: FloorMap, floor: int, data: GameData, rng: Random) -> L
     for i in range(count):
         if not cells:
             break
-        pos = rng.choice(cells)
+        chosen, scaled = _pick_formation(floor, data, rng)
+        pos = _place(cells, kind_for(chosen, scaled, data), fmap, rng)
         cells.remove(pos)
         taken.add(pos)
-        monsters.append(_make_monster(i, pos, floor, data, rng))
+        monsters.append(_make_monster(i, pos, chosen, scaled, data, rng))
     return monsters
 
 
@@ -160,7 +236,9 @@ def maybe_respawn(
     if not cells:
         return None
     next_id = 1 + max((m.id for m in monsters), default=-1)
-    monster = _make_monster(next_id, rng.choice(cells), floor, data, rng, may_sleep=False)
+    chosen, scaled = _pick_formation(floor, data, rng)
+    pos = _place(cells, kind_for(chosen, scaled, data), fmap, rng)
+    monster = _make_monster(next_id, pos, chosen, scaled, data, rng, may_sleep=False)
     monsters.append(monster)
     return monster
 
@@ -170,6 +248,10 @@ def monster_at(monsters: Iterable[Monster], pos: Pos) -> Optional[Monster]:
         if m.pos == pos:
             return m
     return None
+
+
+def _neighbours(pos: Pos) -> List[Pos]:
+    return [(pos[0] + dx, pos[1] + dy) for dx, dy in NEIGHBOURS]
 
 
 def step_monsters(
@@ -188,64 +270,116 @@ def step_monsters(
     sees the party too. ``step`` is the running step count on this floor and
     ``player_spd`` the leader's effective speed; both drive the slow-monster rule.
     """
-    chasers = [
-        m for m in monsters
-        if m.cooldown == 0 and not m.asleep and (m.pos in visible or m.chasing)
-    ]
     field: Dict[Pos, int] = {}
-    if chasers:
-        field = distance_field(fmap, player, MONSTER_MEMORY + 14)
+    post_fields: Dict[Pos, Dict[Pos, int]] = {}
+
+    def player_field() -> Dict[Pos, int]:
+        nonlocal field
+        if not field:
+            field = distance_field(fmap, player, CHASE_LIMIT)
+        return field
+
+    def post_field(post: Pos) -> Dict[Pos, int]:
+        if post not in post_fields:
+            post_fields[post] = distance_field(fmap, post, GUARD_LEASH + CHASE_LIMIT)
+        return post_fields[post]
+
     occupied = {m.pos for m in monsters}
     caught: Optional[Monster] = None
     for m in monsters:
         if m.cooldown > 0:
             m.cooldown -= 1
             continue
+        sees = m.pos in visible
         if m.asleep:
             near = abs(m.pos[0] - player[0]) + abs(m.pos[1] - player[1]) <= WAKE_DIST
-            if not (near and m.pos in visible):
+            if not (near and sees):
                 continue
-            m.state = "chase"
+            m.state = "flee" if m.kind == "skittish" else "chase"
             m.memory = MONSTER_MEMORY
-            if not field:
-                field = distance_field(fmap, player, MONSTER_MEMORY + 14)
-        if m.pos in visible:
-            m.state = "chase"
-            m.memory = MONSTER_MEMORY
-        elif m.chasing:
-            m.memory -= 1
-            if m.memory <= 0:
-                m.state = "wander"
+        # Notice or forget the party
+        if m.kind == "guard":
+            if sees and player_field().get(m.pos, CHASE_LIMIT + 1) <= GUARD_RANGE:
+                m.state, m.memory = "chase", MONSTER_MEMORY
+            elif m.chasing:
+                m.memory -= 1
+                if m.memory <= 0:
+                    m.state = "return"
+        elif m.kind == "skittish":
+            if sees:
+                m.state, m.memory = "flee", MONSTER_MEMORY
+            elif m.fleeing:
+                m.memory -= 1
+                if m.memory <= 0:
+                    m.state = "wander"
+        else:
+            if sees:
+                m.state, m.memory = "chase", MONSTER_MEMORY
+            elif m.chasing:
+                m.memory -= 1
+                if m.memory <= 0:
+                    m.state = "wander"
+        # Move
         occupied.discard(m.pos)
+        slow = m.spd < player_spd and step % 2 == 1
         if m.chasing:
-            slow = m.spd < player_spd and step % 2 == 1
             if not slow:
-                here = field.get(m.pos)
+                pf = player_field()
+                here = pf.get(m.pos)
                 if here is not None:
                     options = [
-                        (m.pos[0] + dx, m.pos[1] + dy) for dx, dy in NEIGHBOURS
-                    ]
-                    options = [
-                        p for p in options
-                        if p in field and field[p] < here and p not in occupied
+                        p for p in _neighbours(m.pos)
+                        if p in pf and pf[p] < here and p not in occupied
                     ]
                     if options:
                         m.pos = options[rng.randrange(len(options))]
-        elif rng.random() >= WANDER_PAUSE:
-            options = [
-                (m.pos[0] + dx, m.pos[1] + dy) for dx, dy in NEIGHBOURS
-            ]
-            options = [
-                p for p in options
-                if fmap.is_walkable(*p) and p not in occupied and p != player
-                and p != fmap.stairs
-            ]
-            if options:
-                m.pos = options[rng.randrange(len(options))]
+            if m.post is not None and post_field(m.post).get(m.pos, GUARD_LEASH + 1) > GUARD_LEASH:
+                m.state = "return"
+        elif m.fleeing:
+            if not slow:
+                pf = player_field()
+                here = pf.get(m.pos)
+                if here is not None:
+                    options = [
+                        p for p in _neighbours(m.pos)
+                        if p in pf and pf[p] > here and p not in occupied and p != fmap.stairs
+                    ]
+                    if options:
+                        best = max(pf[p] for p in options)
+                        options = [p for p in options if pf[p] == best]
+                        m.pos = options[rng.randrange(len(options))]
+                else:
+                    _wander(m, fmap, player, occupied, rng)
+        elif m.state == "return":
+            if m.post is None or m.pos == m.post:
+                m.state = "wander"
+            else:
+                rf = post_field(m.post)
+                here = rf.get(m.pos)
+                options = [
+                    p for p in _neighbours(m.pos)
+                    if here is not None and p in rf and rf[p] < here
+                    and p not in occupied and p != player
+                ]
+                if options:
+                    m.pos = options[rng.randrange(len(options))]
+                if m.pos == m.post:
+                    m.state = "wander"
+        elif m.kind != "guard" and rng.random() >= WANDER_PAUSE:
+            _wander(m, fmap, player, occupied, rng)
         occupied.add(m.pos)
         if m.pos == player and caught is None:
             caught = m
     return caught
+
+
+def _wander(m: Monster, fmap: FloorMap, player: Pos, occupied: Set[Pos], rng: Random) -> None:
+    options = [
+        p for p in _neighbours(m.pos)
+        if fmap.is_walkable(*p) and p not in occupied and p != player and p != fmap.stairs
+    ]
+    if options:
+        m.pos = options[rng.randrange(len(options))]
 
 
 def remove_monster(monsters: List[Monster], monster: Monster) -> None:
@@ -254,7 +388,7 @@ def remove_monster(monsters: List[Monster], monster: Monster) -> None:
 
 def daze(monster: Monster) -> None:
     """The party fled: the monster loses the scent for a few steps."""
-    monster.state = "wander"
+    monster.state = "return" if monster.kind == "guard" else "wander"
     monster.memory = 0
     monster.cooldown = FLEE_COOLDOWN
 
@@ -266,10 +400,17 @@ __all__ = [
     "FLEE_COOLDOWN",
     "SLEEP_CHANCE",
     "WAKE_DIST",
+    "GUARD_RANGE",
+    "GUARD_LEASH",
+    "GUARD_POST_DIST",
+    "KINDS",
+    "KIND_FOR_BEHAVIOR",
     "Monster",
     "monster_rng",
     "monster_count",
     "distance_field",
+    "kind_for",
+    "guard_posts",
     "spawn_monsters",
     "maybe_respawn",
     "monster_at",

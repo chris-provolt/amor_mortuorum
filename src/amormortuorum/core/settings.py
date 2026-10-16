@@ -25,6 +25,7 @@ class VideoSettings:
     fullscreen: bool = False
     vsync: bool = True
     ui_scale: float = 1.0
+    screen_flash: bool = True  # red flash when the party takes a hit
 
 
 @dataclass

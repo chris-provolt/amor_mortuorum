@@ -23,6 +23,18 @@ HP_FRONT = (190, 60, 60)
 HP_PARTY = (70, 170, 110)
 TARGET = (255, 215, 120)
 PANEL = (0, 0, 0, 150)
+FLASH = (200, 40, 40)
+FLASH_TIME = 0.35   # seconds the hit flash takes to fade
+FLASH_ALPHA = 120   # peak alpha of the flash overlay
+
+
+def flash_alpha(remaining: float, total: float = FLASH_TIME, peak: int = FLASH_ALPHA) -> int:
+    """Overlay alpha for a flash with ``remaining`` seconds left: linear fade to zero."""
+    if total <= 0 or remaining <= 0:
+        return 0
+    return int(round(peak * min(1.0, remaining / total)))
+
+
 LOG_COLORS = {
     "attack": (230, 200, 200),
     "heal": (170, 230, 180),
@@ -52,6 +64,7 @@ class CombatScene(BaseScene):
         self._party_rows: List[arcade.Text] = []
         self._header: Optional[arcade.Text] = None
         self._prompt: Optional[arcade.Text] = None
+        self._flash = 0.0  # seconds of hit flash left
 
     # Lifecycle
 
@@ -177,6 +190,7 @@ class CombatScene(BaseScene):
                 return
 
     def _submit(self, action: Action) -> None:
+        party_hp = sum(max(0, p.hp) for p in self.battle.party)
         try:
             events = self.battle.submit(action)
         except AmorError as e:
@@ -184,6 +198,8 @@ class CombatScene(BaseScene):
             return
         self._log.extend(events)
         self._sound_for(events)
+        if sum(max(0, p.hp) for p in self.battle.party) < party_hp:
+            self._flash = FLASH_TIME
         if self.battle.outcome is not Outcome.ONGOING:
             self.mode = "done"
             self.menu.set_items([], keep_selection=False)
@@ -244,6 +260,10 @@ class CombatScene(BaseScene):
 
     # Rendering
 
+    def update(self, delta_time: float):
+        if self._flash > 0:
+            self._flash = max(0.0, self._flash - delta_time)
+
     def _draw_bar(self, x: float, y: float, frac: float, color, width: float = 180) -> None:
         arcade.draw_lbwh_rectangle_filled(x, y, width, 8, HP_BACK)
         arcade.draw_lbwh_rectangle_filled(x, y, width * max(0.0, min(1.0, frac)), 8, color)
@@ -251,6 +271,9 @@ class CombatScene(BaseScene):
     def draw(self):
         w, h = self.app.width, self.app.height
         arcade.draw_lbwh_rectangle_filled(0, 0, w, h, PANEL)
+        alpha = flash_alpha(self._flash) if self.app.state.settings.video.screen_flash else 0
+        if alpha > 0:
+            arcade.draw_lbwh_rectangle_filled(0, 0, w, h, (*FLASH, alpha))
         if self._header is not None:
             self._header.draw()
 

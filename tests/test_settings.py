@@ -31,3 +31,10 @@ def test_user_override_merge(tmp_path: Path):
     assert s.audio.music_volume == 0.25
     # Confirm mapping overridden to single key
     assert s.input.mapping["confirm"] == ["ENTER"]
+
+
+def test_screen_flash_defaults_on_and_can_be_disabled(tmp_path: Path):
+    assert Settings.load().video.screen_flash is True
+    user = tmp_path / "settings.json"
+    user.write_text(json.dumps({"video": {"screen_flash": False}}), encoding="utf-8")
+    assert Settings.load(user_path=user).video.screen_flash is False
