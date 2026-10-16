@@ -111,3 +111,27 @@ def test_mp_tonic_restores_mp_in_and_out_of_combat(data):
     assert any("regains" in e.text for e in events)
     assert hero.stats.mp == tonic.mp_restore
     assert hero.inventory.count("tonic_mind") == 0
+
+
+def test_events_name_their_skill_or_item(data):
+    hero = new_player()
+    grant_xp(hero, data.xp_curve.xp_for_level(7), data)
+    hero.stats.mp = hero.stats.max_mp = 50
+    hero.take_damage(10)
+    hero.inventory.add(data.item("scroll_embers"), 1)
+    hero.inventory.add(data.item("potion_small"), 1)
+    foes = [Enemy.from_def(data.enemy("skel_basic")) for _ in range(2)]
+    for foe in foes:  # sturdy enough to survive the whole exchange
+        foe.stats.hp = foe.stats.max_hp = 500
+    battle = Battle([hero], foes, Random(3), data)
+    events = battle.submit(Action(ActionKind.SKILL, 0, skill_id="dirge"))
+    cast = next(e for e in events if e.effect == "cast")
+    assert cast.source == "dirge"
+    assert [e.source for e in events if e.effect == "spell"] == ["dirge", "dirge"]
+    events = battle.submit(Action(ActionKind.SKILL, 0, skill_id="mend"))
+    assert next(e for e in events if e.effect == "heal").source == "mend"
+    events = battle.submit(Action(ActionKind.ITEM, 0, target=0, item_id="scroll_embers"))
+    assert next(e for e in events if e.effect == "spell").source == "scroll_embers"
+    events = battle.submit(Action(ActionKind.ITEM, 0, item_id="potion_small"))
+    assert next(e for e in events if e.effect == "heal").source == "potion_small"
+    assert all(e.source == "" for e in events if e.effect == "slash")
