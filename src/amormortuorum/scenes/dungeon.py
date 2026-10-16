@@ -143,6 +143,7 @@ class DungeonScene(BaseScene):
         self.pause_menu = VerticalMenu()
         self._pause_view: Optional[MenuView] = None
         self._pause_title: Optional[arcade.Text] = None
+        self._pause_legend: Optional[arcade.Text] = None
 
     # Lifecycle
 
@@ -176,6 +177,12 @@ class DungeonScene(BaseScene):
             "Paused", 0, 0, color=arcade.color.GHOST_WHITE, font_size=fs(28),
             anchor_x="center", anchor_y="center",
         )
+        self._pause_legend = arcade.Text(
+            "Markers: triangle hunts you, square guards its post, diamond runs away.  "
+            "Dull = asleep, bright red = hunting, amber = fleeing.",
+            0, 0, color=(150, 150, 165), font_size=fs(12), anchor_x="center", anchor_y="center",
+            multiline=True, width=620, align="center",
+        )
         self.pause_menu.set_items(
             [
                 MenuItem("Resume", self._toggle_pause),
@@ -208,6 +215,8 @@ class DungeonScene(BaseScene):
             self._pause_title.position = (width / 2, height / 2 + 60)
         if self._pause_view is not None:
             self._pause_view.set_position(width / 2, height / 2)
+        if self._pause_legend is not None:
+            self._pause_legend.position = (width / 2, height / 2 - fs(170))
 
     def on_resume(self):
         super().on_resume()
@@ -634,6 +643,7 @@ class DungeonScene(BaseScene):
             arcade.draw_lbwh_rectangle_filled(0, 0, self.app.width, self.app.height, (0, 0, 0, 170))
             self._pause_title.draw()
             self._pause_view.draw()
+            self._pause_legend.draw()
 
     def on_key_actions(self, actions: list[str], pressed: bool) -> bool:
         if not pressed:

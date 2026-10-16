@@ -171,6 +171,7 @@ def test_full_loop_menu_graveyard_dungeon_combat_stairs(app):
     if d.scene_name() == "DungeonScene":
         d.press("esc")
         assert d.scene.paused
+        d.frame()  # overlay, menu and marker legend draw
         d.press("esc")
         assert not d.scene.paused
 
