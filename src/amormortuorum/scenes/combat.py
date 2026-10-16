@@ -173,8 +173,8 @@ class CombatScene(BaseScene):
         panel_h = max(fs(196), height * 0.36)
         stage_bottom = panel_h + pad
         col = (width - pad * 4) / 10
-        foes = (pad, pad, col * 3.6, panel_h)
-        cmds = (foes[0] + foes[2] + pad, pad, col * 2.2, panel_h)
+        foes = (pad, pad, col * 3.2, panel_h)
+        cmds = (foes[0] + foes[2] + pad, pad, col * 3.0, panel_h)
         party = (cmds[0] + cmds[2] + pad, pad, width - cmds[0] - cmds[2] - pad * 2, panel_h)
         log_h = fs(20) * 4 + 14
         log = (pad, height - pad - log_h, width * 0.5, log_h)
@@ -278,7 +278,8 @@ class CombatScene(BaseScene):
                 effect = f"Deals {item.damage}"
             items.append(
                 MenuItem(
-                    f"{item.name} x{qty}", lambda iid=item_id: self._use_item(iid), hint=effect
+                    f"{item.name} x{qty}", lambda iid=item_id: self._use_item(iid), hint=effect,
+                    icon=pixelart.item_icon(item),
                 )
             )
         if not items:

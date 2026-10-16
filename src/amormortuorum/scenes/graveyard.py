@@ -133,10 +133,11 @@ class GraveyardScene(BaseScene):
             )
             items.append(
                 MenuItem(
-                    f"{item.name:<24} {entry.price:>4}g   x{entry.quantity}",
+                    f"{item.name}  {entry.price}g  x{entry.quantity}",
                     lambda iid=item_id: self._buy(iid),
                     enabled=leader.gold >= entry.price,
                     hint=effect if leader.gold >= entry.price else f"Not enough gold ({effect})",
+                    icon=pixelart.item_icon(item),
                 )
             )
         if not items:
@@ -198,6 +199,7 @@ class GraveyardScene(BaseScene):
                     lambda iid=item_id: self._deposit(iid),
                     enabled=can_stack or not crypt.is_full(),
                     hint="Crypt is full" if (crypt.is_full() and not can_stack) else "",
+                    icon=pixelart.item_icon(item),
                 )
             )
         for idx, slot in enumerate(crypt.list_slots()):
@@ -205,6 +207,8 @@ class GraveyardScene(BaseScene):
                 MenuItem(
                     f"Withdraw {slot.name} x{slot.qty}",
                     lambda i=idx: self._withdraw(i),
+                    icon=pixelart.item_icon(data.item(slot.id)) if data.has_item(slot.id)
+                    else None,
                 )
             )
         items.append(MenuItem("Back", self._show_main_menu))

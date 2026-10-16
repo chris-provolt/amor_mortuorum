@@ -10,6 +10,7 @@ from ..core.scenes.base_scene import BaseScene
 from ..errors import AmorError
 from ..systems.entities import EQUIP_SLOTS
 from ..systems.progression import xp_to_next_level
+from ..ui import pixelart
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
 from ..ui.theme import fs
 
@@ -74,13 +75,15 @@ class InventoryScene(BaseScene):
         items: List[MenuItem] = []
         for slot in EQUIP_SLOTS:
             item_id = p.equipment.slots.get(slot)
-            name = self.data.item(item_id).name if item_id else "-"
+            worn = self.data.item(item_id) if item_id else None
+            name = worn.name if worn else "-"
             items.append(
                 MenuItem(
                     f"{slot.title():<10} {name}",
                     (lambda s=slot: self._unequip(s)) if item_id else None,
                     enabled=item_id is not None,
                     hint="Enter: unequip to bag" if item_id else "",
+                    icon=pixelart.item_icon(worn) if worn else None,
                 )
             )
         items.append(MenuItem("Bag (shared)", enabled=False))
@@ -92,9 +95,10 @@ class InventoryScene(BaseScene):
                 )
                 items.append(
                     MenuItem(
-                        f"  {item.name} x{qty}",
+                        f"{item.name} x{qty}",
                         lambda iid=item_id: self._equip(iid),
                         hint=f"Enter: equip ({item.type}, {stat})",
+                        icon=pixelart.item_icon(item),
                     )
                 )
             elif item.is_consumable and (item.hp_restore > 0 or item.mp_restore > 0):
@@ -104,14 +108,18 @@ class InventoryScene(BaseScene):
                 )
                 items.append(
                     MenuItem(
-                        f"  {item.name} x{qty}",
+                        f"{item.name} x{qty}",
                         lambda iid=item_id: self._use(iid),
                         hint=f"Enter: use ({effect})",
+                        icon=pixelart.item_icon(item),
                     )
                 )
             else:
                 hint = "Revives you at the Graveyard on death" if item.revive else "Combat only"
-                items.append(MenuItem(f"  {item.name} x{qty}", None, hint=hint))
+                items.append(
+                    MenuItem(f"{item.name} x{qty}", None, hint=hint,
+                             icon=pixelart.item_icon(item))
+                )
         items.append(MenuItem("Back", self._back))
         self.menu.set_items(items)
 

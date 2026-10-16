@@ -149,3 +149,20 @@ def test_tile_palettes_change_with_the_floor_tier():
     tinted, plain = tiles.floor_image(cavern, 1), tiles.floor_image("cavern", 1)
     assert tinted.getpixel((3, 3)) != plain.getpixel((3, 3))
     assert tiles.tint((100, 100, 100), 0.0, 1.0, 0.5, 0.0) != (100, 100, 100)
+
+
+def test_every_item_has_an_icon():
+    data = GameData.load()
+    icons = {px.item_icon(item) for item in data.items.values()}
+    assert icons <= set(px.names())
+    assert len(icons) >= 10  # flasks, scrolls, weapons, armour pieces, keys, tokens
+    assert px.item_icon(data.item("potion_small")) == "icon_potion"
+    assert px.item_icon(data.item("tonic_mind")) == "icon_tonic"
+    assert px.item_icon(data.item("dagger_rust")) == "icon_dagger"
+    assert px.item_icon(data.item("blade_bone")) == "icon_sword"
+    assert px.item_icon(data.item("boots_silent")) == "icon_boots"
+    assert px.item_icon(data.item("key_catacomb")) == "key"
+    assert px.item_icon(data.item("res_token")) == "icon_token"
+    for name in icons:
+        assert px.image(name).getpixel((0, 0))[3] == 0, name
+    assert "icon_flask" not in px.names()

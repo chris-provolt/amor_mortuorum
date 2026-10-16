@@ -17,6 +17,7 @@ class MenuItem:
     action: Optional[Callable[[], Any]] = None
     enabled: bool = True
     hint: str = ""
+    icon: Optional[str] = None  # a pixelart sprite name drawn before the label
     payload: Any = None
     extra: dict = field(default_factory=dict)
 
@@ -113,7 +114,12 @@ class VerticalMenu:
 
 
 class MenuView:
-    """Renders a ``VerticalMenu`` with one cached ``arcade.Text`` per row."""
+    """Renders a ``VerticalMenu`` with one cached ``arcade.Text`` per row, a
+    pointer cursor on the selected row and, where an item names one, an icon
+    between the cursor and the label."""
+
+    CURSOR_GAP = 18  # px from the menu's x to the labels (room for the cursor)
+    ICON_GAP = 6
 
     def __init__(
         self,
@@ -130,8 +136,12 @@ class MenuView:
         cursor: str = "> ",
     ) -> None:
         import arcade  # local import keeps the module importable without a window
+        from . import frame, pixelart
 
         self._arcade = arcade
+        self._frame = frame
+        self._pixelart = pixelart
+        self.icon_px = int(font_size * 1.3)
         self.menu = menu
         self.x = x
         self.y = y
@@ -161,21 +171,46 @@ class MenuView:
         ]
         self._layout()
 
+    def _indent(self) -> float:
+        """Where labels start relative to ``x``: past the cursor, and past the
+        icon column when any item in the menu has one (so labels line up)."""
+        if self.anchor_x != "left":
+            return 0.0
+        indent = self.CURSOR_GAP
+        if any(item.icon for item in self.menu.items):
+            indent += self.icon_px + self.ICON_GAP
+        return indent
+
     def _layout(self) -> None:
+        indent = self._indent()
         for i, row in enumerate(self._rows):
-            row.position = (self.x, self.y - i * self.spacing)
+            row.position = (self.x + indent, self.y - i * self.spacing)
         self._hint.position = (self.x, self.y - len(self._rows) * self.spacing - self.spacing * 0.4)
 
     def draw(self) -> None:
         if len(self._rows) != len(self.menu.items):
             self.rebuild()
-        pad = " " * len(self.cursor)
+        indent = self._indent()
+        if self._rows and self._rows[0].x != self.x + indent:
+            self._layout()  # items changed between icon and plain rows
+        arcade = self._arcade
         for i, (row, item) in enumerate(zip(self._rows, self.menu.items)):
             selected = i == self.menu.selected
-            prefix = self.cursor if selected else pad
-            text = prefix + item.label
-            if row.text != text:
-                row.text = text
+            if row.text != item.label:
+                row.text = item.label
+            mid_y = row.y + self.font_size * 0.38
+            if selected:
+                if self.anchor_x == "left":
+                    cx = self.x
+                else:
+                    half = row.content_width / 2
+                    cx = row.x - half - 20 if self.anchor_x == "center" else row.x - 20
+                self._frame.draw_cursor(cx, mid_y, max(8, self.font_size * 0.5))
+            if item.icon and self.anchor_x == "left":
+                tex = self._pixelart.texture(item.icon)
+                left = self.x + self.CURSOR_GAP
+                rect = arcade.LBWH(left, mid_y - self.icon_px / 2, self.icon_px, self.icon_px)
+                arcade.draw_texture_rect(tex, rect, pixelated=True)
             color = (
                 self.disabled_color
                 if not item.enabled
