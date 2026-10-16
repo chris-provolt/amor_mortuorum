@@ -5,6 +5,11 @@ Plays whole runs with a plain auto-policy (attack the weakest foe, cast when it
 pays off, drink when low, rest and shop when a portal shows up and the party is
 hurt) and reports how deep parties get. Pure systems code, no arcade.
 
+Each floor is walked tile by tile along the shortest route (key, chests, stairs)
+with the real wandering-monster rules, so fights happen where the game would
+start them: ambushes from the dark, monsters the walker bumps into, and chasers
+that catch up.
+
     python tools/balance/simulate.py --runs 200 --party 1
     python tools/balance/simulate.py --runs 100 --party 2 --seed 7 --verbose
 """
@@ -33,9 +38,20 @@ from amormortuorum.systems.encounters import (  # noqa: E402
     step_encounter,
 )
 from amormortuorum.systems.entities import Enemy, Player  # noqa: E402
+from amormortuorum.systems.fov import compute_fov  # noqa: E402
 from amormortuorum.systems.loot import roll_chest, roll_chest_gold  # noqa: E402
+from amormortuorum.systems.monsters import (  # noqa: E402
+    Monster,
+    daze,
+    maybe_respawn,
+    monster_at,
+    monster_rng,
+    remove_monster,
+    spawn_monsters,
+    step_monsters,
+)
 from amormortuorum.systems.party import recruit  # noqa: E402
-from amormortuorum.systems.procgen import bfs_reachable, generate_floor  # noqa: E402
+from amormortuorum.systems.procgen import FloorMap, Pos, Tile, generate_floor  # noqa: E402
 from amormortuorum.systems.progression import sync_level  # noqa: E402
 from amormortuorum.systems.rng import chest_rng  # noqa: E402
 from amormortuorum.systems.run import Run, new_run  # noqa: E402
@@ -59,29 +75,57 @@ class RunResult:
     revived: bool = False
 
 
-def _path_len(fmap) -> int:
-    """Shortest walk from start to stairs, plus a detour per chest and key hunt."""
-    prev = {fmap.start: None}
-    queue = deque([fmap.start])
-    passable = bfs_reachable(fmap, fmap.start, through_locked_doors=True)
+def _shortest_path(fmap: FloorMap, a: Pos, b: Pos) -> List[Pos]:
+    """Tiles after ``a`` up to and including ``b``; locked doors count as passable
+    (the walker fetches the key first, so it can open them)."""
+
+    def passable(x: int, y: int) -> bool:
+        return fmap.is_walkable(x, y) or fmap.tile(x, y) == Tile.DOOR
+
+    prev: Dict[Pos, Optional[Pos]] = {a: None}
+    queue = deque([a])
     while queue:
         cur = queue.popleft()
-        if cur == fmap.stairs:
+        if cur == b:
             break
         x, y = cur
         for nxt in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-            if nxt in passable and nxt not in prev:
+            if nxt not in prev and passable(*nxt):
                 prev[nxt] = cur
                 queue.append(nxt)
-    steps = 0
-    cur = fmap.stairs
-    while cur is not None and prev.get(cur) is not None:
-        steps += 1
+    if b not in prev:
+        return []
+    path: List[Pos] = []
+    cur: Optional[Pos] = b
+    while cur is not None and cur != a:
+        path.append(cur)
         cur = prev[cur]
-    steps += 8 * len(fmap.chests)
-    if fmap.doors:
-        steps += 30
-    return max(steps, 10)
+    return path[::-1]
+
+
+def _route(fmap: FloorMap) -> List[Pos]:
+    """Key first (if any), then chests nearest-first, then the stairs."""
+    goals: List[Pos] = sorted(fmap.keys) + sorted(fmap.chests)
+    route: List[Pos] = []
+    cur = fmap.start
+    # Keys first, then greedy nearest chest
+    keys = [g for g in goals if g in fmap.keys]
+    chests = [g for g in goals if g in fmap.chests]
+    for key in keys:
+        leg = _shortest_path(fmap, cur, key)
+        route.extend(leg)
+        cur = key if leg else cur
+    while chests:
+        legs = [(len(_shortest_path(fmap, cur, c)) or 10 ** 6, c) for c in chests]
+        _, nxt = min(legs)
+        chests.remove(nxt)
+        leg = _shortest_path(fmap, cur, nxt)
+        if not leg:
+            continue
+        route.extend(leg)
+        cur = nxt
+    route.extend(_shortest_path(fmap, cur, fmap.stairs))
+    return route
 
 
 class AutoPolicy:
@@ -223,34 +267,72 @@ def simulate_run(
     while floor <= MAX_FLOOR:
         run.floor = floor
         fmap = generate_floor(seed, floor)
-        steps = _path_len(fmap)
         enc = encounter_rng(seed, floor)
         crng = chest_rng(seed, floor)
+        mrng = monster_rng(seed, floor)
+        monsters = spawn_monsters(fmap, floor, data, mrng)
         died_here = False
-        # Chests first (they are on the way)
-        for _ in fmap.chests:
+
+        def open_chest(pos: Pos) -> None:
+            if not fmap.remove_chest(pos):
+                return
             gold = roll_chest_gold(crng, floor)
             if gold is not None:
                 run.leader.add_gold(gold)
-                continue
+                return
             item = roll_chest(crng, floor, data)
             try:
                 run.leader.inventory.add(item, 1)
                 _auto_equip(run.leader, item, data)
             except Exception:
                 pass
-        # Walk
-        for _ in range(steps):
-            run.steps_since_encounter += 1
-            if step_encounter(enc, floor, run.steps_since_encounter, data):
-                enemies = roll_formation(enc, floor, data)
-                battle = _fight(run, enemies, combat_rng(seed, floor, run.encounters), data, policy)
-                run.encounters += 1
-                run.steps_since_encounter = 0
-                battles += 1
-                if battle.outcome is Outcome.DEFEAT:
+
+        def fight(enemies: List[Enemy], monster: Optional[Monster]) -> bool:
+            """Run one battle; return True if the party fell."""
+            nonlocal battles
+            battle = _fight(run, enemies, combat_rng(seed, floor, run.encounters), data, policy)
+            run.encounters += 1
+            run.steps_since_encounter = 0
+            battles += 1
+            if monster is not None:
+                if battle.outcome is Outcome.VICTORY:
+                    remove_monster(monsters, monster)
+                else:
+                    daze(monster)
+            return battle.outcome is Outcome.DEFEAT
+
+        def enemies_of(m: Monster) -> List[Enemy]:
+            return [Enemy.from_def(data.enemy(eid), floor, data.balance) for eid in m.enemies]
+
+        pos: Pos = fmap.start
+        floor_steps = 0
+        for nxt in _route(fmap):
+            # Walking into a monster engages it; keep attacking until the tile is free.
+            guard = 0
+            while monster_at(monsters, nxt) is not None and guard < 5:
+                guard += 1
+                if fight(enemies_of(monster_at(monsters, nxt)), monster_at(monsters, nxt)):
                     died_here = True
                     break
+            if died_here:
+                break
+            pos = nxt
+            floor_steps += 1
+            run.steps_since_encounter += 1
+            open_chest(pos)
+            if step_encounter(enc, floor, run.steps_since_encounter, data):
+                if fight(roll_formation(enc, floor, data), None):
+                    died_here = True
+                    break
+            visible = compute_fov(fmap, pos)
+            caught = step_monsters(
+                monsters, fmap, pos, visible, mrng,
+                step=floor_steps, player_spd=run.leader.effective_spd(data),
+            )
+            maybe_respawn(monsters, fmap, floor, pos, data, mrng, visible=visible)
+            if caught is not None and fight(enemies_of(caught), caught):
+                died_here = True
+                break
         if not died_here:
             boss = data.boss_for_floor(floor)
             if boss is not None:

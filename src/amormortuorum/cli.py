@@ -1,10 +1,14 @@
 import argparse
 import logging
 import os
+import sys
 from pathlib import Path
 
 from .core.settings import Settings, user_settings_path
+from .persistence.paths import default_save_root
 from .utils.logging import configure_logging
+
+logger = logging.getLogger(__name__)
 
 
 def parse_args(argv=None):
@@ -47,7 +51,9 @@ def parse_args(argv=None):
 
 def main(argv=None) -> int:
     args = parse_args(argv)
-    configure_logging(level=logging.DEBUG if args.debug else logging.INFO)
+    # A windowed (PyInstaller) build has no console: keep the log next to the saves.
+    log_file = default_save_root() / "amor.log" if sys.stdout is None else None
+    configure_logging(level=logging.DEBUG if args.debug else logging.INFO, log_file=log_file)
 
     # Headless mode is opt-in via env for CI/testing. It must be configured
     # before arcade is imported, so the app import happens after this block.
@@ -70,5 +76,11 @@ def main(argv=None) -> int:
         seed=args.seed,
         smoke_frames=args.smoke,
     )
-    app.run()
+    try:
+        app.run()
+    except Exception:
+        logger.exception("Fatal error; see the log for details")
+        if sys.stdout is None:  # no console to show a traceback in
+            return 1
+        raise
     return 0

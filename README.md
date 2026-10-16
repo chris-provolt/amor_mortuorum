@@ -18,7 +18,7 @@ What works today, end to end:
 - **Fog of war and minimap**: shadowcast line of sight (walls and locked doors block), remembered tiles drawn dimmed, and a toggleable minimap (M) with icons for stairs, chests, portals, keys and sprung traps you have seen.
 - **Bosses**: mini-bosses guard the stairs on B20/40/60/80 (each drops a Relic of the Veil), and **The Oblivion Heart** waits on B99; beating it awards the final relic and ends the run in victory. Bosses enrage below half HP.
 - **Relics of the Veil**: the five non-boss relics turn up in chests (2% of chests on T1 up to 8% on T5), the collection screen lives on the title and in the Graveyard, and every relic grants a light passive (ATK/DEF/SPD, sight radius, gold or XP percent) that applies to every future run.
-- **Random encounters** that open **turn-based combat**: Attack / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling.
+- **Wandering monsters** roam each floor in plain sight: they wander until they spot the party, then hunt them down corridors with grid pathfinding (slow ones only move every other step, so a quick party can outrun them). Some groups start asleep and only wake when the party comes within two tiles in plain sight, so they can be slipped past or struck first. Bumping into one, or being caught, opens **turn-based combat**: Attack / Skill / Item / Defend / Flee, SPD-ordered turns, a combat log, target cycling. Fleeing dazes the monster for a few steps. Rare ambushes still lunge from the dark.
 - **Death**: a carried **Resurrection Token** is consumed and the party wakes in the Graveyard; without one the run ends and meta progression (Crypt, relics, deepest floor) persists.
 - **Skills**: six spells learned by level (`skills.json`) and cast for MP from the combat Skill menu: single-target, all-enemy, and healing. Resting and the Tonic of Clear Mind restore MP.
 - **Party of up to four**: recruit companions at the Graveyard for gold; they level with you, share the leader's bag and gold, carry their own equipment, act in SPD order, and every survivor earns full XP. Heals target the most wounded ally.
@@ -109,8 +109,8 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
 ## Balance Model
 - **Enemies scale per floor** (`balance.json`): ATK +0.45, DEF +0.15, HP +2.5%, XP and gold +3% per floor below B1. Tier bases in `enemies.json` are the stats at B1 and rise gently across tiers; depth does the rest.
 - **Players** gain +6 HP, +1 MP and +1 ATK per level, +1 DEF every second level and +1 SPD every third (`xp_curve.json`, 40 levels). The stairs restore 10% HP and 15% MP on every descent.
-- **Encounters**: per-step chance starts at the tier's `step_chance` (3-5%), grows 5% per quiet step and caps at 20%, giving roughly 3-5 fights per floor.
-- **Measured with** `python tools/balance/simulate.py --runs 80 --party N`, which plays whole runs with an auto-policy. Current targets: solo runs end around B20-40, pairs around B40 with a long tail to B80, full parties reach the nineties and clear B99 a few percent of the time. Re-run it after touching any number.
+- **Encounters**: each floor spawns `monsters_base` roaming groups (+`monsters_per_floor` per floor of depth, jittered by one) at least 10 steps from the start, drawn from the tier's formations; the floor slowly respawns groups out of sight while under strength. Ambushes add a small per-step chance (the tier's `step_chance`, 1-2%, growing 5% per quiet step, capped at 20%). Together that is roughly 4-6 fights per floor.
+- **Measured with** `python tools/balance/simulate.py --runs 80 --party N`, which plays whole runs with an auto-policy, walking every floor tile by tile against the real monster rules. Current numbers: solo runs end around B20-35 (the Warden on B20 is the first wall), pairs around B40 with a long tail to B80, full parties reach the nineties and clear B99 a few percent of the time. Re-run it after touching any number.
 
 ## Procedural Generation
 - **Algorithms:** BSP split into leaves, one room per leaf, L-shaped corridors joining sibling subtrees; the whole floor is connected. From B6, 30% of floors are **cellular-automata caverns** instead: one connected open region with the stairs at the far end of the cave (no rooms, so no key doors).
@@ -137,7 +137,7 @@ Every epic from the original design has a first implementation. See [Roadmap](#r
   - **Confirm / interact (stairs, portal):** Enter / Space
   - **Back / pause:** Esc
   - **Bag & Equipment:** Tab (Left / Right switches party member)
-  - **Minimap toggle:** M
+  - **Minimap toggle:** M (red triangles mark monsters currently in sight; on the floor, dull markers sleep, red ones wander, bright red ones are hunting you)
   - **Controller:** D-pad / left stick move, A confirm, B back, Y bag, X map, Start pause
   - **Combat target:** Left / Right
 - **Accessibility:** minimap icons are shape-coded as well as coloured (hollow square stairs, filled square chest, ring portal, diamond key, cross trap, dot player); a **UI scale** setting (80-160%) resizes every menu and panel; keys can be **rebound in-game** from Settings. Planned: a screen-shake toggle once effects exist.
@@ -176,7 +176,8 @@ src/amormortuorum/
 │   ├── loot.py            # chest quality / item / gold rolls
 │   ├── entities.py        # Stats, Equipment, Inventory, Player, Enemy
 │   ├── combat.py          # Battle: actions, turn order, damage, outcome
-│   ├── encounters.py      # step rolls and formations
+│   ├── encounters.py      # ambush rolls and formations
+│   ├── monsters.py        # wandering groups: spawning, BFS chase, wander, daze
 │   ├── run.py             # Run state, death/resurrection, persistence bridge
 │   ├── progression.py     # XP curve, level-ups
 │   ├── fov.py             # shadowcasting field of view, explored memory
@@ -241,7 +242,7 @@ Weights per **tier** used by chests to pick a quality bucket.
         "formations": [{"enemies": ["skel_basic"], "weight": 6},
                        {"enemies": ["skel_basic", "wraith"], "weight": 2}]}}
 ```
-Per step the chance is `min(0.35, step_chance * (1 + 0.1 * steps_since_last_encounter))`.
+`step_chance` is the ambush rate; most fights come from the visible wandering monsters, which draw their groups from the same `formations` list. Per step the ambush chance is `min(encounter_cap, step_chance * (1 + encounter_growth_per_step * steps_since_last))`.
 
 ### `relics.json`
 Ten entries `{"id":"veil_1".."veil_9" | "veil_final", "name", "desc", "passive": {...}}`. Passive keys: `atk, df, spd, fov, gold_pct, xp_pct`. Relics referenced by `bosses.json` are boss-only; the rest can drop from chests.
@@ -301,7 +302,7 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 - **Seeds:** all randomness in a run derives from one seed:
   - `floor_rng(seed, floor) = Random(seed + floor * 1013)` (layout, chests placement, portal roll)
   - `chest_rng(seed, floor) = Random(seed + floor * 13)` (chest contents)
-  - `stream_rng(seed, floor, name)` for `encounters` and `combat:<n>` streams
+  - `stream_rng(seed, floor, name)` for `encounters`, `monsters` and `combat:<n>` streams
 - **Unit tests** (`pytest`, no window needed): data validation, rng, procgen (determinism, connectivity, portal rate), loot distributions, entities, combat rules, encounters, run/death rules, hub/shop/crypt, persistence, settings, input, scene stack, menu model, and guards that scenes never import `random` and systems never import `arcade`.
 - **GL tests** (`AMOR_GL_TESTS=1 pytest -m gl`): open a real window and script a playthrough with synthetic key presses: menu, Graveyard, walking, chests, encounters, stairs, pause, and both death paths.
 - **Lint:** `flake8 .` (max line 100, bugbear enabled).
@@ -320,7 +321,7 @@ Flags: `--seed N` (reproducible run), `--profile NAME` (separate saves), `--sett
 Design notes for each epic live in `docs/epics/`. Every epic now has a first implementation; what remains is polish:
 1. Hand playtesting against the simulator's numbers (see Balance Model); the auto-policy never flees and never misjudges a potion, so real runs end earlier.
 2. Real art and audio assets (sprites, tiles, SFX, music) replacing the placeholders.
-3. Visible wandering enemies with grid pathfinding (today encounters are random per step).
+3. Monster variety on the map: per-formation markers, sleeping or stationary guards, and ranged or fleeing behaviours on top of the chase/wander rules.
 
 ---
 

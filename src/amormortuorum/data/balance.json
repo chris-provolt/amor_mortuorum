@@ -6,5 +6,8 @@
   "enemy_xp_per_floor": 0.03,
   "enemy_gold_per_floor": 0.03,
   "encounter_cap": 0.2,
-  "encounter_growth_per_step": 0.05
+  "encounter_growth_per_step": 0.05,
+  "monsters_base": 3,
+  "monsters_per_floor": 0.04,
+  "monster_respawn_chance": 0.01
 }

@@ -1,7 +1,7 @@
 """Minimap overlay: explored tiles plus icons for features the player has seen."""
 from __future__ import annotations
 
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Sequence
 
 import arcade
 
@@ -24,6 +24,7 @@ ICONS = {
     "key": (190, 130, 240),
     "trap": (220, 70, 70),
     "player": (255, 255, 255),
+    "monster": (240, 90, 90),
 }
 ALPHA_VISIBLE = 255
 ALPHA_EXPLORED = 120
@@ -94,7 +95,7 @@ class Minimap:
     def _icon(self, pos: Pos, color, size: float = SCALE, shape: str = "square") -> None:
         """Draw a feature marker. Shapes differ per feature so colour is never the only cue:
         stairs = hollow square, chest = filled square, portal = ring, key = diamond,
-        trap = cross, player = filled circle."""
+        trap = cross, player = filled circle, monster = triangle."""
         cx, cy = self._screen(*pos)
         half = size / 2
         if shape == "square":
@@ -112,8 +113,12 @@ class Minimap:
         elif shape == "cross":
             arcade.draw_line(cx - half, cy - half, cx + half, cy + half, color, 1)
             arcade.draw_line(cx - half, cy + half, cx + half, cy - half, color, 1)
+        elif shape == "triangle":
+            arcade.draw_polygon_filled(
+                [(cx, cy + half), (cx + half, cy - half), (cx - half, cy - half)], color
+            )
 
-    def draw(self, player_pos: Pos) -> None:
+    def draw(self, player_pos: Pos, monsters: Sequence[Pos] = ()) -> None:
         if not self.enabled:
             return
         arcade.draw_lbwh_rectangle_filled(
@@ -135,4 +140,6 @@ class Minimap:
                 self._icon(pos, ICONS["trap"], SCALE + 2, shape="cross")
         if fmap.portal is not None and fmap.portal in explored:
             self._icon(fmap.portal, ICONS["portal"], SCALE + 4, shape="ring")
+        for pos in monsters:
+            self._icon(pos, ICONS["monster"], SCALE + 3, shape="triangle")
         self._icon(player_pos, ICONS["player"], SCALE + 3, shape="circle")
