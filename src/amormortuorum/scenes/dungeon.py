@@ -49,7 +49,7 @@ from ..systems.stats import bump, check_achievements, record_max
 from ..systems.rng import chest_rng
 from ..ui.hud import Hud
 from ..ui.menu import MenuItem, MenuView, VerticalMenu
-from ..ui import frame, pixelart, tiles
+from ..ui import frame, fx, pixelart, tiles
 from ..ui.minimap import Minimap
 from ..ui.theme import fs
 
@@ -68,8 +68,8 @@ TINT_CHASE = (255, 170, 170)
 TINT_FLEE = (255, 220, 160)
 TINT_PLAIN = (255, 255, 255)
 BADGE = 7  # px: kind badge drawn in a tile corner
-SPRITE_SCALE = TILE_SIZE / pixelart.RENDER_PX
-WORLD_ZOOM = 2.0          # 32 px art shown at 64 px: chunky 16-bit pixels
+SPRITE_SCALE = 1.0        # one world unit per 32 px of art (textures may be finer)
+WORLD_ZOOM = 2.0          # a tile is 32 world px shown at 64 screen px: HD art is 1:1
 IDLE_FRAME_TIME = 0.5     # seconds per idle animation frame
 MOVE_TIME = 0.16          # seconds a step takes on screen
 STRIDE_PERIOD = 0.32      # seconds for a full walk cycle while moving
@@ -78,6 +78,10 @@ PORTAL_FRAME_TIME = 0.12
 TORCH = (255, 244, 224)   # light colour next to the party
 TORCH_FAR = (190, 200, 235)  # light colour at the edge of sight
 LIGHT_MIN = 0.42          # brightness at the edge of the field of view
+TORCH_CHANCE = 0.14       # share of wall faces that carry a burning sconce
+TORCH_RADIUS = 2.6        # tiles a sconce lights
+TORCH_GLOW = (255, 170, 90)
+FLAME_PX = 9              # world px: the sconce flame's height
 EXPLORED_TINT = (62, 64, 96)  # remembered tiles: dim and cold
 NOTICE_VERB = {"hunter": "prowls", "guard": "stands watch", "skittish": "skulks"}
 ENGAGE_VERB = {"hunter": "engage", "guard": "challenge", "skittish": "corner"}
@@ -170,6 +174,8 @@ class DungeonScene(BaseScene):
         self._stride = 0.0                       # seconds spent walking (cycle clock)
         self._hold = 0.0                         # seconds a direction key has been held
         self._monster_from: Dict[int, tuple] = {}  # monster id -> (from, t)
+        self._torches: list = []                 # wall cells with a burning sconce
+        self._flicker = 1.0
         self._monster_facing: Dict[int, str] = {}
         self._portal_frames: list = []
         self._portal_sprite: Optional[arcade.Sprite] = None
@@ -335,8 +341,9 @@ class DungeonScene(BaseScene):
         for y, row in enumerate(fmap.tiles):
             for x, tile in enumerate(row):
                 cx, cy = tile_center((x, y))
+                tex = self._tile_texture(x, y, tile)
                 sprite = arcade.Sprite(
-                    self._tile_texture(x, y, tile), scale=SPRITE_SCALE, center_x=cx, center_y=cy
+                    tex, scale=TILE_SIZE / tex.width, center_x=cx, center_y=cy
                 )
                 sprite.alpha = 0
                 self.tiles.append(sprite)
@@ -345,6 +352,15 @@ class DungeonScene(BaseScene):
                     self._door_sprites[(x, y)] = sprite
         self.features = arcade.SpriteList()
         self._feature_sprites = {}
+        # Sconces on some wall faces, placed from the cell hash so a floor is
+        # lit the same way every visit
+        self._torches = [
+            (x, y) for y, row in enumerate(fmap.tiles) for x, tile in enumerate(row)
+            if tile == Tile.WALL and self._open(x, y - 1) and not self._open(x, y + 1)
+            and tiles.noise(x, y, 77) < TORCH_CHANCE
+        ]
+        for pos in self._torches:
+            self._add_feature(pos, "sconce")
         stairs = self._add_feature(fmap.stairs, tiles.texture("stairs", self._style))
         if fmap.stairs_locked:
             stairs.color = COLOR_BOSS_STAIRS
@@ -371,7 +387,7 @@ class DungeonScene(BaseScene):
         """Place a feature sprite from a pixelart name or a ready texture."""
         cx, cy = tile_center(pos)
         tex = pixelart.texture(art) if isinstance(art, str) else art
-        sprite = arcade.Sprite(tex, scale=SPRITE_SCALE, center_x=cx, center_y=cy)
+        sprite = arcade.Sprite(tex, scale=TILE_SIZE / tex.width, center_x=cx, center_y=cy)
         self._shade(sprite, pos)
         self.features.append(sprite)
         self._feature_sprites[pos] = sprite
@@ -426,6 +442,25 @@ class DungeonScene(BaseScene):
     def _visible_monsters(self) -> list[Monster]:
         return [m for m in self.monsters if m.pos in self.vis.visible]
 
+    def _draw_flames(self) -> None:
+        """Live flames and a glow on every sconce the party can see."""
+        for i, pos in enumerate(self._torches):
+            if self.vis.state(pos) != "visible":
+                continue
+            cx, cy = tile_center(pos)
+            fy = cy + TILE_SIZE * 0.22
+            fx.draw_light_pool(cx, fy - 6, TILE_SIZE * 1.6 * fx.flicker(self._anim, i, 0.08),
+                               TORCH_GLOW, 50)
+            fx.draw_flame(cx, fy, self._anim, FLAME_PX, seed=i)
+            fx.draw_embers(cx, fy + 4, self._anim, count=3, rise=22, spread=5, seed=i,
+                           size=0.9)
+
+    def _draw_ambience(self) -> None:
+        """Dust drifting in the party's torchlight."""
+        px, py = self._player_sprite.position
+        fx.draw_motes(px, py, self._anim, count=16, radius=TILE_SIZE * 3.2,
+                      color=(255, 232, 180), seed=5, size=1.1, alpha=120)
+
     def _draw_monsters(self) -> None:
         """Portraits from the sprite list, then a kind badge per visible monster."""
         self.monster_sprites.draw(pixelated=True)
@@ -470,9 +505,19 @@ class DungeonScene(BaseScene):
         return 0 if self.vis.state(pos) == "unknown" else ALPHA_VISIBLE
 
     def _light(self, pos: Pos) -> tuple[int, int, int]:
-        """Torchlight tint for a visible cell, by distance from the party."""
+        """Light on a visible cell: the party's torch by distance, flickering, plus
+        the warm glow of any wall sconce close by."""
         dx, dy = pos[0] - self.pos[0], pos[1] - self.pos[1]
-        return light_at((dx * dx + dy * dy) ** 0.5, self.vis.radius)
+        r, g, b = light_at((dx * dx + dy * dy) ** 0.5, self.vis.radius)
+        r, g, b = int(r * self._flicker), int(g * self._flicker), int(b * self._flicker)
+        for tx, ty in self._torches:
+            d = ((pos[0] - tx) ** 2 + (pos[1] - ty + 1) ** 2) ** 0.5
+            if d < TORCH_RADIUS:
+                k = (1 - d / TORCH_RADIUS) * 0.9 * self._flicker
+                r = max(r, int(r + (TORCH_GLOW[0] - r) * k))
+                g = max(g, int(g + (TORCH_GLOW[1] - g) * k))
+                b = max(b, int(b * (1 - 0.3 * k)))
+        return (min(255, r), min(255, g), min(255, b))
 
     def _shade(self, sprite: arcade.Sprite, pos: Pos) -> None:
         """Hide unknown cells, dim remembered ones, light visible ones by distance."""
@@ -854,6 +899,15 @@ class DungeonScene(BaseScene):
         if self._portal_sprite is not None and self._portal_frames:
             idx = int(self._anim / PORTAL_FRAME_TIME) % len(self._portal_frames)
             self._portal_sprite.texture = self._portal_frames[idx]
+        # Torchlight breathes: re-tint what is lit
+        self._flicker = fx.flicker(self._anim, 3)
+        for pos in self._lit:
+            tile = self._tile_sprites.get(pos)
+            if tile is not None:
+                self._shade(tile, pos)
+            feature = self._feature_sprites.get(pos)
+            if feature is not None:
+                self._shade(feature, pos)
 
     def draw(self):
         if self.camera is not None:
@@ -861,8 +915,10 @@ class DungeonScene(BaseScene):
             self.camera.use()
         self.tiles.draw(pixelated=True)
         self.features.draw(pixelated=True)
+        self._draw_flames()
         self._draw_monsters()
         self.player.draw(pixelated=True)
+        self._draw_ambience()
         self.app.default_camera.use()
         if self.hud is not None:
             self.hud.draw(self.run, extra=f"Steps {self.run.steps_since_encounter}   [M] map")
